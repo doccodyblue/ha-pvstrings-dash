@@ -16,7 +16,8 @@ createServer(async (req, res) => {
   try {
     const body = await readFile(path);
     res.writeHead(200, {
-      "Content-Type": path.endsWith(".js") ? "application/javascript" : "text/plain",
+      "Content-Type": path.endsWith(".js") || path.endsWith(".mjs") ? "application/javascript"
+        : path.endsWith(".html") ? "text/html; charset=utf-8" : "text/plain",
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "no-store",
     });

@@ -1527,7 +1527,9 @@ class PvsChainCard extends PvsBaseCard {
     } else if (this._measured.err) {
       measuredHtml = `<span class="pvs-sub">⚠︎ ${t(hass, "stats_unavailable", { entity: this._producedId ?? cfg.entity })}</span>`;
     } else if (this._measured.kwh == null) {
-      measuredHtml = withheldHTML(t(hass, "not_available"));
+      measuredHtml = withheldHTML(isCur
+        ? t(hass, "in_progress", { min: new Date().getMinutes() })
+        : t(hass, "not_available"));
     } else {
       const delta = this._measured.kwh - row.potential_kwh;
       measuredHtml = `${kwhCell(this._measured.kwh)}
@@ -1806,8 +1808,8 @@ class PvsDailyCard extends PvsBaseCard {
     card(`
       <div class="pvs-head">
         <span class="pvs-title">${esc(title)}</span>
-        <span class="pvs-chip clickable" data-more-info="${tomorrowId}">Soll <span class="pvs-sub">${t(hass, "more_info")}</span></span>
-        <span class="pvs-chip clickable" data-more-info="${producedId}">Ist <span class="pvs-sub">${t(hass, "more_info")}</span></span>
+        <span class="pvs-chip clickable" data-more-info="${tomorrowId}" title="${esc(t(hass, "more_info"))}: ${tomorrowId}">${t(hass, "daily_soll").split(" ")[0]} ↗</span>
+        <span class="pvs-chip clickable" data-more-info="${producedId}" title="${esc(t(hass, "more_info"))}: ${producedId}">${t(hass, "daily_ist")} ↗</span>
       </div>
       <div class="d-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         <defs>${hatchPattern("pvs-hatch-d")}${hatchPattern("pvs-hatch-dl")}</defs>

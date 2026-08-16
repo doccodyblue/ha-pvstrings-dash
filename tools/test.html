@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!-- Dev harness: renders all cards with LIVE data from HA over websocket.
+     Open as: http://localhost:8099/tools/test.html?dark=1#token=<HA_LLAT>
+     The token stays in the URL fragment (never sent to the server). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>pvstrings-dash test</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0; padding: 18px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f4f4f4;
+    --card-background-color: #ffffff;
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --divider-color: #e0e0e0;
+    --warning-color: #ffa600;
+    --error-color: #db4437;
+    --success-color: #43a047;
+    --ha-card-border-radius: 12px;
+  }
+  body.dark {
+    color-scheme: dark;
+    background: #111111;
+    --card-background-color: #1c1c1c;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --divider-color: #2c2c2c;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 14px; }
+  .cell > * { display: block; }
+  ha-card {
+    display: block; background: var(--card-background-color);
+    border-radius: 12px; border: 1px solid var(--divider-color);
+    color: var(--primary-text-color);
+  }
+  h4 { color: var(--secondary-text-color); font-weight: 500; margin: 4px 2px; font-size: 11px; }
+  #status { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 12px; font-family: monospace; }
+  pre { font-size: 10px; overflow: auto; max-height: 320px; background: var(--card-background-color); color: var(--primary-text-color); padding: 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="status">connecting…</div>
+<div class="grid" id="grid"></div>
+<h4>strategy output</h4>
+<pre id="strategy"></pre>
+<script type="module">
+  import "/pvstrings-dash.js";
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("dark") === "1") document.body.classList.add("dark");
+  const token = new URLSearchParams(location.hash.slice(1)).get("token");
+  const HA = "homeassistant.local:8123";
+  const status = (m) => document.getElementById("status").textContent = m;
+
+  // minimal hass over a real websocket
+  const ws = new WebSocket(`ws://${HA}/api/websocket`);
+  let msgId = 0;
+  const pending = new Map();
+  const wsReady = new Promise((resolve, reject) => {
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "auth_required") ws.send(JSON.stringify({ type: "auth", access_token: token }));
+      else if (msg.type === "auth_ok") resolve();
+      else if (msg.type === "auth_invalid") reject(new Error("auth failed"));
+      else if (msg.type === "result") {
+        const p = pending.get(msg.id);
+        if (p) { pending.delete(msg.id); msg.success ? p.res(msg.result) : p.rej(new Error(JSON.stringify(msg.error))); }
+      }
+    };
+    ws.onerror = () => reject(new Error("ws error"));
+  });
+  const callWS = async (cmd) => {
+    await wsReady;
+    return new Promise((res, rej) => {
+      const id = ++msgId;
+      pending.set(id, { res, rej });
+      ws.send(JSON.stringify({ ...cmd, id }));
+    });
+  };
+
+  await wsReady.catch((e) => { status("FAILED: " + e.message + " — pass #token=<LLAT>"); throw e; });
+  const statesList = await callWS({ type: "get_states" });
+  const config = await callWS({ type: "get_config" });
+  const states = Object.fromEntries(statesList.map((s) => [s.entity_id, s]));
+
+  const hass = {
+    states, callWS, config,
+    language: "de", locale: { language: "de" },
+    themes: { darkMode: document.body.classList.contains("dark") },
+  };
+
+  const find = (pred) => statesList.find(pred)?.entity_id;
+  const skyId = find((s) => Array.isArray(s.attributes.cells) && "reference_ratio" in s.attributes);
+  const stringFcId = find((s) => s.attributes.forecast?.[0]?.physics_kwh !== undefined);
+  const plantFcId = find((s) => Array.isArray(s.attributes.forecast) && s.attributes.forecast[0]?.physics_kwh === undefined);
+  const moId = find((s) => s.attributes.log_ratio);
+  const sdId = find((s) => s.attributes.strings && typeof s.attributes.strings === "object" && !Array.isArray(s.attributes.strings));
+  const collId = find((s) => s.attributes.intervals_written !== undefined);
+  const ghiId = find((s) => s.attributes.truth_source !== undefined);
+
+  const cards = [
+    ["sky-map", "pvstrings-sky-map", { entity: skyId }],
+    ["forecast plant 2d", "pvstrings-forecast", { entity: plantFcId, days: 2 }],
+    ["forecast string 1d", "pvstrings-forecast", { entity: stringFcId, days: 1 }],
+    ["chain", "pvstrings-chain", { entity: stringFcId }],
+    ["daily plant 14d", "pvstrings-daily", { entity: plantFcId, days: 14 }],
+    ["daily string 7d", "pvstrings-daily", { entity: stringFcId, days: 7 }],
+    ["kv log_ratio_plant", "pvstrings-kv-table", { entity: moId, mode: "log_ratio_plant", title: "Anlage: Wetter × Tagesabschnitt" }],
+    ["kv ghi_bias", "pvstrings-kv-table", { entity: moId, mode: "ghi_bias", title: "Source-Bias", truth_entity: ghiId }],
+    ["kv censoring", "pvstrings-kv-table", { entity: sdId, mode: "censoring", title: "Zensur-Split" }],
+    ["kv collector", "pvstrings-kv-table", { entity: collId, mode: "collector", title: "Erfassung" }],
+    ["kv skip_reasons", "pvstrings-kv-table", { entity: moId, mode: "skip_reasons", title: "Skip-Gründe" }],
+    ["problem panel (broken entity)", "pvstrings-sky-map", { entity: "sensor.does_not_exist" }],
+  ];
+  const grid = document.getElementById("grid");
+  for (const [label, tag, cfg] of cards) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `<h4>${label}</h4>`;
+    const el = document.createElement(tag);
+    try { el.setConfig(cfg); } catch (e) { cell.append("setConfig error: " + e.message); }
+    el.hass = hass;
+    cell.append(el);
+    grid.append(cell);
+  }
+  status(`connected — ${statesList.length} states, sky=${skyId}, stringFc=${stringFcId}, plantFc=${plantFcId}`);
+
+  // strategy dry-run
+  try {
+    const strat = customElements.get("ll-strategy-dashboard-pvstrings");
+    const out = await strat.generate({}, hass);
+    document.getElementById("strategy").textContent =
+      JSON.stringify(out, null, 1).slice(0, 20000);
+  } catch (e) {
+    document.getElementById("strategy").textContent = "STRATEGY ERROR: " + (e.stack ?? e);
+  }
+</script>
+</body>
+</html>
