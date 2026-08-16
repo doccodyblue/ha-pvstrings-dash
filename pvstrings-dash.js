@@ -149,6 +149,9 @@ const STR = {
     "fc_delta": "actual vs forecast",
     "fc_group_unshaded": "Group sensors publish no separate unshaded series (the attribute is a copy) — unshaded hidden.",
     "fc_actual_unresolved": "Actual production hidden: could not resolve the production sensor for this entity.",
+    "fc_hero_ist": "actual today",
+    "fc_hero_prog": "forecast today",
+    "fc_hourly_fallback": "actual drawn from hourly statistics (no 5-minute power data available)",
     // chain
     "chain_title": "Forecast chain",
     "chain_physics": "raw physics",
@@ -250,6 +253,9 @@ const STR = {
     "fc_delta": "Ist vs. Prognose",
     "fc_group_unshaded": "Gruppen-Sensoren publizieren keine eigene Unverschattet-Serie (das Attribut ist eine Kopie) — Unverschattet ausgeblendet.",
     "fc_actual_unresolved": "Ist-Produktion ausgeblendet: Produktionssensor für diese Entity nicht auflösbar.",
+    "fc_hero_ist": "Ist heute",
+    "fc_hero_prog": "Prognose heute",
+    "fc_hourly_fallback": "Ist aus Stundenstatistik gezeichnet (keine 5-Minuten-Leistungsdaten verfügbar)",
     "chain_title": "Prognosekette",
     "chain_physics": "Roh-Physik",
     "chain_shading": "Himmelskarte",
@@ -620,7 +626,8 @@ async function wsStats(hass, { ids, startISO, endISO, period, types }) {
     for (const [id, rows] of Object.entries(res ?? {})) {
       out.set(id, rows.map((r) => ({
         startMs: _tsNorm(r.start), endMs: _tsNorm(r.end),
-        change: r.change ?? null, state: r.state ?? null, sum: r.sum ?? null,
+        change: r.change ?? null, state: r.state ?? null,
+        sum: r.sum ?? null, mean: r.mean ?? null,
       })));
     }
     return out;
@@ -752,7 +759,7 @@ function wireTooltip(card, { selector, content }) {
   const show = (target, ev) => {
     const tip = root.querySelector(".pvs-tip");
     if (!tip) return;
-    const html = content(target);
+    const html = content(target, ev);
     if (!html) { tip.classList.remove("on"); return; }
     tip.innerHTML = html;
     tip.classList.add("on");
@@ -1129,7 +1136,8 @@ class PvsForecastCard extends PvsBaseCard {
   }
   watchedEntities() {
     const r = this._resolved;
-    return [this._config?.entity, r?.tomorrowId, r?.dayAfterId].filter(Boolean);
+    return [this._config?.entity, r?.tomorrowId, r?.dayAfterId,
+      r?.producedIds?.[0]].filter(Boolean);
   }
   getCardSize() { return 5; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
@@ -1148,10 +1156,15 @@ class PvsForecastCard extends PvsBaseCard {
         r.dayAfterId = info.node.byKey.forecast_day_after ?? null;
         r.remainingId = info.node.byKey.forecast_remaining ?? null;
         r.producedIds = [info.node.byKey.produced_today].filter(Boolean);
+        r.powerId = info.node.byKey.power_now ?? null;
       } else if (kind === "string") {
         r.remainingId = info.node.byKey.string_forecast_remaining ?? null;
         r.tomorrowId = info.node.byKey.string_forecast_tomorrow ?? null;
         r.producedIds = [info.node.byKey.string_produced_today].filter(Boolean);
+        // the string's configured power entity, via the plant's strings_detail
+        const sdId = info.node.plant?.byKey?.strings_detail;
+        const sd = sdId ? hass.states[sdId]?.attributes?.strings : null;
+        r.powerId = sd?.[info.node.name]?.power_entity ?? null;
       } else { // group: match member names against string devices
         const names = hass.states[id]?.attributes?.strings ?? [];
         const ids = names.map((n) =>
@@ -1162,6 +1175,7 @@ class PvsForecastCard extends PvsBaseCard {
       this._resolved = r;
       this._render();
       this._loadActuals();
+      if ((this._config.style ?? "bars") === "line") this._loadPower();
     } catch (e) {
       this._resolved = { kind: "plant", producedIds: [], error: String(e) };
       this._render();
@@ -1205,6 +1219,171 @@ class PvsForecastCard extends PvsBaseCard {
     }
   }
 
+  // 5-minute mean power for the line style. Falls back to hourly statistics
+  // (marked as such) when the power entity has no short-term statistics.
+  async _loadPower() {
+    const hass = this._hass, r = this._resolved;
+    if (!r?.powerId) { this._power = null; return; }
+    const token = this._renderToken; // don't outrace _loadActuals' bump
+    const startMs = localMidnightMs(hass, Date.now());
+    try {
+      const stats = await wsStats(hass, {
+        ids: [r.powerId],
+        startISO: new Date(startMs).toISOString(), endISO: null,
+        period: "5minute", types: ["mean"], // units left as-is; W assumed below
+      });
+      const unit = hass.states[r.powerId]?.attributes?.unit_of_measurement ?? "W";
+      const scale = unit === "kW" ? 1000 : 1;
+      this._power = (stats.get(r.powerId) ?? [])
+        .filter((x) => x.mean != null)
+        .map((x) => ({ ms: x.startMs + 150000, w: x.mean * scale }));
+      this._render();
+    } catch (_) {
+      this._power = null;
+      this._render();
+    }
+  }
+
+  _renderLine(card, st, r) {
+    const hass = this._hass, cfg = this._config;
+    const title = cfg.title ?? st.attributes.friendly_name?.replace(/ (Prognose heute|Forecast today)$/i, "") ?? cfg.entity;
+    const rows = this._rows();
+    if (!rows.length) {
+      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span></div>
+        ${withheldHTML(t(hass, "fc_no_hours"))}`);
+    }
+    const isGroup = r.kind === "group";
+    const showUnshaded = (cfg.show_unshaded ?? true) && !isGroup;
+    const days = cfg.days ?? 1;
+    const startMs = localMidnightMs(hass, Date.now());
+    const windowMs = days * 24 * 3600000;
+    const nowMs = Date.now();
+
+    // series in W: forecast/unshaded at hour centers; actual 5-min or hourly
+    const fcPts = rows.map((x) => ({ ms: x.ms + 1800000, v: x.potential * 1000 }));
+    const unPts = showUnshaded
+      ? rows.map((x) => ({ ms: x.ms + 1800000, v: x.unshaded * 1000 })) : [];
+    let actPts = [], hourlyFallback = false;
+    if (this._power?.length) {
+      actPts = this._power.filter((p) => p.ms >= startMs && p.ms <= nowMs)
+        .map((p) => ({ ms: p.ms, v: Math.max(0, p.w) }));
+    } else if (this._actuals) {
+      hourlyFallback = true;
+      actPts = [...this._actuals.entries()]
+        .filter(([ms]) => ms + 3600000 <= nowMs + 60000)
+        .sort((a, b) => a[0] - b[0])
+        .map(([ms, kwh]) => ({ ms: ms + 1800000, v: kwh * 1000 }));
+    }
+
+    let maxV = 100;
+    for (const p of [...fcPts, ...unPts, ...actPts]) maxV = Math.max(maxV, p.v);
+    const yMax = niceMax(maxV * 1.06);
+    const PAD_L = 42, PAD_R = 6, PAD_T = 10, PAD_B = 22, PH = 168;
+    const PW = 620;
+    const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
+    const xOf = (ms) => PAD_L + ((ms - startMs) / windowMs) * PW;
+    const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
+
+    const path = (pts, maxGap) => {
+      let d = "", prev = null;
+      for (const p of pts) {
+        d += `${!prev || p.ms - prev.ms > maxGap ? "M" : "L"}${xOf(p.ms).toFixed(1)} ${yOf(p.v).toFixed(1)}`;
+        prev = p;
+      }
+      return d;
+    };
+    // area under the actual line, one closed path per contiguous run
+    const area = (pts, maxGap) => {
+      let d = "", run = [];
+      const flush = () => {
+        if (run.length < 2) { run = []; return; }
+        d += `M${xOf(run[0].ms).toFixed(1)} ${yOf(0).toFixed(1)}`
+          + run.map((p) => `L${xOf(p.ms).toFixed(1)} ${yOf(p.v).toFixed(1)}`).join("")
+          + `L${xOf(run[run.length - 1].ms).toFixed(1)} ${yOf(0).toFixed(1)}Z`;
+        run = [];
+      };
+      for (const p of pts) {
+        if (run.length && p.ms - run[run.length - 1].ms > maxGap) flush();
+        run.push(p);
+      }
+      flush();
+      return d;
+    };
+    const HOUR_GAP = 2 * 3600000, FIVE_GAP = 16 * 60000;
+    const actGap = hourlyFallback ? HOUR_GAP : FIVE_GAP;
+
+    // axes: y 0/half/max, x every 4h (1 day) or 6h
+    let grid = "";
+    const unitKw = yMax >= 10000;
+    for (const v of [0, yMax / 2, yMax]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${unitKw ? fmtNum(hass, v / 1000, 1) : fmtNum(hass, v, 0)}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 2}" text-anchor="end" style="font-size:8.5px">${unitKw ? "kW" : "W"}</text>`;
+    const stepH = days === 1 ? 4 : 6;
+    for (let hOff = 0; hOff <= days * 24; hOff += stepH) {
+      const ms = startMs + hOff * 3600000;
+      const x = xOf(ms);
+      if (hOff % 24 === 0 && hOff > 0 && hOff < days * 24) {
+        grid += `<line class="grid" x1="${x}" y1="${PAD_T}" x2="${x}" y2="${PAD_T + PH}"/>`;
+      }
+      if (hOff < days * 24 || days === 1) {
+        grid += `<text class="axis" x="${x}" y="${H - 8}" text-anchor="middle">${fmtHour(hass, ms)}</text>`;
+      }
+    }
+    // now marker
+    let now = "";
+    if (nowMs > startMs && nowMs < startMs + windowMs) {
+      const nx = xOf(nowMs);
+      now = `<line x1="${nx}" y1="${PAD_T - 3}" x2="${nx}" y2="${PAD_T + PH}"
+        stroke="var(--pvs-measure)" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/>`;
+    }
+
+    // hero numbers
+    const prodId = r.producedIds?.[0];
+    const prodSt = prodId ? hass.states[prodId] : null;
+    const heroIst = prodSt && !isNaN(parseFloat(prodSt.state))
+      ? `<div class="fc-hero-item clickable" data-more-info="${prodId}">
+          <span class="hv" style="color:var(--pvs-measure)">${fmtNum(hass, parseFloat(prodSt.state), 1)}<span class="hu">kWh</span></span>
+          <span class="hl">${t(hass, "fc_hero_ist")}</span></div>` : "";
+    const fcState = isGroup ? st.attributes.today_kwh : parseFloat(st.state);
+    const heroProg = fcState != null && !isNaN(fcState)
+      ? `<div class="fc-hero-item right clickable" data-more-info="${cfg.entity}">
+          <span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, fcState, 1)}<span class="hu">kWh</span></span>
+          <span class="hl">${t(hass, "fc_hero_prog")}</span></div>` : "";
+
+    this._lineGeom = { startMs, windowMs, PAD_L, PW, W };
+    this._lineSeries = {
+      fc: new Map(rows.map((x) => [x.ms, x])),
+      act: actPts, hourlyFallback,
+    };
+
+    const notes = [];
+    if (hourlyFallback && actPts.length) notes.push(`<div class="fc-note">${t(hass, "fc_hourly_fallback")}</div>`);
+    if (this._actualsProblem === "stats_unavailable" && !actPts.length) {
+      notes.push(`<div class="fc-note">${t(hass, "stats_unavailable", { entity: r.powerId ?? r.producedIds?.join(", ") ?? "?" })}</div>`);
+    }
+
+    card(`
+      <div class="fc-hero">${heroIst}<span class="fc-hero-title">${esc(title)}</span>${heroProg}</div>
+      ${notes.join("")}
+      <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}
+        ${actPts.length ? `<path d="${area(actPts, actGap)}" fill="var(--pvs-measure)" opacity="0.13"/>` : ""}
+        ${unPts.length ? `<path d="${path(unPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${fcPts.length ? `<path d="${path(fcPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${actPts.length ? `<path d="${path(actPts, actGap)}" fill="none" stroke="var(--pvs-measure)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${now}
+        <line class="fc-xh" x1="-10" y1="${PAD_T}" x2="-10" y2="${PAD_T + PH}" stroke="var(--secondary-text-color)" stroke-width="1" opacity="0"/>
+        <rect class="lhit" x="${PAD_L}" y="${PAD_T}" width="${PW}" height="${PH}" fill="transparent"/>
+      </svg></div>
+      <div class="pvs-legend">
+        ${unPts.length ? `<span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "fc_unshaded")}</span>` : ""}
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "fc_forecast")}</span>
+        ${actPts.length ? `<span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "fc_actual")}</span>` : ""}
+      </div>`);
+  }
+
   _rows() {
     // -> [{ms, potential, unshaded}] across the configured window, sparse.
     const hass = this._hass, cfg = this._config, r = this._resolved;
@@ -1245,6 +1424,7 @@ class PvsForecastCard extends PvsBaseCard {
     this._resolve();
     const r = this._resolved || { kind: "plant", producedIds: [] };
     const isGroup = r.kind === "group";
+    if ((cfg.style ?? "bars") === "line") return this._renderLine(card, st, r);
     const showUnshaded = (cfg.show_unshaded ?? true) && !isGroup;
     const showActual = (cfg.show_actual ?? true);
 
@@ -1402,9 +1582,13 @@ class PvsForecastCard extends PvsBaseCard {
     this._wireMoreInfo();
     if (this._wired) return;
     this._wired = true;
+    this.shadowRoot.addEventListener("pointerleave", () => {
+      this.shadowRoot.querySelector(".fc-xh")?.setAttribute("opacity", "0");
+    });
     wireTooltip(this, {
-      selector: ".hit",
-      content: (el) => {
+      selector: ".hit,.lhit",
+      content: (el, ev) => {
+        if (el.classList.contains("lhit")) return this._lineTip(ev);
         const hass = this._hass;
         const d = JSON.parse(el.getAttribute("data-slot"));
         if (d.f == null && d.a == null) {
@@ -1423,6 +1607,33 @@ class PvsForecastCard extends PvsBaseCard {
     });
   }
 
+  _lineTip(ev) {
+    const hass = this._hass;
+    const g = this._lineGeom, s = this._lineSeries;
+    if (!g || !s) return null;
+    const svg = this.shadowRoot.querySelector("svg.fc-line");
+    const rect = svg.getBoundingClientRect();
+    const vx = (ev.clientX - rect.left) / rect.width * g.W;
+    const ms = g.startMs + (vx - g.PAD_L) / g.PW * g.windowMs;
+    const hourMs = ms - (ms % 3600000);
+    const fc = s.fc.get(hourMs);
+    let act = null, best = 21 * 60000;
+    for (const p of s.act) {
+      const d = Math.abs(p.ms - ms);
+      if (d < best) { best = d; act = p; }
+    }
+    const xh = svg.querySelector(".fc-xh");
+    if (xh) { xh.setAttribute("x1", vx); xh.setAttribute("x2", vx); xh.setAttribute("opacity", "0.4"); }
+    if (!fc && !act) return null;
+    const shadow = fc && fc.unshaded > 0 ? (1 - fc.potential / fc.unshaded) * 100 : null;
+    return `<div class="h">${fmtWeekday(hass, ms)} ${fmtHour(hass, ms)}</div>
+      ${fc ? `<div class="r"><span class="k">${t(hass, "fc_forecast")}</span><span class="v">${fmtNum(hass, fc.potential * 1000, 0)} W</span></div>` : ""}
+      ${fc && fc.unshaded !== fc.potential ? `<div class="r"><span class="k">${t(hass, "fc_unshaded")}</span><span class="v">${fmtNum(hass, fc.unshaded * 1000, 0)} W</span></div>` : ""}
+      ${shadow != null && shadow > 0.5 ? `<div class="r"><span class="k">${t(hass, "fc_known_shadow")}</span><span class="v">${fmtNum(hass, shadow, 0)} %</span></div>` : ""}
+      ${act ? `<div class="r"><span class="k">${t(hass, "fc_actual")}</span><span class="v">${fmtNum(hass, act.v, 0)} W</span></div>` : ""}
+      ${s.hourlyFallback && act ? `<div class="pvs-sub">${t(hass, "fc_hourly_fallback")}</div>` : ""}`;
+  }
+
   static getConfigElement() { return document.createElement("pvstrings-forecast-editor"); }
   static getStubConfig(hass, entities) {
     const guess = (entities ?? []).find((e) =>
@@ -1434,7 +1645,20 @@ class PvsForecastCard extends PvsBaseCard {
 const FC_CSS = `
   .fc-wrap svg { width: 100%; height: auto; display: block; }
   .fc-note { font-size: 11px; color: var(--secondary-text-color); margin: 2px 0 6px; }
-  .hit { cursor: crosshair; }
+  .hit, .lhit { cursor: crosshair; }
+  .fc-hero { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+  .fc-hero-title {
+    flex: 1; text-align: center; align-self: center;
+    font-size: 13px; font-weight: 600; color: var(--secondary-text-color);
+    letter-spacing: 0.2px; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fc-hero-item { display: flex; flex-direction: column; gap: 1px; }
+  .fc-hero-item.right { text-align: right; }
+  .fc-hero-item.clickable { cursor: pointer; }
+  .fc-hero-item .hv { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 700; line-height: 1.1; }
+  .fc-hero-item .hu { font-size: 12px; font-weight: 500; margin-left: 3px; opacity: 0.75; }
+  .fc-hero-item .hl { font-size: 11px; color: var(--secondary-text-color); }
 `;
 
 /* ========================= SECTION: CARD:CHAIN =========================== */
@@ -1982,10 +2206,11 @@ class PvsKvTableCard extends PvsBaseCard {
         const sky = hass.states[r.sky], sh = hass.states[r.shading];
         const ref = sky?.attributes?.reference_ratio;
         const worst = sh?.attributes?.most_shaded?.[0];
+        const sector = worst?.sector?.replace("|", "° · ").replace(/-/g, "–") ?? null;
         return `<tr><th class="clickable" data-more-info="${r.sky}">${esc(r.name)}</th>
           <td><span class="pvs-num">${sky?.attributes?.cells?.length ?? "—"}</span></td>
           <td class="${ref != null && ref < 0.9 ? "hot" : ""}"><span class="pvs-num">${ref == null ? "—" : fmtNum(hass, ref, 2)}</span></td>
-          <td>${worst ? `<span class="pvs-num">${esc(worst.sector)}</span> <span class="n">${fmtNum(hass, worst.shading_pct, 0)}%</span>` : "—"}</td></tr>`;
+          <td>${worst ? `<span class="pvs-num" style="white-space:nowrap">${esc(sector)}°</span> <span class="n">${fmtNum(hass, worst.shading_pct, 0)}%</span>` : "—"}</td></tr>`;
       }).join("");
       body = `<table><tr><th></th><th>cells</th><th>${t(hass, "sky_reference")}</th><th>max</th></tr>${rows2}</table>`;
     } else {
@@ -1996,7 +2221,7 @@ class PvsKvTableCard extends PvsBaseCard {
       body = `<table>${Object.entries(obj).map(([k, v]) =>
         `<tr><th>${esc(k)}</th><td>${typeof v === "object" ? `<span class="dim">${esc(JSON.stringify(v))}</span>` : `<span class="pvs-num">${esc(v)}</span>`}</td></tr>`).join("")}</table>`;
     }
-    card(head + body);
+    card(head + `<div class="kv-scroll">${body}</div>`);
   }
 
   static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
@@ -2004,6 +2229,7 @@ class PvsKvTableCard extends PvsBaseCard {
 }
 
 const KV_CSS = `
+  .kv-scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
   th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--pvs-hairline); }
   th { color: var(--secondary-text-color); font-weight: 500; }
@@ -2026,10 +2252,19 @@ const KV_CSS = `
 function mdCard(content) { return { type: "markdown", content }; }
 function heading(text, style = "title") { return { type: "heading", heading: text, heading_style: style }; }
 
-function tileOrMissing(lang, node, key, extra = {}) {
+function tileOrMissing(hass, lang, node, key, extra = {}) {
   const id = node?.byKey?.[key];
   if (!id) return mdCard(t(lang, "missing_card", { key }));
-  return { type: "tile", entity: id, ...extra };
+  // Strip the device-name prefix: the section heading already names the
+  // device, and full friendly names truncate in tiles.
+  let name = extra.name;
+  if (!name) {
+    const friendly = hass.states[id]?.attributes?.friendly_name ?? "";
+    if (node.name && friendly.startsWith(node.name)) {
+      name = friendly.slice(node.name.length).trim();
+    }
+  }
+  return { type: "tile", entity: id, ...(name ? { name } : {}), ...extra };
 }
 
 async function buildViews(hass, config) {
@@ -2049,7 +2284,7 @@ async function buildViews(hass, config) {
     const slug = multi ? plant.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" : "";
     const strings = model.strings.filter((s) => s.plant === plant);
     const groups = model.groups.filter((g) => g.plant === plant);
-    const P = (key, extra) => tileOrMissing(lang, plant, key, extra);
+    const P = (key, extra) => tileOrMissing(hass, lang, plant, key, extra);
     const forecastDays = config?.forecast_days ?? 2;
 
     // ---- Übersicht ----
@@ -2079,7 +2314,7 @@ async function buildViews(hass, config) {
     if (groups.length) {
       overviewSections.push({ type: "grid", cards: [
         heading(t(lang, "s_groups")),
-        ...groups.map((g) => tileOrMissing(lang, g, "group_forecast_remaining", { name: g.name })),
+        ...groups.map((g) => tileOrMissing(hass, lang, g, "group_forecast_remaining", { name: g.name })),
       ] });
     }
     overviewSections.push({ type: "grid", cards: [
@@ -2100,14 +2335,14 @@ async function buildViews(hass, config) {
         type: "grid", cards: [
           heading(s.name),
           s.byKey.string_forecast_today
-            ? { type: "custom:pvstrings-forecast", entity: s.byKey.string_forecast_today, days: 1, title: s.name }
+            ? { type: "custom:pvstrings-forecast", entity: s.byKey.string_forecast_today, days: 1, style: "line", title: s.name }
             : mdCard(t(lang, "missing_card", { key: "string_forecast_today" })),
           s.byKey.string_sky_map
             ? { type: "custom:pvstrings-sky-map", entity: s.byKey.string_sky_map }
             : mdCard(t(lang, "missing_card", { key: "string_sky_map" })),
-          tileOrMissing(lang, s, "string_shading_now"),
-          tileOrMissing(lang, s, "string_produced_today", { color: "orange" }),
-          tileOrMissing(lang, s, "string_potential_now"),
+          tileOrMissing(hass, lang, s, "string_shading_now"),
+          tileOrMissing(hass, lang, s, "string_produced_today", { color: "orange" }),
+          tileOrMissing(hass, lang, s, "string_potential_now"),
         ],
       })),
     });
@@ -2208,6 +2443,7 @@ const EDITORS = {
     { name: "show_sun", selector: { boolean: {} } },
     { name: "seasons", selector: { boolean: {} } }],
   "pvstrings-forecast-editor": [ENTITY_SCHEMA,
+    { name: "style", selector: { select: { options: ["bars", "line"], mode: "dropdown" } } },
     { name: "days", selector: { number: { min: 1, max: 3, mode: "box" } } },
     { name: "show_unshaded", selector: { boolean: {} } },
     { name: "show_actual", selector: { boolean: {} } }],

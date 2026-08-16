@@ -88,6 +88,15 @@ attribute shape, so one card. For a curtailment group, `today_kwh` and
 Bars for the hourly detail, not a smoothed line: the values *are* hourly
 buckets and a spline across them draws a resolution the data does not have.
 
+**Amendment (2026-08-16).** A `style: line` variant exists and is what the
+strategy uses for the per-string sections. It keeps the honesty rule by
+changing the data, not by smoothing: the actual series comes from the string's
+configured power entity via the recorder's 5-minute statistics (mean power),
+which *is* high-resolution, while forecast and unshaded stay hourly and are
+drawn as straight segments between hour centres — no splines. One axis, watts.
+When no 5-minute statistics exist the card falls back to hourly means and says
+so on the card. The plant overview keeps bars.
+
 ---
 
 ## 3. `pvstrings-chain`

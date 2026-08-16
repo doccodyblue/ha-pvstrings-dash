@@ -11,6 +11,18 @@ const root = normalize(join(fileURLToPath(import.meta.url), "..", ".."));
 const port = parseInt(process.argv[2] ?? "8099", 10);
 
 createServer(async (req, res) => {
+  if (req.method === "OPTIONS") {
+    // Chrome Private/Local Network Access preflight
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Private-Network": "true",
+      "Access-Control-Allow-Local-Network": "true",
+    });
+    res.end();
+    return;
+  }
   const path = normalize(join(root, new URL(req.url, "http://x").pathname));
   if (!path.startsWith(root)) { res.writeHead(403).end(); return; }
   try {
