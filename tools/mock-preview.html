@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <style>
   body { margin: 0; padding: 18px; font-family: system-ui, sans-serif;
-    background: #111;
-    --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1;
-    --secondary-text-color: #9b9b9b; --divider-color: #2c2c2c;
+    background: #f4f4f4;
+    --card-background-color: #ffffff; --primary-text-color: #212121;
+    --secondary-text-color: #727272; --divider-color: #e0e0e0;
     --warning-color: #ffa600; --error-color: #db4437; --success-color: #43a047; }
+  body.dark { background: #111;
+    --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b; --divider-color: #2c2c2c; }
   ha-card { display: block; background: var(--card-background-color);
     border-radius: 12px; border: 1px solid var(--divider-color); color: var(--primary-text-color); }
   .narrow { width: 460px; } .wideb { width: 940px; }
@@ -16,9 +19,10 @@
 </head>
 <body>
 <h4>wide (940px container)</h4><div class="wideb" id="w"></div>
-<h4>normal (460px container)</h4><div class="narrow" id="n"></div>
+<h4>normal (460px container)</h4><div class="narrow" id="n"></div>\n<h4>sky map (520px container)</h4><div style="width:520px" id="sky"></div>
 <script type="module">
   import "/pvstrings-dash.js";
+  if (new URLSearchParams(location.search).get("dark") === "1") document.body.classList.add("dark");
   // --- synthetic plant: forecast bell curve, 5-min power with noise ---
   const day = new Date(); day.setHours(0, 0, 0, 0);
   const d0 = day.getTime();
@@ -29,7 +33,26 @@
       potential_kwh: +bell(h).toFixed(3), unshaded_kwh: +(bell(h) * 1.12).toFixed(3) });
   }
   const nowH = 14.4;
+  // synthetic sky map: an arc with an evening shadow, holes, and a low reference
+  const cells = [];
+  for (let az = 60; az <= 300; az += 10) {
+    const elMax = Math.max(5, Math.round(50 * Math.sin((az - 50) / 260 * Math.PI) / 5) * 5);
+    for (let el = 5; el <= elMax; el += 5) {
+      if ((az === 130 && el > 20) || (az === 180 && el === 25)) continue; // unobserved holes
+      const evening = az > 230 ? (az - 230) / 70 : 0;
+      const low = el <= 15 ? (20 - el) / 20 : 0;
+      const loss = Math.min(95, Math.round((evening * 60 + low * 45) * 10) / 10);
+      cells.push({ az, el, loss, ratio: +(0.9 - loss / 200).toFixed(3),
+        n: +(5 + Math.random() * 30).toFixed(1),
+        season: az === 90 && el === 10 ? "ascending" : null });
+    }
+  }
   const states = {
+    "sensor.s1_sky": { entity_id: "sensor.s1_sky", state: String(cells.length),
+      attributes: { cells, reference_ratio: 0.87, friendly_name: "Strang Ost Himmelskarte" } },
+    "sensor.s1_shading": { entity_id: "sensor.s1_shading", state: "12",
+      attributes: { name: "Strang Ost", sun_azimuth: 205.4, sun_elevation: 34.2,
+        observations: 5123, most_shaded: [], friendly_name: "Strang Ost Verschattung jetzt" } },
     "sensor.plant_fc": { entity_id: "sensor.plant_fc", state: "17.9",
       attributes: { forecast, friendly_name: "PV Anlage Prognose heute" } },
     "sensor.plant_prod": { entity_id: "sensor.plant_prod", state: "12.4",
@@ -38,11 +61,16 @@
       attributes: { unit_of_measurement: "W", friendly_name: "PV Anlage Leistung jetzt" } },
   };
   const entReg = [
+    { entity_id: "sensor.s1_sky", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_sky_map", translation_key: "sky_map" },
+    { entity_id: "sensor.s1_shading", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_shading_now", translation_key: "shading_now" },
     { entity_id: "sensor.plant_fc", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_today", translation_key: "forecast_today" },
     { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
   ];
-  const devReg = [{ id: "dp", model: "PV plant", name: "PV Anlage", identifiers: [["pvstrings", "e"]] }];
+  const devReg = [
+    { id: "dp", model: "PV plant", name: "PV Anlage", identifiers: [["pvstrings", "e"]] },
+    { id: "ds", model: "PV string", name: "Strang Ost", via_device_id: "dp", identifiers: [["pvstrings", "e_s1"]] },
+  ];
   const stats5 = [];
   for (let m = 0; m < nowH * 60; m += 5) {
     const h = m / 60;
@@ -66,9 +94,11 @@
   const hass = { states, callWS, language: "de", locale: { language: "de" },
     config: { time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone, latitude: 53.6 },
     themes: { darkMode: true } };
-  for (const [sel, cfg] of [["#w", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false }],
-                            ["#n", { entity: "sensor.plant_fc", days: 1, style: "line" }]]) {
-    const el = document.createElement("pvstrings-forecast");
+  for (const [sel, tag, cfg] of [
+      ["#w", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false }],
+      ["#n", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line" }],
+      ["#sky", "pvstrings-sky-map", { entity: "sensor.s1_sky" }]]) {
+    const el = document.createElement(tag);
     el.setConfig(cfg); el.hass = hass;
     document.querySelector(sel).append(el);
   }

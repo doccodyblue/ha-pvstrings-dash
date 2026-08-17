@@ -336,10 +336,14 @@ function t(hass, key, vars) {
 // palette validator against HA's default surfaces #ffffff / #1c1c1c):
 //   model quantities = blue, its earlier stage (unshaded) = light ordinal
 //   step of the same hue, measurement = orange, loss = violet sequential.
-const LOSS_RAMP_LIGHT = ["#ede9fa", "#dcd3f5", "#c8b9ef", "#b29ce7",
-  "#9a7fdd", "#8163d0", "#6749bd", "#4c319f"];
-const LOSS_RAMP_DARK = ["#2c2740", "#3b3159", "#4c3d75", "#5f4b92",
-  "#7660b4", "#8f7bd4", "#ab9cec", "#cabffa"];
+// Loss ramp = shadow ramp: light means clear sky, dark means shadow — the
+// iconic mapping (shading IS darkness) needs no legend to be learned. The
+// direction is the SAME in both themes (a sunny sky is bright, also at
+// night-mode); the dark end carries a cool violet cast, like real shadows.
+const LOSS_RAMP_LIGHT = ["#f4f2ee", "#e0ddd8", "#c8c5c2", "#aaa8a8",
+  "#8a888d", "#68656f", "#454250", "#262230"];
+const LOSS_RAMP_DARK = ["#eceae5", "#d3d0cc", "#b5b2b1", "#959398",
+  "#75727c", "#555260", "#393647", "#262230"];
 
 const BASE_CSS = `
   :host {
@@ -349,6 +353,7 @@ const BASE_CSS = `
     --pvs-sun: #eda100;
     --pvs-unobserved: color-mix(in srgb, var(--secondary-text-color, #727272) 16%, var(--card-background-color, #fff));
     --pvs-hairline: color-mix(in srgb, var(--primary-text-color, #212121) 9%, transparent);
+    --pvs-cell-stroke: color-mix(in srgb, var(--primary-text-color, #212121) 16%, transparent);
     --pvs-chip-bg: color-mix(in srgb, var(--primary-text-color, #212121) 5%, transparent);
     --pvs-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     ${LOSS_RAMP_LIGHT.map((c, i) => `--pvs-loss-${i}: ${c};`).join("\n    ")}
@@ -978,13 +983,16 @@ class PvsSkyMapCard extends PvsBaseCard {
         const c = layer.get(`${az}|${el}`);
         const x = PAD_L + ai * CW, y = PAD_T + ei * CH;
         if (c) {
+          // observed cells are filled AND outlined — the light end of the
+          // shadow ramp must never melt into the card background (a clear
+          // cell is not "nothing")
           rects += `<rect class="cell" x="${x}" y="${y}" width="${CW}" height="${CH}"
-            fill="${lossColor(c.loss)}" stroke="var(--card-background-color)" stroke-width="1"
+            fill="${lossColor(c.loss)}" stroke="var(--pvs-cell-stroke)" stroke-width="1"
             data-cell='${esc(JSON.stringify({ az, el, loss: c.loss, ratio: c.ratio, n: c.n, season: c.season }))}'/>`;
         } else {
-          rects += `<rect x="${x}" y="${y}" width="${CW}" height="${CH}"
-            fill="var(--pvs-unobserved)" stroke="var(--card-background-color)" stroke-width="1"/>
-            <rect x="${x}" y="${y}" width="${CW}" height="${CH}" fill="url(#pvs-hatch)"
+          // never observed: unfilled + hatched — on the shadow ramp neither
+          // end may collide with this
+          rects += `<rect x="${x}" y="${y}" width="${CW}" height="${CH}" fill="url(#pvs-hatch)"
             stroke="none" data-unobs="1"/>`;
         }
       }
@@ -1040,8 +1048,8 @@ class PvsSkyMapCard extends PvsBaseCard {
         <rect width="72" height="10" rx="2" fill="url(#pvs-ramp)"/></svg>
         ${t(hass, "sky_loss")} 0–95%</span>
       <span class="it"><svg width="14" height="12">
-        <rect width="14" height="12" rx="2" fill="var(--pvs-unobserved)"/>
-        <rect width="14" height="12" rx="2" fill="url(#pvs-hatch-l)"/></svg>
+        <rect x="0.5" y="0.5" width="13" height="11" rx="2" fill="url(#pvs-hatch-l)"
+          stroke="var(--pvs-cell-stroke)" stroke-width="1"/></svg>
         ${t(hass, "sky_unobserved")}</span>
     </div>`;
 
