@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.1.3";
+const PVS_VERSION = "0.2.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -184,7 +184,8 @@ const STR = {
     "s_nowcast": "Nowcast (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
-    "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.",
+    "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
+    "nerd_explain": "### What these numbers mean\n- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: the reference is the best hour ever seen (below 0.9 is suspicious — the reference itself sits in shadow). Each cell's loss is relative to that reference; n is the weighted observation count.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -285,7 +286,8 @@ const STR = {
     "s_nowcast": "Nowcast (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
-    "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.",
+    "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
+    "nerd_explain": "### Was diese Zahlen bedeuten\n- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Die Referenz ist die beste je gesehene Stunde (unter 0,9 ist verdächtig — dann steht die Referenz selbst im Schatten). Der Verlust jeder Zelle ist relativ zu dieser Referenz; n ist die gewichtete Beobachtungszahl.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -1299,6 +1301,50 @@ class PvsForecastCard extends PvsBaseCard {
       }
       return d;
     };
+    // Monotone cubic interpolation (Fritsch–Carlson): passes through every
+    // data point and never overshoots — it rounds the corners the smooth
+    // physics implies without inventing extrema the data does not have.
+    // (A plain Catmull-Rom/Bézier spline stays taboo per SPEC §2.)
+    const smoothPath = (pts, maxGap) => {
+      let d = "", run = [];
+      const emit = () => {
+        const P = run.map((p) => [xOf(p.ms), yOf(p.v)]);
+        run = [];
+        if (!P.length) return;
+        d += `M${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
+        const n = P.length;
+        if (n < 2) return;
+        const h = [], delta = [];
+        for (let i = 0; i < n - 1; i++) {
+          h.push(P[i + 1][0] - P[i][0]);
+          delta.push((P[i + 1][1] - P[i][1]) / h[i]);
+        }
+        const m = [delta[0]];
+        for (let i = 1; i < n - 1; i++) {
+          m.push(delta[i - 1] * delta[i] <= 0 ? 0 : (delta[i - 1] + delta[i]) / 2);
+        }
+        m.push(delta[n - 2]);
+        for (let i = 0; i < n - 1; i++) {
+          if (delta[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+          if (m[i] / delta[i] > 3) m[i] = 3 * delta[i];
+          if (m[i + 1] / delta[i] > 3) m[i + 1] = 3 * delta[i];
+        }
+        for (let i = 0; i < n - 1; i++) {
+          const c1x = P[i][0] + h[i] / 3, c1y = P[i][1] + m[i] * h[i] / 3;
+          const c2x = P[i + 1][0] - h[i] / 3, c2y = P[i + 1][1] - m[i + 1] * h[i] / 3;
+          d += `C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${P[i + 1][0].toFixed(1)} ${P[i + 1][1].toFixed(1)}`;
+        }
+      };
+      for (const p of pts) {
+        if (run.length && p.ms - run[run.length - 1].ms > maxGap) emit();
+        run.push(p);
+      }
+      emit();
+      return d;
+    };
+    // Forecast/unshaded are smoothed (hourly means of a smooth process);
+    // the measured 5-minute line stays raw — its jitter is information.
+    const fcLine = (cfg.smooth ?? true) ? smoothPath : path;
     // area under the actual line, one closed path per contiguous run
     const area = (pts, maxGap) => {
       let d = "", run = [];
@@ -1378,8 +1424,8 @@ class PvsForecastCard extends PvsBaseCard {
       <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         ${grid}
         ${actPts.length ? `<path d="${area(actPts, actGap)}" fill="var(--pvs-measure)" opacity="0.13"/>` : ""}
-        ${unPts.length ? `<path d="${path(unPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
-        ${fcPts.length ? `<path d="${path(fcPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${unPts.length ? `<path d="${fcLine(unPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${fcPts.length ? `<path d="${fcLine(fcPts, HOUR_GAP)}" fill="none" stroke="var(--pvs-model)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
         ${actPts.length ? `<path d="${path(actPts, actGap)}" fill="none" stroke="var(--pvs-measure)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
         ${now}
         <line class="fc-xh" x1="-10" y1="${PAD_T}" x2="-10" y2="${PAD_T + PH}" stroke="var(--secondary-text-color)" stroke-width="1" opacity="0"/>
@@ -2436,6 +2482,8 @@ async function buildViews(hass, config) {
       mo ? { type: "custom:pvstrings-kv-table", entity: mo, mode: "skip_reasons", title: t(lang, "nerd_skips") }
         : mdCard(t(lang, "missing_card", { key: "model_observations" })),
     ] });
+    // Educational footer: nerds know this, normal users may want to learn it.
+    nerdSections.push({ type: "grid", column_span: 3, cards: [mdCard(t(lang, "nerd_explain"))] });
     views.push({
       title: prefix + t(lang, "v_nerd"), path: `${slug}nerd`,
       icon: "mdi:flask-outline", type: "sections", max_columns: 3,
@@ -2467,6 +2515,7 @@ const EDITORS = {
   "pvstrings-forecast-editor": [ENTITY_SCHEMA,
     { name: "style", selector: { select: { options: ["bars", "line"], mode: "dropdown" } } },
     { name: "wide", selector: { boolean: {} } },
+    { name: "smooth", selector: { boolean: {} } },
     { name: "days", selector: { number: { min: 1, max: 3, mode: "box" } } },
     { name: "show_unshaded", selector: { boolean: {} } },
     { name: "show_actual", selector: { boolean: {} } }],
