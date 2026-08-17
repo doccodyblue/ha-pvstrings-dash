@@ -2419,7 +2419,9 @@ async function buildViews(hass, config) {
 
     // ---- Genauigkeit ----
     const accSections = [
-      { type: "grid", column_span: 2, cards: [mdCard(t(lang, "acc_note"))] },
+      // Two paragraphs (nowcast-vs-day-ahead, WMAPE) as two columns — one
+      // markdown card would fill only half the spanned section's grid.
+      { type: "grid", column_span: 2, cards: t(lang, "acc_note").split("\n\n").map(mdCard) },
       { type: "grid", cards: [
         heading(t(lang, "s_nowcast"), "subtitle"),
         P("wmape_7d"), P("wmape_30d"), P("bias_7d"),

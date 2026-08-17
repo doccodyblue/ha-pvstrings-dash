@@ -52,7 +52,7 @@
   const params = new URLSearchParams(location.search);
   if (params.get("dark") === "1") document.body.classList.add("dark");
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
-  const HA = "homeassistant.local:8123";
+  const HA = params.get("host") ?? "homeassistant.local:8123";
   const status = (m) => document.getElementById("status").textContent = m;
 
   // minimal hass over a real websocket
@@ -135,6 +135,7 @@
   try {
     const strat = customElements.get("ll-strategy-dashboard-pvstrings");
     const out = await strat.generate({}, hass);
+    window.__strategy = out;
     document.getElementById("strategy").textContent =
       JSON.stringify(out, null, 1).slice(0, 20000);
   } catch (e) {
