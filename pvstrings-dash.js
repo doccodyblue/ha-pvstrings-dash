@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.1.1";
+const PVS_VERSION = "0.1.2";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -1140,7 +1140,9 @@ class PvsForecastCard extends PvsBaseCard {
       r?.producedIds?.[0]].filter(Boolean);
   }
   getCardSize() { return 5; }
-  getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
+  // "full": a section with column_span > 1 doubles its internal grid, and a
+  // card pinned to 12 columns would only fill half of it.
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
 
   async _resolve() {
     if (this._resolved !== null || !this._hass || !this._config?.entity) return;
@@ -1278,10 +1280,12 @@ class PvsForecastCard extends PvsBaseCard {
     let maxV = 100;
     for (const p of [...fcPts, ...unPts, ...actPts]) maxV = Math.max(maxV, p.v);
     const yMax = niceMax(maxV * 1.06);
-    const PAD_L = 42, PAD_R = 6, PAD_T = 10, PAD_B = 22, PH = 168;
-    // wide: for full-width placement — twice the drawing width keeps the
-    // rendered height identical when the card spans two columns
+    // wide: for full-width placement — wider AND taller drawing area, so a
+    // card spanning two columns reads as the hero chart, not as a squished
+    // copy of the narrow one.
     const wide = !!cfg.wide;
+    const PAD_L = 42, PAD_R = 6, PAD_T = 10, PAD_B = 22;
+    const PH = wide ? 300 : 168;
     const PW = wide ? 1330 : 620;
     const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
     const xOf = (ms) => PAD_L + ((ms - startMs) / windowMs) * PW;
@@ -1318,7 +1322,8 @@ class PvsForecastCard extends PvsBaseCard {
     // axes: y 0/half/max, x every 4h (1 day) or 6h
     let grid = "";
     const unitKw = yMax >= 10000;
-    for (const v of [0, yMax / 2, yMax]) {
+    const yTicks = wide ? [0, 0.25, 0.5, 0.75, 1].map((f) => f * yMax) : [0, yMax / 2, yMax];
+    for (const v of yTicks) {
       grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${unitKw ? fmtNum(hass, v / 1000, 1) : fmtNum(hass, v, 0)}</text>`;
     }
@@ -1368,7 +1373,7 @@ class PvsForecastCard extends PvsBaseCard {
     }
 
     card(`
-      <div class="fc-hero">${heroIst}<span class="fc-hero-title">${esc(title)}</span>${heroProg}</div>
+      <div class="fc-hero${wide ? " wide" : ""}">${heroIst}<span class="fc-hero-title">${esc(title)}</span>${heroProg}</div>
       ${notes.join("")}
       <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         ${grid}
@@ -1662,6 +1667,9 @@ const FC_CSS = `
   .fc-hero-item .hv { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 700; line-height: 1.1; }
   .fc-hero-item .hu { font-size: 12px; font-weight: 500; margin-left: 3px; opacity: 0.75; }
   .fc-hero-item .hl { font-size: 11px; color: var(--secondary-text-color); }
+  .fc-hero.wide .hv { font-size: 32px; }
+  .fc-hero.wide .hu { font-size: 14px; }
+  .fc-hero.wide .fc-hero-title { font-size: 15px; }
 `;
 
 /* ========================= SECTION: CARD:CHAIN =========================== */
