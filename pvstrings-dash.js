@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.1.0";
+const PVS_VERSION = "0.1.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -1279,7 +1279,10 @@ class PvsForecastCard extends PvsBaseCard {
     for (const p of [...fcPts, ...unPts, ...actPts]) maxV = Math.max(maxV, p.v);
     const yMax = niceMax(maxV * 1.06);
     const PAD_L = 42, PAD_R = 6, PAD_T = 10, PAD_B = 22, PH = 168;
-    const PW = 620;
+    // wide: for full-width placement — twice the drawing width keeps the
+    // rendered height identical when the card spans two columns
+    const wide = !!cfg.wide;
+    const PW = wide ? 1330 : 620;
     const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
     const xOf = (ms) => PAD_L + ((ms - startMs) / windowMs) * PW;
     const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
@@ -1320,7 +1323,7 @@ class PvsForecastCard extends PvsBaseCard {
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${unitKw ? fmtNum(hass, v / 1000, 1) : fmtNum(hass, v, 0)}</text>`;
     }
     grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 2}" text-anchor="end" style="font-size:8.5px">${unitKw ? "kW" : "W"}</text>`;
-    const stepH = days === 1 ? 4 : 6;
+    const stepH = wide ? (days === 1 ? 2 : 4) : (days === 1 ? 4 : 6);
     for (let hOff = 0; hOff <= days * 24; hOff += stepH) {
       const ms = startMs + hOff * 3600000;
       const x = xOf(ms);
@@ -2328,10 +2331,21 @@ async function buildViews(hass, config) {
     });
 
     // ---- Stränge ----
+    // The whole-plant Ist/Prognose chart leads the view at double width —
+    // no shading series here (a plant has no single sky map).
+    const plantLineSection = {
+      type: "grid", column_span: 2, cards: [
+        heading(plant.name),
+        plant.byKey.forecast_today
+          ? { type: "custom:pvstrings-forecast", entity: plant.byKey.forecast_today,
+              days: 1, style: "line", wide: true, show_unshaded: false, title: plant.name }
+          : mdCard(t(lang, "missing_card", { key: "forecast_today" })),
+      ],
+    };
     views.push({
       title: prefix + t(lang, "v_strings"), path: `${slug}strings`,
       icon: "mdi:solar-panel", type: "sections", max_columns: 2,
-      sections: strings.map((s) => ({
+      sections: [plantLineSection, ...strings.map((s) => ({
         type: "grid", cards: [
           heading(s.name),
           s.byKey.string_forecast_today
@@ -2344,7 +2358,7 @@ async function buildViews(hass, config) {
           tileOrMissing(hass, lang, s, "string_produced_today", { color: "orange" }),
           tileOrMissing(hass, lang, s, "string_potential_now"),
         ],
-      })),
+      }))],
     });
 
     // ---- Genauigkeit ----
@@ -2444,6 +2458,7 @@ const EDITORS = {
     { name: "seasons", selector: { boolean: {} } }],
   "pvstrings-forecast-editor": [ENTITY_SCHEMA,
     { name: "style", selector: { select: { options: ["bars", "line"], mode: "dropdown" } } },
+    { name: "wide", selector: { boolean: {} } },
     { name: "days", selector: { number: { min: 1, max: 3, mode: "box" } } },
     { name: "show_unshaded", selector: { boolean: {} } },
     { name: "show_actual", selector: { boolean: {} } }],

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 18px; font-family: system-ui, sans-serif;
+    background: #111;
+    --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b; --divider-color: #2c2c2c;
+    --warning-color: #ffa600; --error-color: #db4437; --success-color: #43a047; }
+  ha-card { display: block; background: var(--card-background-color);
+    border-radius: 12px; border: 1px solid var(--divider-color); color: var(--primary-text-color); }
+  .narrow { width: 460px; } .wideb { width: 940px; }
+  h4 { color: #888; font: 500 11px system-ui; margin: 12px 2px 4px; }
+</style>
+</head>
+<body>
+<h4>wide (940px container)</h4><div class="wideb" id="w"></div>
+<h4>normal (460px container)</h4><div class="narrow" id="n"></div>
+<script type="module">
+  import "/pvstrings-dash.js";
+  // --- synthetic plant: forecast bell curve, 5-min power with noise ---
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const d0 = day.getTime();
+  const bell = (h) => Math.max(0, Math.sin((h - 5.5) / 15 * Math.PI)) ** 2 * 3.2;
+  const forecast = [];
+  for (let h = 0; h < 24; h++) {
+    forecast.push({ datetime: new Date(d0 + h * 3600e3).toISOString(),
+      potential_kwh: +bell(h).toFixed(3), unshaded_kwh: +(bell(h) * 1.12).toFixed(3) });
+  }
+  const nowH = 14.4;
+  const states = {
+    "sensor.plant_fc": { entity_id: "sensor.plant_fc", state: "17.9",
+      attributes: { forecast, friendly_name: "PV Anlage Prognose heute" } },
+    "sensor.plant_prod": { entity_id: "sensor.plant_prod", state: "12.4",
+      attributes: { friendly_name: "PV Anlage Ertrag heute" } },
+    "sensor.plant_power": { entity_id: "sensor.plant_power", state: "2100",
+      attributes: { unit_of_measurement: "W", friendly_name: "PV Anlage Leistung jetzt" } },
+  };
+  const entReg = [
+    { entity_id: "sensor.plant_fc", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_today", translation_key: "forecast_today" },
+    { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
+    { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
+  ];
+  const devReg = [{ id: "dp", model: "PV plant", name: "PV Anlage", identifiers: [["pvstrings", "e"]] }];
+  const stats5 = [];
+  for (let m = 0; m < nowH * 60; m += 5) {
+    const h = m / 60;
+    const noise = 1 + 0.35 * Math.sin(m / 7) * Math.random();
+    stats5.push({ start: d0 + m * 60e3, end: d0 + (m + 5) * 60e3,
+      mean: Math.round(bell(h) * 1000 * Math.max(0.2, noise)) });
+  }
+  const statsH = [];
+  for (let h = 0; h < Math.floor(nowH); h++) {
+    statsH.push({ start: d0 + h * 3600e3, end: d0 + (h + 1) * 3600e3, change: +bell(h).toFixed(3) });
+  }
+  const callWS = async (cmd) => {
+    switch (cmd.type) {
+      case "config/entity_registry/list": return entReg;
+      case "config/device_registry/list": return devReg;
+      case "recorder/statistics_during_period":
+        return { [cmd.statistic_ids[0]]: cmd.period === "5minute" ? stats5 : statsH };
+      default: return {};
+    }
+  };
+  const hass = { states, callWS, language: "de", locale: { language: "de" },
+    config: { time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone, latitude: 53.6 },
+    themes: { darkMode: true } };
+  for (const [sel, cfg] of [["#w", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false }],
+                            ["#n", { entity: "sensor.plant_fc", days: 1, style: "line" }]]) {
+    const el = document.createElement("pvstrings-forecast");
+    el.setConfig(cfg); el.hass = hass;
+    document.querySelector(sel).append(el);
+  }
+</script>
+</body>
+</html>
