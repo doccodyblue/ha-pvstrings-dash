@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.1.2";
+const PVS_VERSION = "0.1.3";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2300,7 +2300,7 @@ async function buildViews(hass, config) {
 
     // ---- Übersicht ----
     const overviewSections = [
-      { type: "grid", cards: [
+      { type: "grid", column_span: 2, cards: [
         heading(t(lang, "s_today")),
         P("produced_today", { color: "orange" }),
         P("forecast_today"),
@@ -2328,7 +2328,7 @@ async function buildViews(hass, config) {
         ...groups.map((g) => tileOrMissing(hass, lang, g, "group_forecast_remaining", { name: g.name })),
       ] });
     }
-    overviewSections.push({ type: "grid", cards: [
+    overviewSections.push({ type: "grid", column_span: 2, cards: [
       heading(t(lang, "s_savings")),
       P("savings_today"), P("savings_month"), P("savings_total"), P("amortisation"),
     ] });
