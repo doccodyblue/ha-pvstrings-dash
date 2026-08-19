@@ -47,8 +47,8 @@ builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield),
 **Accuracy** (nowcast vs day-ahead, with the day-by-day comparison), and
-**Nerd** (learning buckets, source-bias table, collection health, skip
-reasons). Views follow `hass.language` (German/English). The generated YAML
+**Nerd** (training maturity, learning buckets, source-bias table, collection
+health, skip reasons). Views follow `hass.language` (German/English). The generated YAML
 is a normal dashboard config — take it over and edit it if you want to.
 
 ---
@@ -133,6 +133,27 @@ Small diagnostic table renderer the nerd view is built from (learning
 buckets, source-bias matrix, censoring split, skip reasons). Every table
 header links to its source entity. Usable standalone via `mode:` —
 see the strategy-generated YAML for examples.
+
+### `pvstrings-maturity`
+
+How far the training has come, on two axes with deliberately different
+clocks — one blended number would hide exactly that:
+
+- **Weather correction**: the evidence held across all weather × daypart
+  buckets, relative to the most a bucket can ever hold. The learning forgets
+  slowly, so the count saturates — 100 % means "as learned as it gets",
+  not "finished".
+- **Shading**: the share of the year's sun path each string has observed
+  (the same figure the sky-map card shows per string, aggregated). This one
+  can only grow as fast as the calendar moves the sun.
+
+```yaml
+type: custom:pvstrings-maturity
+entity: sensor.<plant>_model_observations
+rows:
+  - name: East
+    sky: sensor.<string>_sky_map
+```
 
 ---
 

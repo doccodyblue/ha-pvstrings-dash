@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.2.2";
+const PVS_VERSION = "0.3.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -186,7 +186,7 @@ const STR = {
     "s_daily": "Day by day",
     "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: the reference is the best hour ever seen (below 0.9 is suspicious — the reference itself sits in shadow). Each cell's loss is relative to that reference; n is the weighted observation count.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: the reference is the best hour ever seen (below 0.9 is suspicious — the reference itself sits in shadow). Each cell's loss is relative to that reference; n is the weighted observation count.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -202,6 +202,11 @@ const STR = {
     "nerd_censoring": "Censoring split (today)",
     "nerd_skips": "Learn-cycle skip reasons",
     "nerd_sky": "Sky maps",
+    "maturity_title": "Training maturity",
+    "maturity_weather": "Weather correction",
+    "maturity_shading": "Shading (sky maps)",
+    "maturity_buckets": "{seen} of {total} buckets seen",
+    "maturity_no_lat": "location unknown — no sun-path reference",
     "kv_empty": "attribute {path} is empty or missing on {entity}",
     "factor": "factor",
     "weather_clear": "clear", "weather_partly_cloudy": "partly cloudy",
@@ -289,7 +294,7 @@ const STR = {
     "s_daily": "Tag für Tag",
     "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Die Referenz ist die beste je gesehene Stunde (unter 0,9 ist verdächtig — dann steht die Referenz selbst im Schatten). Der Verlust jeder Zelle ist relativ zu dieser Referenz; n ist die gewichtete Beobachtungszahl.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Die Referenz ist die beste je gesehene Stunde (unter 0,9 ist verdächtig — dann steht die Referenz selbst im Schatten). Der Verlust jeder Zelle ist relativ zu dieser Referenz; n ist die gewichtete Beobachtungszahl.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -304,6 +309,11 @@ const STR = {
     "nerd_censoring": "Zensur-Split (heute)",
     "nerd_skips": "Skip-Gründe des Lernzyklus",
     "nerd_sky": "Himmelskarten",
+    "maturity_title": "Lernreife",
+    "maturity_weather": "Wetter-Korrektur",
+    "maturity_shading": "Verschattung (Himmelskarten)",
+    "maturity_buckets": "{seen} von {total} Buckets gesehen",
+    "maturity_no_lat": "Standort unbekannt — keine Sonnenweg-Referenz",
     "kv_empty": "Attribut {path} ist leer oder fehlt auf {entity}",
     "factor": "Faktor",
     "weather_clear": "klar", "weather_partly_cloudy": "teils bewölkt",
@@ -2314,6 +2324,98 @@ const KV_CSS = `
   th.dim, .dim { color: var(--secondary-text-color); font-weight: 400; }
 `;
 
+/* ========================= SECTION: CARD:MATURITY ======================== */
+
+// How far along the training is, on two axes with deliberately different
+// clocks: weather buckets fill within weeks, the sky map can only fill as
+// fast as the calendar moves the sun. One blended number would hide that.
+//
+// Mirrors learning.py: HALFLIFE = 15 effective observations, so a bucket's
+// n_eff converges on 1/ALPHA ≈ 22 and stops there — "full" is a real,
+// reachable ceiling, not an asymptote.
+const MATURITY_MAX_N_EFF = 1 / (1 - 0.5 ** (1 / 15));
+
+class PvsMaturityCard extends PvsBaseCard {
+  getCardSize() { return 2; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  watchedEntities() {
+    return [this._config?.entity, ...(this._config?.rows ?? []).map((r) => r.sky)]
+      .filter(Boolean);
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+
+    // weather axis: evidence held across all plant buckets, vs the ceiling
+    const buckets = (cfg.entity ? hass.states[cfg.entity] : null)?.attributes?.log_ratio?.plant;
+    let weather = null;
+    if (buckets) {
+      const total = WEATHERS.length * DAYPARTS.length;
+      let sum = 0, seen = 0;
+      for (const w of WEATHERS) for (const d of DAYPARTS) {
+        const c = buckets[`${w}|${d}`];
+        if (c?.n_eff > 0) { seen++; sum += Math.min(1, c.n_eff / MATURITY_MAX_N_EFF); }
+      }
+      weather = { pct: (sum / total) * 100, seen, total };
+    }
+
+    // shading axis: observed pooled sky cells vs the year's sun path
+    const lat = hass.config?.latitude;
+    const annual = lat != null ? annualSkyCells(lat) : null;
+    const perString = (cfg.rows ?? []).map((r) => {
+      const sky = hass.states[r.sky];
+      if (!sky || !annual) return null;
+      const pooled = (sky.attributes?.cells ?? []).filter((c) => c.season == null).length;
+      return { name: r.name, id: r.sky, pct: Math.min(100, (pooled / annual) * 100) };
+    }).filter(Boolean);
+    const shading = perString.length
+      ? { pct: perString.reduce((s, x) => s + x.pct, 0) / perString.length } : null;
+
+    const bar = (label, m, sub, moreInfo) => `
+      <div class="mat-axis">
+        <div class="mat-row">
+          <span class="mat-label${moreInfo ? " clickable" : ""}"${moreInfo ? ` data-more-info="${moreInfo}"` : ""}>${esc(label)}</span>
+          <span class="mat-pct pvs-num">${m == null ? "—" : fmtNum(hass, m.pct, 0) + " %"}</span>
+        </div>
+        <div class="mat-track"><div class="mat-fill" style="width:${m == null ? 0 : Math.max(1.5, m.pct)}%"></div></div>
+        <div class="pvs-sub">${sub}</div>
+      </div>`;
+
+    const wSub = weather
+      ? t(hass, "maturity_buckets", { seen: weather.seen, total: weather.total })
+      : t(hass, "kv_empty", { path: "log_ratio.plant", entity: cfg.entity ?? "model_observations" });
+    const sSub = !annual
+      ? t(hass, "maturity_no_lat")
+      : perString.map((s) =>
+          `<span class="mat-chip clickable" data-more-info="${s.id}">${esc(s.name)} <span class="pvs-num">${fmtNum(hass, s.pct, 0)} %</span></span>`,
+        ).join("") || t(hass, "kv_empty", { path: "cells", entity: "sky_map" });
+
+    this.shadowRoot.innerHTML = `<style>${BASE_CSS}${MATURITY_CSS}</style><ha-card>
+      <div class="mat-wrap">
+        ${bar(t(hass, "maturity_weather"), weather, wSub, cfg.entity)}
+        ${bar(t(hass, "maturity_shading"), shading, sSub, null)}
+      </div></ha-card>`;
+    this._wireMoreInfo();
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entity: "", rows: [] }; }
+}
+
+const MATURITY_CSS = `
+  .mat-wrap { display: flex; gap: 28px; padding: 14px 16px; flex-wrap: wrap; }
+  .mat-axis { flex: 1 1 240px; min-width: 0; }
+  .mat-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .mat-label { font-size: 13px; font-weight: 500; }
+  .mat-label.clickable { cursor: pointer; }
+  .mat-pct { font-size: 15px; font-weight: 600; }
+  .mat-track { height: 6px; border-radius: 3px; background: var(--pvs-unobserved); overflow: hidden; }
+  .mat-fill { height: 100%; border-radius: 3px; background: var(--pvs-model); }
+  .mat-axis .pvs-sub { margin-top: 7px; line-height: 1.7; }
+  .mat-chip { display: inline-block; margin-right: 10px; cursor: pointer; }
+`;
+
 /* ========================== SECTION: STRATEGY ============================ */
 
 function mdCard(content) { return { type: "markdown", content }; }
@@ -2458,6 +2560,12 @@ async function buildViews(hass, config) {
     const mo = plant.byKey.model_observations;
     const ghi = plant.byKey.ghi_forecast;
     const nerdSections = [];
+    nerdSections.push({ type: "grid", column_span: 3, cards: [
+      heading(t(lang, "maturity_title")),
+      { type: "custom:pvstrings-maturity", ...(mo ? { entity: mo } : {}),
+        rows: strings.map((s) => ({ name: s.name, sky: s.byKey.string_sky_map }))
+          .filter((r) => r.sky) },
+    ] });
     if (mo) {
       nerdSections.push({ type: "grid", cards: [
         heading(t(lang, "nerd_learning")),
@@ -2556,13 +2664,16 @@ const CARDS = [
     "Day-ahead forecast vs actual production, day by day."],
   ["pvstrings-kv-table", PvsKvTableCard, "PV Strings KV Table",
     "Diagnostic attribute tables (learning buckets, source bias, collection)."],
+  ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",
+    "How far the training has come: weather-bucket evidence and sun-path coverage."],
 ];
 window.customCards = window.customCards ?? [];
 for (const [tag, cls, name, description] of CARDS) {
   if (!customElements.get(tag)) customElements.define(tag, cls);
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
-      type: tag, name, description, preview: tag !== "pvstrings-kv-table",
+      type: tag, name, description,
+      preview: !["pvstrings-kv-table", "pvstrings-maturity"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }
