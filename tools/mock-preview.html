@@ -22,6 +22,7 @@
 <h4>normal (460px container)</h4><div class="narrow" id="n"></div>
 <h4>sky map (520px container)</h4><div style="width:520px" id="sky"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
+<h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
 <script type="module">
   import "/pvstrings-dash.js";
@@ -75,6 +76,10 @@
         "overcast|midday": { factor: 1.15, n_eff: 4.0 },
         "overcast|afternoon": { factor: 1.3, n_eff: 2.0 },
         "rain|midday": { factor: 1.4, n_eff: 1.2 },
+      }, string_daypart: {
+        "s1|morning": { factor: 0.948, n_eff: 18.2 },
+        // s1|midday absent: below the activation threshold, not "never seen"
+        "s1|afternoon": { factor: 1.059, n_eff: 19.5 },
       } } } },
     // a mature learning state: all buckets near the ceiling (green zone)
     "sensor.plant_mo2": { entity_id: "sensor.plant_mo2", state: "241.8",
@@ -125,6 +130,8 @@
       ["#w", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false }],
       ["#n", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line" }],
       ["#sky", "pvstrings-sky-map", { entity: "sensor.s1_sky" }],
+      ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
+        mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
