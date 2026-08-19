@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.3.3";
+const PVS_VERSION = "0.3.4";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -196,6 +196,8 @@ const STR = {
     "nerd_string_daypart": "String × daypart",
     "nerd_bucket_missing": "never seen",
     "nerd_bucket_below": "not yet active",
+    "cens_coverage": "coverage",
+    "cens_curtailed": "curtailed",
     "nerd_source_bias": "Source bias (local hour × horizon)",
     "nerd_truth_measured": "learned against a measured sensor",
     "nerd_truth_nowcast": "learned only against the source's own short-horizon run — a much weaker claim",
@@ -304,6 +306,8 @@ const STR = {
     "nerd_string_daypart": "Strang × Tagesabschnitt",
     "nerd_bucket_missing": "nie gesehen",
     "nerd_bucket_below": "noch nicht aktiv",
+    "cens_coverage": "Erfassung",
+    "cens_curtailed": "Abregelung",
     "nerd_source_bias": "Source-Bias (lokale Stunde × Horizont)",
     "nerd_truth_measured": "gegen einen Messsensor gelernt",
     "nerd_truth_nowcast": "nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt — eine deutlich schwächere Aussage",
@@ -2261,7 +2265,7 @@ class PvsKvTableCard extends PvsBaseCard {
     } else if (mode === "censoring") {
       const strings = a.strings;
       if (!strings) return empty("strings");
-      body = `<table><tr><th></th><th>${t(hass, "vk_measured")}</th><th>${t(hass, "vk_lower_bound")}</th><th>${t(hass, "vk_reconstructed")}</th><th>cov</th><th>curt</th></tr>
+      body = `<table><tr><th></th><th>${t(hass, "vk_measured")}</th><th>${t(hass, "vk_lower_bound")}</th><th>${t(hass, "vk_reconstructed")}</th><th>${t(hass, "cens_coverage")}</th><th>${t(hass, "cens_curtailed")}</th></tr>
         ${Object.entries(strings).map(([name, s]) => {
           const vk = s.today?.value_kinds ?? {};
           return `<tr><th>${esc(name)}</th>
@@ -2615,10 +2619,15 @@ async function buildViews(hass, config) {
       heading(t(lang, "nerd_collection")),
       coll ? { type: "custom:pvstrings-kv-table", entity: coll, mode: "collector", title: t(lang, "nerd_collection") }
         : mdCard(t(lang, "missing_card", { key: "collector_health" })),
-      sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring", title: t(lang, "nerd_censoring") }
-        : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
       mo ? { type: "custom:pvstrings-kv-table", entity: mo, mode: "skip_reasons", title: t(lang, "nerd_skips") }
         : mdCard(t(lang, "missing_card", { key: "model_observations" })),
+    ] });
+    // Six columns next to long string names: scrolls inside a single-column
+    // section, so censoring gets a double-width section of its own.
+    nerdSections.push({ type: "grid", column_span: 2, cards: [
+      heading(t(lang, "nerd_censoring")),
+      sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring", title: t(lang, "nerd_censoring") }
+        : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
     ] });
     // Educational footer: nerds know this, normal users may want to learn
     // it. Three balanced markdown columns under a full-width heading.

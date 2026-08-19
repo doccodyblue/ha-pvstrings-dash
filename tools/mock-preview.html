@@ -23,6 +23,7 @@
 <h4>sky map (520px container)</h4><div style="width:520px" id="sky"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
+<h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
 <script type="module">
   import "/pvstrings-dash.js";
@@ -87,6 +88,16 @@
         Object.fromEntries(["clear", "partly_cloudy", "overcast", "rain"].flatMap((w) =>
           ["morning", "midday", "afternoon"].map((d) =>
             [`${w}|${d}`, { factor: 1.02, n_eff: 18 + ((w.length + d.length) % 5) }]))) } } },
+    // censoring split with real-world long string names
+    "sensor.plant_sd": { entity_id: "sensor.plant_sd", state: "5",
+      attributes: { friendly_name: "PV Anlage Strang-Detail", strings: {
+        "Strang 1 Sued 30": { today: { value_kinds: { measured: 9, lower_bound: 2, reconstructed: 0 },
+          coverage_mean: 0.98, curtailed_fraction: 0.18 } },
+        "Strang 4 CH2 Ost": { today: { value_kinds: { measured: 11, lower_bound: 0, reconstructed: 1 },
+          coverage_mean: 0.91, curtailed_fraction: 0 } },
+        "Strang 5 CH4 Ost Gartenhaus": { today: { value_kinds: { measured: 10, lower_bound: 0, reconstructed: 0 },
+          coverage_mean: 1, curtailed_fraction: 0 } },
+      } } },
     // a younger second string: half the sky seen so far
     "sensor.s2_sky": { entity_id: "sensor.s2_sky", state: String(cells.length >> 1),
       attributes: { cells: cells.filter((c, i) => i % 2 === 0), reference_ratio: 0.97,
@@ -132,6 +143,8 @@
       ["#sky", "pvstrings-sky-map", { entity: "sensor.s1_sky" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
+      ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",
+        mode: "censoring", title: "Zensur-Split (heute)" }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
