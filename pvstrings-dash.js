@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.3.0";
+const PVS_VERSION = "0.3.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2388,7 +2388,7 @@ class PvsMaturityCard extends PvsBaseCard {
     const sSub = !annual
       ? t(hass, "maturity_no_lat")
       : perString.map((s) =>
-          `<span class="mat-chip clickable" data-more-info="${s.id}">${esc(s.name)} <span class="pvs-num">${fmtNum(hass, s.pct, 0)} %</span></span>`,
+          `<span class="mat-chip clickable" data-more-info="${s.id}">${esc(s.name)} · <span class="pvs-num">${fmtNum(hass, s.pct, 0)} %</span></span>`,
         ).join("") || t(hass, "kv_empty", { path: "cells", entity: "sky_map" });
 
     this.shadowRoot.innerHTML = `<style>${BASE_CSS}${MATURITY_CSS}</style><ha-card>
