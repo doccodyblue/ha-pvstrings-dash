@@ -76,6 +76,12 @@
         "overcast|afternoon": { factor: 1.3, n_eff: 2.0 },
         "rain|midday": { factor: 1.4, n_eff: 1.2 },
       } } } },
+    // a mature learning state: all buckets near the ceiling (green zone)
+    "sensor.plant_mo2": { entity_id: "sensor.plant_mo2", state: "241.8",
+      attributes: { friendly_name: "PV Anlage Modell-Beobachtungen (reif)", log_ratio: { plant:
+        Object.fromEntries(["clear", "partly_cloudy", "overcast", "rain"].flatMap((w) =>
+          ["morning", "midday", "afternoon"].map((d) =>
+            [`${w}|${d}`, { factor: 1.02, n_eff: 18 + ((w.length + d.length) % 5) }]))) } } },
     // a younger second string: half the sky seen so far
     "sensor.s2_sky": { entity_id: "sensor.s2_sky", state: String(cells.length >> 1),
       attributes: { cells: cells.filter((c, i) => i % 2 === 0), reference_ratio: 0.97,
@@ -121,7 +127,7 @@
       ["#sky", "pvstrings-sky-map", { entity: "sensor.s1_sky" }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
-      ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo",
+      ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }]]) {
     const el = document.createElement(tag);
     el.setConfig(cfg); el.hass = hass;
