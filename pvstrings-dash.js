@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.3.5";
+const PVS_VERSION = "0.3.6";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2623,12 +2623,14 @@ async function buildViews(hass, config) {
         : mdCard(t(lang, "missing_card", { key: "model_observations" })),
     ] });
     // Six columns next to long string names: scrolls inside a single-column
-    // section, so censoring gets a full-width section of its own. Full width
-    // rather than 2-of-3: partial spans are not honoured on every frontend
-    // (seen live), while span == max_columns demonstrably is.
-    nerdSections.push({ type: "grid", column_span: 3, cards: [
+    // section, so censoring gets a double-width section of its own. A
+    // section's grid density scales with its span (12 units per view
+    // column) and a card defaults to 12 units — one column — so the card
+    // must opt into the section's full width or the span looks ignored.
+    nerdSections.push({ type: "grid", column_span: 2, cards: [
       heading(t(lang, "nerd_censoring")),
-      sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring", title: t(lang, "nerd_censoring") }
+      sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring",
+        title: t(lang, "nerd_censoring"), grid_options: { columns: "full" } }
         : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
     ] });
     // Educational footer: nerds know this, normal users may want to learn
