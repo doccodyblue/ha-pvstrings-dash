@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.6.0";
+const PVS_VERSION = "0.6.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -237,7 +237,8 @@ const STR = {
     "conv_ev_admin": "Conversion learning evidence lives in the entry diagnostics, which need an admin user — hence empty here.",
     "conv_ev_unavailable": "The entry diagnostics could not be loaded — from here, whether collection runs cannot be checked.",
     "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
-    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour — the gate working, not a fault. A 0 / 0 row is configured but collecting nothing.",
+    "conv_ev_silent": "collecting nothing",
+    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour — the gate working, not a fault. A 0 / 0 row is configured but collecting nothing. No progress bar: the fit that would define \"enough\" does not exist yet, so a full bar would be an invented scale — a few hundred usable pairs per stage and sunny day is the realistic order of magnitude.",
     "s_nowcast": "Nowcast (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
@@ -391,7 +392,8 @@ const STR = {
     "conv_ev_admin": "Die Wandlungs-Evidenz steckt in den Entry-Diagnosen, die einen Admin-Benutzer erfordern — daher hier leer.",
     "conv_ev_unavailable": "Die Entry-Diagnosen ließen sich nicht laden — ob die Sammlung läuft, lässt sich von hier nicht prüfen.",
     "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
-    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — die Leitplanke arbeitet, kein Fehler. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts.",
+    "conv_ev_silent": "sammelt nichts",
+    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — die Leitplanke arbeitet, kein Fehler. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Kein Fortschrittsbalken: Der Fit, der „genug“ definieren würde, existiert noch nicht — ein voller Balken wäre eine erfundene Skala. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag.",
     "s_nowcast": "Nowcast (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
@@ -2561,9 +2563,11 @@ class PvsKvTableCard extends PvsBaseCard {
       const info = m.byEntityId.get(this._config.entity);
       const entryId = info?.node?.entryId ?? m.plants[0]?.entryId ?? null;
       const res = await conversionEvidence(hass, entryId);
+      // absent block and empty block mean the same thing: no stage is set
+      // up to collect (a configured stage always appears, if only with 0/0)
       if (res.evidence && Object.keys(res.evidence).length)
         out = { names: await this._stringNames(), evidence: res.evidence };
-      else if (!res.evidence) out = { error: "none" };
+      else if (!res.error) out = { error: "none" };
       else out = res;
     } catch (_) { /* stays unavailable -> withheld */ }
     this._convEv = out;
@@ -2712,6 +2716,10 @@ class PvsKvTableCard extends PvsBaseCard {
         body = `<div class="kv-note dim">${t(hass, "conv_ev_loading")}</div>`;
       } else if (d.error === "admin") {
         body = `<div class="kv-note warn">${t(hass, "conv_ev_admin")}</div>`;
+      } else if (d.error === "none") {
+        // block absent (or empty): nothing is set up to learn from — a known
+        // state, and it must not wear the "could not check" message
+        body = withheldHTML(t(hass, "conv_ev_none"));
       } else if (d.error) {
         // network/endpoint trouble: unknown state, never claim "nothing"
         body = `<div class="kv-note warn">${t(hass, "conv_ev_unavailable")}</div>`;
@@ -2721,17 +2729,20 @@ class PvsKvTableCard extends PvsBaseCard {
         const rows4 = Object.entries(d.evidence).map(([k, v]) => {
           const [scope, stage] = k.split("|");
           const name = d.names.get(scope) ?? scope.slice(0, 8);
+          // Deliberately no progress bar: a bar needs a target, and until the
+          // fit exists there is no "enough" to draw against. usable/rows
+          // would only chart the censoring gate catching up — permanently
+          // full, and reading like "done" when it means nothing of the kind.
           const silent = v.rows === 0;
-          const pct = v.rows > 0 ? Math.round((Math.min(v.usable, v.rows) / v.rows) * 100) : 0;
           return `<tr>
             <th>${esc(name)}</th>
             <td><span class="n">${stageTxt[stage] ?? esc(stage)}</span></td>
-            <td class="${silent ? "hot" : ""}"><span class="pvs-num">${v.usable}</span> / <span class="pvs-num">${v.rows}</span></td>
-            <td style="width:35%"><div class="ev-bar"><div style="width:${pct}%"></div></div></td>
+            <td class="${silent ? "hot" : ""}"><span class="pvs-num">${v.usable}</span> / <span class="pvs-num">${v.rows}</span>
+              ${silent ? `<span class="n">${t(hass, "conv_ev_silent")}</span>` : ""}</td>
           </tr>`;
         }).join("");
         body = `<table><tr><th></th><th>${t(hass, "conv_ev_stage")}</th>
-            <th>${t(hass, "conv_ev_pairs")}</th><th></th></tr>${rows4}</table>
+            <th>${t(hass, "conv_ev_pairs")}</th></tr>${rows4}</table>
           <div class="kv-note">${t(hass, "conv_ev_note")}</div>`;
       }
     } else {
@@ -2766,9 +2777,6 @@ const KV_CSS = `
   .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-bottom: 8px; }
   .kv-note.warn { background: color-mix(in srgb, var(--warning-color, #ffa600) 12%, transparent); color: var(--primary-text-color); }
   th.dim, .dim { color: var(--secondary-text-color); font-weight: 400; }
-  .ev-bar { height: 8px; border-radius: 4px; background: var(--pvs-hairline);
-    overflow: hidden; min-width: 70px; }
-  .ev-bar > div { height: 100%; border-radius: 4px; background: var(--pvs-model); }
 `;
 
 /* ========================= SECTION: CARD:MATURITY ======================== */
