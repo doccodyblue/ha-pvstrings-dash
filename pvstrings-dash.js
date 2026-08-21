@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.5.0";
+const PVS_VERSION = "0.5.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2986,11 +2986,14 @@ async function buildViews(hass, config) {
     const convNerd = groups.filter((g) =>
       (g.byKey.group_forecast_ac || g.byKey.group_forecast_battery_charge) && g.byKey.group_forecast_remaining);
     if (convNerd.length) {
-      nerdSections.push({ type: "grid", cards: [
+      // six columns: needs a double-width section and a card that opts into
+      // its full grid width — same lesson as the censoring table
+      nerdSections.push({ type: "grid", column_span: 2, cards: [
         heading(t(lang, "nerd_conversion")),
         { type: "custom:pvstrings-kv-table",
           entity: convNerd[0].byKey.group_forecast_ac ?? convNerd[0].byKey.group_forecast_battery_charge,
           mode: "conversion", title: t(lang, "nerd_conversion"),
+          grid_options: { columns: "full" },
           rows: convNerd.map((g) => ({
             name: g.name,
             out: g.byKey.group_forecast_ac ?? g.byKey.group_forecast_battery_charge,
