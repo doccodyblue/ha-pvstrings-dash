@@ -120,7 +120,9 @@ Three semantic guard rails, straight from the integration's contract: AC
 and battery charge are never added (different kinds of energy); the AC
 figure is hardware potential — capped at the inverter's AC rating, never
 at regulatory limits; and clipping is shown as its own chip because a
-hardware cap is not a conversion loss.
+hardware cap is not a conversion loss. A header chip names what produced
+the output figure — datasheet or custom curve, fixed factors with their
+applied multiplier, or "unconverted" when no path is configured.
 
 ### `pvstrings-chain`
 

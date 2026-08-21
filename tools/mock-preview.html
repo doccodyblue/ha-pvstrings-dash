@@ -43,7 +43,7 @@
   }
   const nowH = 14.4;
   // conversion layer (v1.20): direct group with datasheet curve + midday
-  // clipping, storage group with a flat custom curve
+  // clipping, storage group with fixed per-stage factors (0.9312)
   const dcG1 = [], acG1 = [], dcG2 = [], bcG2 = [];
   let g1Dc = 0, g1Ac = 0, g1Clip = 0, g2Dc = 0, g2Bc = 0;
   for (let h = 0; h < 24; h++) {
@@ -54,7 +54,7 @@
     const a1 = +Math.min(acRaw, cap).toFixed(3);
     g1Clip += Math.max(0, acRaw - cap);
     const d2 = +(bell(h) * 0.4).toFixed(3);
-    const b2 = +(d2 * 0.985).toFixed(3);
+    const b2 = +(d2 * 0.9312).toFixed(3);
     g1Dc += d1; g1Ac += a1; g2Dc += d2; g2Bc += b2;
     dcG1.push({ datetime: dt, potential_kwh: d1 });
     acG1.push({ datetime: dt, potential_kwh: a1 });
@@ -135,7 +135,8 @@
         strings: ["Strang Süd"], friendly_name: "Speicher Restprognose heute" } },
     "sensor.g2_bc": { entity_id: "sensor.g2_bc", state: "1.38",
       attributes: { forecast: bcG2, today_kwh: +g2Bc.toFixed(2), tomorrow_kwh: 3.05,
-        output_path: "storage", curve_source: "custom",
+        output_path: "storage", curve_source: "fixed_factors", conversion_factor: 0.9312,
+        stages: [{ name: "MPPT" }, { name: "Laden" }],
         semantics: "DC energy into the storage; discharge timing is a control decision. Never sum with AC.",
         friendly_name: "Speicher Restprognose Akkuladung heute" } },
     // a younger second string: half the sky seen, no level yet (absolute fit)

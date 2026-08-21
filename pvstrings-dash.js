@@ -182,6 +182,8 @@ const STR = {
     "conv_curve_datasheet": "datasheet curve",
     "conv_curve_custom": "custom curve",
     "conv_curve_neutral": "unconverted (output = DC)",
+    "conv_curve_fixed_factors": "fixed factors",
+    "conv_fixed_factors_tip": "Fixed per-stage factors applied to DC (e.g. MPPT × charge) — configured values, not measured.",
     "conv_neutral_note": "No conversion curve configured — the output equals DC by definition, this is not a measured 0 % loss.",
     "conv_clipped": "clipping {v} kWh",
     "conv_clipped_tip": "Energy above the inverter's AC rating — a hardware cap, not a conversion loss.",
@@ -327,6 +329,8 @@ const STR = {
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
     "conv_curve_custom": "eigene Kennlinie",
     "conv_curve_neutral": "ungewandelt (Ausgang = DC)",
+    "conv_curve_fixed_factors": "feste Faktoren",
+    "conv_fixed_factors_tip": "Feste Faktoren je Stufe auf DC angewendet (z. B. MPPT × Laden) — konfigurierte Werte, nicht gemessen.",
     "conv_neutral_note": "Keine Kennlinie konfiguriert — der Ausgang ist per Definition gleich DC, das ist kein gemessener 0-%-Verlust.",
     "conv_clipped": "Clipping {v} kWh",
     "conv_clipped_tip": "Energie über dem AC-Nennwert des Wechselrichters — eine Hardware-Kappung, kein Wandlungsverlust.",
@@ -1833,6 +1837,18 @@ const FC_CSS = `
 // curve means "unconverted" — not a measured 0 % loss. The per-hour ratio
 // strip omits hours whose DC is too small for a meaningful quotient
 // (hatched, rule 1: absence is shown, never faked as a value).
+// Curve-source label for chip and nerd table. fixed_factors carries the
+// applied multiplier (conversion_factor, e.g. 0.9312 = MPPT 0.97 × charge
+// 0.96) — showing it is the point; without it, the label alone.
+function curveLabel(hass, source, factor) {
+  if (!source) return null;
+  if (source === "fixed_factors")
+    return t(hass, "conv_curve_fixed_factors") +
+      (factor != null ? ` × ${fmtNum(hass, factor, 3)}` : "");
+  return ["datasheet", "custom", "neutral"].includes(source)
+    ? t(hass, "conv_curve_" + source) : esc(source);
+}
+
 class PvsConversionCard extends PvsBaseCard {
   watchedEntities() {
     return [this._config?.entity, this._config?.dc_entity].filter(Boolean);
@@ -1891,10 +1907,10 @@ class PvsConversionCard extends PvsBaseCard {
         ${t(hass, "conv_eff_today")} <span class="v">${fmtNum(hass, (outToday / dcToday) * 100, 1)} %</span></span>`);
     }
     if (a.curve_source) {
-      const curveTxt = ["datasheet", "custom", "neutral"].includes(a.curve_source)
-        ? t(hass, "conv_curve_" + a.curve_source) : esc(a.curve_source);
       chips.push(`<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
-        title="${neutral ? esc(t(hass, "conv_neutral_note")) : esc(t(hass, "more_info"))}">${curveTxt}</span>`);
+        title="${esc(neutral ? t(hass, "conv_neutral_note")
+          : a.curve_source === "fixed_factors" ? t(hass, "conv_fixed_factors_tip")
+          : t(hass, "more_info"))}">${curveLabel(hass, a.curve_source, a.conversion_factor)}</span>`);
     }
     if (!neutral && a.clipped_kwh > 0) {
       chips.push(`<span class="pvs-chip warn" title="${esc(t(hass, "conv_clipped_tip"))}">
@@ -2598,10 +2614,7 @@ class PvsKvTableCard extends PvsBaseCard {
         const pathTxt = oa.output_path
           ? t(hass, "conv_out_" + (oa.output_path === "storage" ? "storage" : "direct")) : "—";
         const neutral = oa.curve_source === "neutral";
-        const curveTxt = oa.curve_source
-          ? (["datasheet", "custom", "neutral"].includes(oa.curve_source)
-            ? t(hass, "conv_curve_" + oa.curve_source) : esc(oa.curve_source))
-          : "—";
+        const curveTxt = curveLabel(hass, oa.curve_source, oa.conversion_factor) ?? "—";
         const stages = oa.stages;
         const stagesTxt = stages == null ? "—"
           : Array.isArray(stages)

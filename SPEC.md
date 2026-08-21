@@ -111,10 +111,12 @@ dc_entity: sensor.<gruppe>_rest_heute
 
 **Data.** Both entities carry the usual hourly `forecast` list plus
 `today_kwh`. The output entity adds `output_path` (`direct|storage`),
-`curve_source` (`datasheet|custom|neutral`), `stages` (shape not yet
-contracted — render defensively), for direct groups `clipped_kwh` and
-optionally `note`. These entities exist only when the user configured an
-output path — absence is normal and renders nothing (no missing_card).
+`curve_source` (`datasheet|custom|neutral|fixed_factors`; with
+`fixed_factors`, `conversion_factor` carries the applied multiplier),
+`stages` (shape not yet contracted — render defensively), for direct
+groups `clipped_kwh` and optionally `note`. These entities exist only
+when the user configured an output path — absence is normal and renders
+nothing (no missing_card).
 
 **Chart.** One day. DC potential as ghost bars, converted output in front;
 below, a 0–100 % ratio strip (output/DC per hour). Hours whose DC is below
@@ -126,9 +128,10 @@ never summed. AC is hardware potential: capped at the AC rating, never at
 regulatory limits — never labelled "feed-in". Clipping is a separate warn
 chip (a hardware cap is not a conversion loss). `curve_source: neutral`
 renders as "unconverted" with no ratio strip — output = DC by definition
-is not a measured 0 % loss. `unavailable` coordinator state shows the
-withheld "waiting" style, checked before feature detection, so startup
-never looks like a contract violation.
+is not a measured 0 % loss. `fixed_factors` shows the applied factor
+(× 0.931) — configured, not measured. `unavailable` coordinator state
+shows the withheld "waiting" style, checked before feature detection, so
+startup never looks like a contract violation.
 
 **Strategy placement.** Overview view, own "conversion" section directly
 after the forecast chart — deliberately not inside the DC groups section,
