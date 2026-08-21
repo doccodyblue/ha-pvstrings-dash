@@ -72,9 +72,11 @@ Two things it deliberately gets right, both learned the hard way:
 
 - **A cell nobody has observed is not a cell with no loss.** Unobserved cells
   are hatched neutral — never the light end of the loss ramp.
-- **A flat map is meaningless without its reference.** `reference_ratio` is
-  always on the card; below 0.9 it carries a warning, because a reference
-  inside the shadow is a map that has normalised the shadow away.
+- **A flat map is meaningless without knowing what it is measured against.**
+  The fit level and method are always on the card: a *differential* map is
+  fitted against the sibling strings and its losses are clear-day losses; a
+  string with no level (single string, or too few shared epochs) says
+  *absolute* instead of pretending.
 
 ### `pvstrings-forecast`
 
@@ -163,7 +165,7 @@ Cards **detect the attributes they need**, and never sniff a version number.
 When something is missing they say which attribute, and which integration
 version introduced it:
 
-> needs `reference_ratio` on `sensor.…_sky_map` (PV Strings ≥ 1.15.0)
+> needs `level & fit_method` on `sensor.…_sky_map` (PV Strings ≥ 1.18.0)
 
 Feature detection rather than a version string, because the question a card
 actually has is "can I draw this", not "what release is this".
@@ -175,7 +177,7 @@ card it meant to include.
 |---|---|
 | forecast card (hourly + unshaded) | ≥ 1.8.0 |
 | chain card (per-hour factors) | ≥ 1.8.0 |
-| sky map with `ratio` / `reference_ratio` | ≥ 1.15.0 |
+| sky map with `level` / `fit_method` | ≥ 1.18.0 |
 | curtailment-group sections | ≥ 1.14.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 

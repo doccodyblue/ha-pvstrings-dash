@@ -93,7 +93,7 @@
   };
 
   const find = (pred) => statesList.find(pred)?.entity_id;
-  const skyId = find((s) => Array.isArray(s.attributes.cells) && "reference_ratio" in s.attributes);
+  const skyId = find((s) => Array.isArray(s.attributes.cells) && "level" in s.attributes && "fit_method" in s.attributes);
   const stringFcId = find((s) => s.attributes.forecast?.[0]?.physics_kwh !== undefined);
   const plantFcId = find((s) => Array.isArray(s.attributes.forecast) && s.attributes.forecast[0]?.physics_kwh === undefined);
   const moId = find((s) => s.attributes.log_ratio);

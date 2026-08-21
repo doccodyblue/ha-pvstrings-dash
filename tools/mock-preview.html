@@ -21,6 +21,7 @@
 <h4>wide (940px container)</h4><div class="wideb" id="w"></div>
 <h4>normal (460px container)</h4><div class="narrow" id="n"></div>
 <h4>sky map (520px container)</h4><div style="width:520px" id="sky"></div>
+<h4>sky overview (460px container)</h4><div class="narrow" id="skyov"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -54,7 +55,7 @@
   }
   const states = {
     "sensor.s1_sky": { entity_id: "sensor.s1_sky", state: String(cells.length),
-      attributes: { cells, reference_ratio: 0.87, friendly_name: "Strang Ost Himmelskarte" } },
+      attributes: { cells, level: 1.04, fit_method: "differential", friendly_name: "Strang Ost Himmelskarte" } },
     "sensor.s1_shading": { entity_id: "sensor.s1_shading", state: "12",
       attributes: { name: "Strang Ost", sun_azimuth: 205.4, sun_elevation: 34.2,
         observations: 5123, most_shaded: [], friendly_name: "Strang Ost Verschattung jetzt" } },
@@ -98,9 +99,9 @@
         "Strang 5 CH4 Ost Gartenhaus": { today: { value_kinds: { measured: 10, lower_bound: 0, reconstructed: 0 },
           coverage_mean: 1, curtailed_fraction: 0 } },
       } } },
-    // a younger second string: half the sky seen so far
+    // a younger second string: half the sky seen, no level yet (absolute fit)
     "sensor.s2_sky": { entity_id: "sensor.s2_sky", state: String(cells.length >> 1),
-      attributes: { cells: cells.filter((c, i) => i % 2 === 0), reference_ratio: 0.97,
+      attributes: { cells: cells.filter((c, i) => i % 2 === 0), level: null, fit_method: "absolute",
         friendly_name: "Strang West Himmelskarte" } },
   };
   const entReg = [
@@ -141,6 +142,10 @@
       ["#w", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false }],
       ["#n", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line" }],
       ["#sky", "pvstrings-sky-map", { entity: "sensor.s1_sky" }],
+      ["#skyov", "pvstrings-kv-table", { entity: "sensor.plant_mo",
+        mode: "sky_overview", title: "Himmelskarten",
+        rows: [{ name: "Strang Ost", sky: "sensor.s1_sky", shading: "sensor.s1_shading" },
+               { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",

@@ -34,7 +34,7 @@ entity: sensor.strang_1_sued_30_himmelskarte
 ```
 
 **Data.** `cells[]` with `az`, `el`, `loss`, `ratio`, `n`, `season`;
-`reference_ratio` on the entity. Sun position from
+`level` and `fit_method` on the entity (PV Strings ≥ 1.18). Sun position from
 `sensor.<string>_verschattung_jetzt` (`sun_azimuth`, `sun_elevation`) when
 present.
 
@@ -51,8 +51,10 @@ opposite things and one of them is why a broken map looked healthy for two days.
 
 **Always visible on the card**, not behind a tooltip:
 
-- `reference_ratio` — with a warning when it sits below ~0.9, because a
-  reference inside the shadow is a map that has normalised the shadow away
+- `level` and `fit_method` — the string's clear-view level relative to physics
+  and whether the map was fitted against the sibling strings (*differential*,
+  losses are clear-day losses) or absolutely; a null level (single string, too
+  few shared epochs) shows the method only — structural "nothing", not "not yet"
 - observed cell count, and how much of the year's sky that is
 
 **Hover** gives the cell: azimuth and elevation range, loss, its own `ratio`,
@@ -148,7 +150,7 @@ the card says so rather than inviting the comparison.
 - *Source bias:* the (local hour × horizon) table, and `truth_source` — whether
   the bias is being learned against a measured sensor or only against the
   source's own short-horizon run, which is a much weaker claim.
-- *Sky map:* cells learned per string, `reference_ratio`, the worst sectors.
+- *Sky map:* cells learned per string, `level` / `fit_method`, the worst sectors.
 - *Collection:* coverage, intervals written, events seen, write errors,
   and the censoring split — how many intervals were measured, how many were
   lower bounds, and why.

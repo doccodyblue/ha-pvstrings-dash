@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.3.7";
+const PVS_VERSION = "0.4.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -82,11 +82,12 @@ const FEATURES = {
     attr: "cells[].ratio", since: "1.15.0",
   },
   // Presence check, deliberately separate from sky_ratio:
-  // reference_ratio: null is a valid "not yet" state (withheld chip);
+  // level: null is a valid state (single-string plants and strings without
+  // enough shared epochs have none — structural, not "not yet");
   // a MISSING key is the contract error (problem panel).
-  sky_reference: {
-    test: (a) => a != null && "reference_ratio" in a,
-    attr: "reference_ratio", since: "1.15.0",
+  sky_level: {
+    test: (a) => a != null && "level" in a && "fit_method" in a,
+    attr: "level & fit_method", since: "1.18.0",
   },
 };
 
@@ -121,18 +122,21 @@ const STR = {
     "not_yet_hour": "not yet — hour is in the future",
     "day_running": "today, still running",
     // sky map
-    "sky_reference": "reference",
-    "sky_reference_warn": "Reference below {v} — a reference inside the shadow normalises the shadow away. Losses on this map are relative to an already-shaded best hour.",
-    "sky_reference_withheld": "reference not established yet",
+    "sky_level": "level",
+    "sky_fit_differential": "differential",
+    "sky_fit_absolute": "absolute",
+    "sky_level_tip": "Clear-view level relative to physics — 1.05 means: delivers 5 % above physics where nothing is in the way.",
+    "sky_level_none": "no level — a single-string plant, or not enough shared epochs with the sibling strings",
     "sky_cells": "{n} cells observed",
     "sky_share_of_year": "≈ {pct}% of the year's sun path",
     "sky_no_cells": "No sky cells learned yet — the map fills in as the sun crosses new positions. {obs} raw observations collected so far.",
     "sky_unobserved": "never observed — not “no loss”",
     "sky_loss": "loss",
+    "sky_loss_clear": "loss (clear day)",
     "sky_pooled": "pooled (all year)",
     "sky_season_ascending": "season: ascending sun (Dec–Jun)",
     "sky_season_descending": "season: descending sun (Jun–Dec)",
-    "sky_ratio_gt1": "ratio above 1.0 — cell outperforms the reference",
+    "sky_ratio_gt1": "ratio above 1.0 — measurement above the physics envelope",
     "sky_sun_below": "sun below 3° — no shading value at night",
     "sky_sun_outside": "sun outside the observed window",
     "sky_layer_pooled": "Pooled",
@@ -186,7 +190,7 @@ const STR = {
     "s_daily": "Day by day",
     "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: the reference is the best hour ever seen (below 0.9 is suspicious — the reference itself sits in shadow). Each cell's loss is relative to that reference; n is the weighted observation count.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -236,18 +240,21 @@ const STR = {
     "in_progress": "Stunde läuft ({min} min)",
     "not_yet_hour": "noch nicht — Stunde liegt in der Zukunft",
     "day_running": "heute, läuft noch",
-    "sky_reference": "Referenz",
-    "sky_reference_warn": "Referenz unter {v} — eine Referenz im Schatten normalisiert den Schatten weg. Verluste auf dieser Karte sind relativ zu einer bereits verschatteten besten Stunde.",
-    "sky_reference_withheld": "Referenz noch nicht etabliert",
+    "sky_level": "Niveau",
+    "sky_fit_differential": "differenziell",
+    "sky_fit_absolute": "absolut",
+    "sky_level_tip": "Freisicht-Niveau relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist.",
+    "sky_level_none": "kein Niveau — Ein-Strang-Anlage oder zu wenige gemeinsame Epochen mit den Geschwister-Strängen",
     "sky_cells": "{n} Zellen beobachtet",
     "sky_share_of_year": "≈ {pct}% des Jahres-Sonnenwegs",
     "sky_no_cells": "Noch keine Himmelszellen gelernt — die Karte füllt sich, während die Sonne neue Positionen überstreicht. Bisher {obs} Roh-Beobachtungen.",
     "sky_unobserved": "nie beobachtet — nicht „kein Verlust“",
     "sky_loss": "Verlust",
+    "sky_loss_clear": "Verlust (klarer Tag)",
     "sky_pooled": "gepoolt (ganzjährig)",
     "sky_season_ascending": "Saison: steigende Sonne (Dez–Jun)",
     "sky_season_descending": "Saison: fallende Sonne (Jun–Dez)",
-    "sky_ratio_gt1": "Ratio über 1.0 — Zelle übertrifft die Referenz",
+    "sky_ratio_gt1": "Ratio über 1.0 — Messung über der Physik-Hüllkurve",
     "sky_sun_below": "Sonne unter 3° — nachts kein Verschattungswert",
     "sky_sun_outside": "Sonne außerhalb des beobachteten Fensters",
     "sky_layer_pooled": "Gepoolt",
@@ -297,7 +304,7 @@ const STR = {
     "s_daily": "Tag für Tag",
     "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Die Referenz ist die beste je gesehene Stunde (unter 0,9 ist verdächtig — dann steht die Referenz selbst im Schatten). Der Verlust jeder Zelle ist relativ zu dieser Referenz; n ist die gewichtete Beobachtungszahl.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -927,7 +934,7 @@ class PvsSkyMapCard extends PvsBaseCard {
       this._wire();
     };
     if (!st) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
-    const need = requireFeatures(st, ["sky_cells", "sky_ratio", "sky_reference"]);
+    const need = requireFeatures(st, ["sky_cells", "sky_ratio", "sky_level"]);
     if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
 
     const attrs = st.attributes;
@@ -937,13 +944,18 @@ class PvsSkyMapCard extends PvsBaseCard {
       ?? attrs.friendly_name?.replace(/ (Himmelskarte|Sky map)$/i, "") ?? cfg.entity;
 
     // ---- header ----
-    const ref = attrs.reference_ratio;
-    const refBadge = ref == null
-      ? withheldHTML(t(hass, "sky_reference_withheld"))
-      : `<span class="pvs-chip ${ref < 0.9 ? "warn" : ""} clickable" data-more-info="${cfg.entity}"
-           title="${ref < 0.9 ? esc(t(hass, "sky_reference_warn", { v: "0.9" })) : t(hass, "more_info")}">
-           ${ref < 0.9 ? `<span class="ico">⚠︎</span>` : ""}
-           ${t(hass, "sky_reference")} <span class="v">${fmtNum(hass, ref, 2)}</span></span>`;
+    // level: null is structural "nothing" (single string / too few shared
+    // epochs), not "not yet" — method-only chip, never the withheld style.
+    const level = attrs.level;
+    const fitTxt = t(hass, attrs.fit_method === "differential"
+      ? "sky_fit_differential" : "sky_fit_absolute");
+    const levelBadge = level == null
+      ? `<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
+           title="${esc(t(hass, "sky_level_none"))}">${fitTxt}</span>`
+      : `<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
+           title="${esc(t(hass, "sky_level_tip"))}">
+           ${t(hass, "sky_level")} <span class="v">${fmtNum(hass, level, 2)}</span>
+           <span class="pvs-sub">· ${fitTxt}</span></span>`;
     const pooledCount = cells.filter((c) => c.season == null).length;
     const lat = hass.config?.latitude;
     const annual = lat != null ? annualSkyCells(lat) : null;
@@ -952,14 +964,11 @@ class PvsSkyMapCard extends PvsBaseCard {
         <span class="v">${pooledCount}</span> ${t(hass, "sky_cells", { n: "" }).replace("{n} ", "").trim() || "cells"}
         ${share != null ? `<span class="pvs-sub">· ${t(hass, "sky_share_of_year", { pct: share })}</span>` : ""}
       </span>`;
-    const refWarnLine = (ref != null && ref < 0.9)
-      ? `<div class="sky-warnline">⚠︎ ${t(hass, "sky_reference_warn", { v: "0.9" })}</div>` : "";
-
     // ---- empty-but-valid state (rule 1: "not yet", never a blank) ----
     if (!cells.length) {
       const obs = shading?.attributes?.observations ?? "?";
       return card(`
-        <div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${refBadge}</div>
+        <div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${levelBadge}</div>
         ${withheldHTML(t(hass, "sky_no_cells", { obs }))}`);
     }
 
@@ -1062,7 +1071,7 @@ class PvsSkyMapCard extends PvsBaseCard {
       <span class="it"><svg width="72" height="10"><defs>
         <linearGradient id="pvs-ramp">${rampStops}</linearGradient></defs>
         <rect width="72" height="10" rx="2" fill="url(#pvs-ramp)"/></svg>
-        ${t(hass, "sky_loss")} 0–95%</span>
+        ${t(hass, attrs.fit_method === "differential" ? "sky_loss_clear" : "sky_loss")} 0–95%</span>
       <span class="it"><svg width="14" height="12">
         <rect x="0.5" y="0.5" width="13" height="11" rx="2" fill="url(#pvs-hatch-l)"
           stroke="var(--pvs-cell-stroke)" stroke-width="1"/></svg>
@@ -1072,9 +1081,9 @@ class PvsSkyMapCard extends PvsBaseCard {
     card(`
       <div class="pvs-head">
         <span class="pvs-title">${esc(title)}</span>
-        ${seg}${refBadge}${cellChip}
+        ${seg}${levelBadge}${cellChip}
       </div>
-      ${refWarnLine}${sunLine}
+      ${sunLine}
       <div class="sky-wrap">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
           <defs>${hatchPattern("pvs-hatch")}${hatchPattern("pvs-hatch-l")}</defs>
@@ -1102,8 +1111,10 @@ class PvsSkyMapCard extends PvsBaseCard {
         const c = JSON.parse(el.getAttribute("data-cell"));
         const seasonTxt = c.season == null ? t(hass, "sky_pooled")
           : t(hass, "sky_season_" + c.season);
+        const differential = hass?.states[this._config?.entity]
+          ?.attributes?.fit_method === "differential";
         return `<div class="h">${c.az}°–${c.az + 10}° · ${c.el}°–${c.el + 5}°</div>
-          <div class="r"><span class="k">${t(hass, "sky_loss")}</span><span class="v">${fmtNum(hass, c.loss, 1)} %</span></div>
+          <div class="r"><span class="k">${t(hass, differential ? "sky_loss_clear" : "sky_loss")}</span><span class="v">${fmtNum(hass, c.loss, 1)} %</span></div>
           <div class="r"><span class="k">ratio</span><span class="v">${fmtNum(hass, c.ratio, 3)}${c.ratio > 1 ? " ↑" : ""}</span></div>
           <div class="r"><span class="k">n</span><span class="v">${fmtNum(hass, c.n, 1)}</span></div>
           <div class="pvs-sub">${seasonTxt}${c.ratio > 1 ? `<br>${t(hass, "sky_ratio_gt1")}` : ""}</div>`;
@@ -2290,15 +2301,20 @@ class PvsKvTableCard extends PvsBaseCard {
     } else if (mode === "sky_overview") {
       const rows2 = (cfg.rows ?? []).map((r) => {
         const sky = hass.states[r.sky], sh = hass.states[r.shading];
-        const ref = sky?.attributes?.reference_ratio;
+        const sa2 = sky?.attributes;
+        const lvl = sa2?.level;
+        const fit2 = sa2 ? t(hass, sa2.fit_method === "differential"
+          ? "sky_fit_differential" : "sky_fit_absolute") : null;
         const worst = sh?.attributes?.most_shaded?.[0];
         const sector = worst?.sector?.replace("|", "° · ").replace(/-/g, "–") ?? null;
         return `<tr><th class="clickable" data-more-info="${r.sky}">${esc(r.name)}</th>
-          <td><span class="pvs-num">${sky?.attributes?.cells?.length ?? "—"}</span></td>
-          <td class="${ref != null && ref < 0.9 ? "hot" : ""}"><span class="pvs-num">${ref == null ? "—" : fmtNum(hass, ref, 2)}</span></td>
+          <td><span class="pvs-num">${sa2?.cells?.length ?? "—"}</span></td>
+          <td>${lvl != null
+            ? `<span class="pvs-num">${fmtNum(hass, lvl, 2)}</span> <span class="n">${fit2}</span>`
+            : `<span class="n">${fit2 ?? "—"}</span>`}</td>
           <td>${worst ? `<span class="pvs-num" style="white-space:nowrap">${esc(sector)}°</span> <span class="n">${fmtNum(hass, worst.shading_pct, 0)}%</span>` : "—"}</td></tr>`;
       }).join("");
-      body = `<table><tr><th></th><th>cells</th><th>${t(hass, "sky_reference")}</th><th>max</th></tr>${rows2}</table>`;
+      body = `<table><tr><th></th><th>cells</th><th>${t(hass, "sky_level")}</th><th>max</th></tr>${rows2}</table>`;
     } else {
       // generic: dot-path into attributes -> k/v table
       let obj = a;
@@ -2686,7 +2702,7 @@ for (const [tag, schema] of Object.entries(EDITORS)) {
 
 const CARDS = [
   ["pvstrings-sky-map", PvsSkyMapCard, "PV Strings Sky Map",
-    "The learned sky as a grid over sun position, with reference and unobserved cells made explicit."],
+    "The learned sky as a grid over sun position, with fit level and unobserved cells made explicit."],
   ["pvstrings-forecast", PvsForecastCard, "PV Strings Forecast",
     "Hourly forecast vs unshaded vs actual — the whole shading diagnostic in one chart."],
   ["pvstrings-chain", PvsChainCard, "PV Strings Chain",
