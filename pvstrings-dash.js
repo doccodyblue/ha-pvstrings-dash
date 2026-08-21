@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.5.1";
+const PVS_VERSION = "0.6.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -228,6 +228,16 @@ const STR = {
     "conv_stages": "stages",
     "conv_clipped_col": "clipping",
     "conv_today_col": "conversion today",
+    "nerd_conv_evidence": "Learning — conversion evidence",
+    "conv_ev_stage": "stage",
+    "conv_ev_pairs": "usable / rows",
+    "conv_stage_inverter": "inverter",
+    "conv_stage_mppt": "MPPT",
+    "conv_ev_loading": "loading collection evidence…",
+    "conv_ev_admin": "Conversion learning evidence lives in the entry diagnostics, which need an admin user — hence empty here.",
+    "conv_ev_unavailable": "The entry diagnostics could not be loaded — from here, whether collection runs cannot be checked.",
+    "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
+    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour — the gate working, not a fault. A 0 / 0 row is configured but collecting nothing.",
     "s_nowcast": "Nowcast (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
@@ -372,6 +382,16 @@ const STR = {
     "conv_stages": "Stufen",
     "conv_clipped_col": "Clipping",
     "conv_today_col": "Wandlung heute",
+    "nerd_conv_evidence": "Lernen — Wandlungs-Evidenz",
+    "conv_ev_stage": "Stufe",
+    "conv_ev_pairs": "usable / rows",
+    "conv_stage_inverter": "Wechselrichter",
+    "conv_stage_mppt": "MPPT",
+    "conv_ev_loading": "Sammel-Evidenz wird geladen…",
+    "conv_ev_admin": "Die Wandlungs-Evidenz steckt in den Entry-Diagnosen, die einen Admin-Benutzer erfordern — daher hier leer.",
+    "conv_ev_unavailable": "Die Entry-Diagnosen ließen sich nicht laden — ob die Sammlung läuft, lässt sich von hier nicht prüfen.",
+    "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
+    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — die Leitplanke arbeitet, kein Fehler. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts.",
     "s_nowcast": "Nowcast (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
@@ -669,7 +689,11 @@ async function getRegistryModel(hass) {
       let node = nodeByDevice.get(dev.id);
       if (!node) {
         node = {
-          deviceId: dev.id, name: dev.name_by_user || dev.name,
+          deviceId: dev.id,
+          // config entry id — the stable handle for the entry-level
+          // diagnostics download (data.conversion_evidence lives there)
+          entryId: dev.config_entry_id ?? null,
+          name: dev.name_by_user || dev.name,
           viaDeviceId: dev.via_device_id ?? null, byKey: {},
         };
         nodeByDevice.set(dev.id, node);
@@ -707,6 +731,30 @@ async function plantSibling(hass, entityId, key) {
   if (!info) return null;
   const plant = info.level === "plant" ? info.node : info.node.plant;
   return plant?.byKey?.[key] ?? null;
+}
+
+// ---- diagnostics ----------------------------------------------------------
+
+// Entry-level diagnostics download. Since HA 2024-ish this is an HTTP
+// endpoint, not a WS command, and it is admin-only: a non-admin viewer gets
+// 401/403, which the card shows as a note — never as a contract violation.
+// The collector's conversion evidence (learning pairs rows/usable per stage)
+// lives under data.conversion_evidence; the block is absent until the
+// integration collects, which is "not configured", not an error.
+async function conversionEvidence(hass, entryId) {
+  if (!entryId) return { error: "no_entry" };
+  try {
+    return await cachedWS(`conv_ev|${entryId}`, 5 * 60000, async () => {
+      try {
+        const res = await hass.fetchWithAuth(
+          `/api/diagnostics/config_entry/${entryId}`);
+        if (res.status === 401 || res.status === 403) return { error: "admin" };
+        if (!res.ok) return { error: "unavailable" };
+        const json = await res.json();
+        return { evidence: json?.data?.conversion_evidence ?? null };
+      } catch (_) { return { error: "unavailable" }; }
+    });
+  } catch (_) { return { error: "unavailable" }; }
 }
 
 // ---- statistics -----------------------------------------------------------
@@ -2500,6 +2548,28 @@ class PvsKvTableCard extends PvsBaseCard {
     return names;
   }
 
+  // Entry diagnostics -> data.conversion_evidence (+ scope display names).
+  // Resolved once per card instance; the underlying download is capped at
+  // 5 minutes by cachedWS, so state churn does not refetch it.
+  async _loadConversionEvidence() {
+    if (this._convEv) return;
+    this._convEv = "loading";
+    let out = { error: "unavailable" };
+    try {
+      const hass = this._hass;
+      const m = await getRegistryModel(hass);
+      const info = m.byEntityId.get(this._config.entity);
+      const entryId = info?.node?.entryId ?? m.plants[0]?.entryId ?? null;
+      const res = await conversionEvidence(hass, entryId);
+      if (res.evidence && Object.keys(res.evidence).length)
+        out = { names: await this._stringNames(), evidence: res.evidence };
+      else if (!res.evidence) out = { error: "none" };
+      else out = res;
+    } catch (_) { /* stays unavailable -> withheld */ }
+    this._convEv = out;
+    this._render();
+  }
+
   _render() {
     const hass = this._hass, cfg = this._config;
     if (!hass || !cfg) return;
@@ -2631,6 +2701,39 @@ class PvsKvTableCard extends PvsBaseCard {
             : ratio != null ? `<span class="pvs-num">${fmtNum(hass, ratio * 100, 1)} %</span>` : "—"}</td></tr>`;
       }).join("");
       body = `<table><tr><th></th><th>${t(hass, "conv_path")}</th><th>${t(hass, "conv_curve")}</th><th>${t(hass, "conv_stages")}</th><th>${t(hass, "conv_clipped_col")}</th><th>${t(hass, "conv_today_col")}</th></tr>${rows3}</table>`;
+    } else if (mode === "conversion_evidence") {
+      // The collector's learning pairs (rows written / usable after the
+      // censoring gate), from entry diagnostics. "not yet" and "nothing"
+      // must not look alike: usable trailing rows is the gate working; a
+      // 0/0 row is configured-but-silent — a real warning.
+      const d = this._convEv;
+      if (!d || d === "loading") {
+        this._loadConversionEvidence();
+        body = `<div class="kv-note dim">${t(hass, "conv_ev_loading")}</div>`;
+      } else if (d.error === "admin") {
+        body = `<div class="kv-note warn">${t(hass, "conv_ev_admin")}</div>`;
+      } else if (d.error) {
+        // network/endpoint trouble: unknown state, never claim "nothing"
+        body = `<div class="kv-note warn">${t(hass, "conv_ev_unavailable")}</div>`;
+      } else {
+        const stageTxt = { inverter: t(hass, "conv_stage_inverter"),
+          mppt: t(hass, "conv_stage_mppt") };
+        const rows4 = Object.entries(d.evidence).map(([k, v]) => {
+          const [scope, stage] = k.split("|");
+          const name = d.names.get(scope) ?? scope.slice(0, 8);
+          const silent = v.rows === 0;
+          const pct = v.rows > 0 ? Math.round((Math.min(v.usable, v.rows) / v.rows) * 100) : 0;
+          return `<tr>
+            <th>${esc(name)}</th>
+            <td><span class="n">${stageTxt[stage] ?? esc(stage)}</span></td>
+            <td class="${silent ? "hot" : ""}"><span class="pvs-num">${v.usable}</span> / <span class="pvs-num">${v.rows}</span></td>
+            <td style="width:35%"><div class="ev-bar"><div style="width:${pct}%"></div></div></td>
+          </tr>`;
+        }).join("");
+        body = `<table><tr><th></th><th>${t(hass, "conv_ev_stage")}</th>
+            <th>${t(hass, "conv_ev_pairs")}</th><th></th></tr>${rows4}</table>
+          <div class="kv-note">${t(hass, "conv_ev_note")}</div>`;
+      }
     } else {
       // generic: dot-path into attributes -> k/v table
       let obj = a;
@@ -2663,6 +2766,9 @@ const KV_CSS = `
   .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-bottom: 8px; }
   .kv-note.warn { background: color-mix(in srgb, var(--warning-color, #ffa600) 12%, transparent); color: var(--primary-text-color); }
   th.dim, .dim { color: var(--secondary-text-color); font-weight: 400; }
+  .ev-bar { height: 8px; border-radius: 4px; background: var(--pvs-hairline);
+    overflow: hidden; min-width: 70px; }
+  .ev-bar > div { height: 100%; border-radius: 4px; background: var(--pvs-model); }
 `;
 
 /* ========================= SECTION: CARD:MATURITY ======================== */
@@ -3001,10 +3107,12 @@ async function buildViews(hass, config) {
     if (convNerd.length) {
       // six columns: needs a double-width section and a card that opts into
       // its full grid width — same lesson as the censoring table
+      const convEntity = convNerd[0].byKey.group_forecast_ac
+        ?? convNerd[0].byKey.group_forecast_battery_charge;
       nerdSections.push({ type: "grid", column_span: 2, cards: [
         heading(t(lang, "nerd_conversion")),
         { type: "custom:pvstrings-kv-table",
-          entity: convNerd[0].byKey.group_forecast_ac ?? convNerd[0].byKey.group_forecast_battery_charge,
+          entity: convEntity,
           mode: "conversion", title: t(lang, "nerd_conversion"),
           grid_options: { columns: "full" },
           rows: convNerd.map((g) => ({
@@ -3012,6 +3120,12 @@ async function buildViews(hass, config) {
             out: g.byKey.group_forecast_ac ?? g.byKey.group_forecast_battery_charge,
             dc: g.byKey.group_forecast_remaining,
           })) },
+        // collector evidence (rows/usable per stage): only rendered when the
+        // integration collects — the card withholds otherwise, never errors
+        { type: "custom:pvstrings-kv-table",
+          entity: convEntity,
+          mode: "conversion_evidence", title: t(lang, "nerd_conv_evidence"),
+          grid_options: { columns: "full" } },
       ] });
     }
     // Six columns next to long string names: scrolls inside a single-column

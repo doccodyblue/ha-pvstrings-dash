@@ -88,6 +88,9 @@
 
   const hass = {
     states, callWS, config,
+    // entry diagnostics (conversion evidence) come over HTTP, not WS
+    fetchWithAuth: (url, opts) => fetch(`http://${HA}${url}`,
+      { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) } }),
     language: "de", locale: { language: "de" },
     themes: { darkMode: document.body.classList.contains("dark") },
   };
@@ -115,6 +118,7 @@
     ["kv ghi_bias", "pvstrings-kv-table", { entity: moId, mode: "ghi_bias", title: "Source-Bias", truth_entity: ghiId }],
     ["kv censoring", "pvstrings-kv-table", { entity: sdId, mode: "censoring", title: "Zensur-Split" }],
     ["kv collector", "pvstrings-kv-table", { entity: collId, mode: "collector", title: "Erfassung" }],
+    ["kv conversion_evidence", "pvstrings-kv-table", { entity: collId, mode: "conversion_evidence", title: "Wandlungs-Evidenz" }],
     ["kv skip_reasons", "pvstrings-kv-table", { entity: moId, mode: "skip_reasons", title: "Skip-Gründe" }],
     ["problem panel (broken entity)", "pvstrings-sky-map", { entity: "sensor.does_not_exist" }],
   ];

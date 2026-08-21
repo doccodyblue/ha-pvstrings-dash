@@ -25,6 +25,7 @@
 <h4>conversion — direct group, clipping (820px)</h4><div style="width:820px" id="conv1"></div>
 <h4>conversion — storage group (460px)</h4><div class="narrow" id="conv2"></div>
 <h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
+<h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -152,9 +153,23 @@
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
   ];
   const devReg = [
-    { id: "dp", model: "PV plant", name: "PV Anlage", identifiers: [["pvstrings", "e"]] },
-    { id: "ds", model: "PV string", name: "Strang Ost", via_device_id: "dp", identifiers: [["pvstrings", "e_s1"]] },
+    { id: "dp", model: "PV plant", name: "PV Anlage", config_entry_id: "mock-entry",
+      identifiers: [["pvstrings", "mock-entry"]] },
+    { id: "ds", model: "PV string", name: "Strang Ost", via_device_id: "dp",
+      identifiers: [["pvstrings", "mock-entry_s1"]] },
+    { id: "ds2", model: "PV string", name: "Strang West", via_device_id: "dp",
+      identifiers: [["pvstrings", "mock-entry_s2"]] },
+    { id: "dg", model: "Curtailment group", name: "Netz", via_device_id: "dp",
+      identifiers: [["pvstrings", "mock-entry_g1"]] },
   ];
+  // entry diagnostics download -> conversion evidence incl. the real warning
+  // case: a stage configured but collecting nothing (0/0). Keys are
+  // <subentry-scope>|<stage>; names resolve via device identifiers.
+  const diagJson = { data: { conversion_evidence: {
+    "g1|inverter": { rows: 19, usable: 16 },
+    "s1|mppt": { rows: 18, usable: 15 },
+    "s2|mppt": { rows: 0, usable: 0 },
+  } } };
   const stats5 = [];
   for (let m = 0; m < nowH * 60; m += 5) {
     const h = m / 60;
@@ -175,7 +190,11 @@
       default: return {};
     }
   };
-  const hass = { states, callWS, language: "de", locale: { language: "de" },
+  const hass = { states, callWS,
+    fetchWithAuth: async (url) => url.includes("/api/diagnostics/")
+      ? new Response(JSON.stringify(diagJson), { status: 200 })
+      : new Response("{}", { status: 404 }),
+    language: "de", locale: { language: "de" },
     config: { time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone, latitude: 53.6 },
     themes: { darkMode: true } };
   for (const [sel, tag, cfg] of [
@@ -191,6 +210,8 @@
       ["#convt", "pvstrings-kv-table", { entity: "sensor.g1_ac", mode: "conversion", title: "Wandlung",
         rows: [{ name: "Netz", out: "sensor.g1_ac", dc: "sensor.g1_dc" },
                { name: "Speicher", out: "sensor.g2_bc", dc: "sensor.g2_dc" }] }],
+      ["#conve", "pvstrings-kv-table", { entity: "sensor.g1_ac",
+        mode: "conversion_evidence", title: "Lernen — Wandlungs-Evidenz" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",
