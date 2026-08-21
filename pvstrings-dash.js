@@ -12,7 +12,7 @@
  *   FMT       number/date/energy formatting (Intl, HA timezone)
  *   DATA      websocket wrappers, registry model, statistics helpers
  *   UI        problem panel, withheld chip, tooltip, base card class
- *   CARD:SKYMAP / CARD:FORECAST / CARD:CHAIN / CARD:DAILY / CARD:KVTABLE
+ *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:CHAIN / CARD:DAILY / CARD:KVTABLE
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
  *
@@ -24,7 +24,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.4.0";
+const PVS_VERSION = "0.5.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -41,13 +41,19 @@ const PLANT_KEYS = [
   "savings_month", "savings_total", "amortisation",
   "rain_probability_tomorrow", "model_observations", "ghi_forecast",
   "strings_detail", "collector_health",
+  // conversion layer (>= 1.20) — only published when an output path is
+  // configured; absence is normal, not an error
+  "forecast_ac_today", "forecast_ac_tomorrow",
 ];
 const STRING_KEYS = [
   "string_sky_map", "string_shading_now", "string_forecast_today",
   "string_forecast_remaining", "string_forecast_tomorrow",
   "string_potential_now", "string_produced_today",
 ];
-const GROUP_KEYS = ["group_forecast_remaining"];
+const GROUP_KEYS = ["group_forecast_remaining",
+  // conversion layer (>= 1.20): direct groups publish _ac, storage groups
+  // publish _battery_charge; a group without an output path has neither
+  "group_forecast_ac", "group_forecast_battery_charge"];
 
 // unique_id suffixes -> translation_key (registry rows may omit
 // translation_key on older cores; the unique_id suffix is stable).
@@ -72,6 +78,12 @@ const FEATURES = {
   unshaded: {
     test: (a) => a?.forecast?.[0]?.unshaded_kwh !== undefined,
     attr: "forecast[].unshaded_kwh", since: "1.7.0",
+  },
+  // conversion entities must say what they are — without output_path and
+  // curve_source the card would silently assume AC semantics
+  conv_output: {
+    test: (a) => a != null && "output_path" in a && "curve_source" in a,
+    attr: "output_path & curve_source", since: "1.20.0",
   },
   sky_cells: {
     test: (a) => Array.isArray(a?.cells),
@@ -156,6 +168,25 @@ const STR = {
     "fc_hero_ist": "actual today",
     "fc_hero_prog": "forecast today",
     "fc_hourly_fallback": "actual drawn from hourly statistics (no 5-minute power data available)",
+    // conversion (AC / battery charge)
+    "conv_not_ready": "waiting for forecast data",
+    "conv_dc": "DC potential",
+    "conv_out_direct": "AC potential",
+    "conv_out_storage": "battery charge",
+    "conv_hero_dc": "DC today",
+    "conv_hero_direct": "AC today",
+    "conv_hero_storage": "charge today",
+    "conv_eff_today": "conversion today",
+    "conv_eff_tip_direct": "Day total AC / day total DC — after the conversion curve and the AC rating. Hardware potential: never capped at regulatory limits.",
+    "conv_eff_tip_storage": "Day total charge / day total DC — after the charge path's conversion curve. DC energy into the storage, not AC.",
+    "conv_curve_datasheet": "datasheet curve",
+    "conv_curve_custom": "custom curve",
+    "conv_curve_neutral": "unconverted (output = DC)",
+    "conv_neutral_note": "No conversion curve configured — the output equals DC by definition, this is not a measured 0 % loss.",
+    "conv_clipped": "clipping {v} kWh",
+    "conv_clipped_tip": "Energy above the inverter's AC rating — a hardware cap, not a conversion loss.",
+    "conv_strip": "{out} / DC per hour",
+    "conv_low_dc": "too little DC for a meaningful ratio",
     // chain
     "chain_title": "Forecast chain",
     "chain_physics": "raw physics",
@@ -185,12 +216,22 @@ const STR = {
     "s_tomorrow": "Tomorrow & weather",
     "s_savings": "Savings",
     "s_groups": "Inverter groups",
+    "s_conversion": "Conversion (AC / storage)",
+    "conv_partial_storage": "In the battery-charge forecast, not in AC: {list}",
+    "conv_partial_unconverted": "In no output forecast (no output path configured): {list}",
+    "conv_never_sum": "AC and battery charge are different kinds of energy — AC sits behind the inverter, charge is DC into the battery. Never add them.",
+    "nerd_conversion": "Conversion",
+    "conv_path": "path",
+    "conv_curve": "curve",
+    "conv_stages": "stages",
+    "conv_clipped_col": "clipping",
+    "conv_today_col": "conversion today",
     "s_nowcast": "Nowcast (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
     "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. Conversion curves come from a datasheet or your own data, they are not learned; *unconverted* means no curve is configured, not a measured 0 % loss.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -273,6 +314,24 @@ const STR = {
     "fc_hero_ist": "Ist heute",
     "fc_hero_prog": "Prognose heute",
     "fc_hourly_fallback": "Ist aus Stundenstatistik gezeichnet (keine 5-Minuten-Leistungsdaten verfügbar)",
+    "conv_not_ready": "warte auf Prognosedaten",
+    "conv_dc": "DC-Potenzial",
+    "conv_out_direct": "AC-Potenzial",
+    "conv_out_storage": "Akkuladung",
+    "conv_hero_dc": "DC heute",
+    "conv_hero_direct": "AC heute",
+    "conv_hero_storage": "Ladung heute",
+    "conv_eff_today": "Wandlung heute",
+    "conv_eff_tip_direct": "Tagessumme AC / Tagessumme DC — nach Kennlinie und AC-Nennwert. Hardware-Potenzial: nie an Regel- oder Rechtslimits gedeckelt.",
+    "conv_eff_tip_storage": "Tagessumme Ladung / Tagessumme DC — nach Kennlinie des Ladepfads. DC-Energie in den Speicher, kein AC.",
+    "conv_curve_datasheet": "Datenblatt-Kennlinie",
+    "conv_curve_custom": "eigene Kennlinie",
+    "conv_curve_neutral": "ungewandelt (Ausgang = DC)",
+    "conv_neutral_note": "Keine Kennlinie konfiguriert — der Ausgang ist per Definition gleich DC, das ist kein gemessener 0-%-Verlust.",
+    "conv_clipped": "Clipping {v} kWh",
+    "conv_clipped_tip": "Energie über dem AC-Nennwert des Wechselrichters — eine Hardware-Kappung, kein Wandlungsverlust.",
+    "conv_strip": "{out} / DC pro Stunde",
+    "conv_low_dc": "zu wenig DC für einen sinnvollen Quotienten",
     "chain_title": "Prognosekette",
     "chain_physics": "Roh-Physik",
     "chain_shading": "Himmelskarte",
@@ -299,12 +358,22 @@ const STR = {
     "s_tomorrow": "Morgen & Wetter",
     "s_savings": "Ersparnis",
     "s_groups": "Wechselrichter-Gruppen",
+    "s_conversion": "Wandlung (AC / Speicher)",
+    "conv_partial_storage": "In der Akkuladungs-Prognose, nicht im AC: {list}",
+    "conv_partial_unconverted": "In keiner Ausgangs-Prognose (kein Ausgabepfad konfiguriert): {list}",
+    "conv_never_sum": "AC und Akkuladung sind verschiedene Energiearten — AC liegt hinter dem Wechselrichter, Ladung ist DC in den Speicher. Niemals addieren.",
+    "nerd_conversion": "Wandlung",
+    "conv_path": "Pfad",
+    "conv_curve": "Kennlinie",
+    "conv_stages": "Stufen",
+    "conv_clipped_col": "Clipping",
+    "conv_today_col": "Wandlung heute",
     "s_nowcast": "Nowcast (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
     "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Kennlinien kommen aus dem Datenblatt oder eigener Messung, sie werden nicht gelernt; „ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -1755,6 +1824,202 @@ const FC_CSS = `
   .fc-hero.wide .fc-hero-title { font-size: 15px; }
 `;
 
+/* ======================= SECTION: CARD:CONVERSION ======================== */
+
+// DC potential vs converted output (AC or battery charge) for one group.
+// Semantics per the integration's contract: the output is hardware
+// potential (capped at the AC rating, never at regulatory limits),
+// clipping is a hardware cap and not a conversion loss, and a neutral
+// curve means "unconverted" — not a measured 0 % loss. The per-hour ratio
+// strip omits hours whose DC is too small for a meaningful quotient
+// (hatched, rule 1: absence is shown, never faked as a value).
+class PvsConversionCard extends PvsBaseCard {
+  watchedEntities() {
+    return [this._config?.entity, this._config?.dc_entity].filter(Boolean);
+  }
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    if (!cfg.entity || !cfg.dc_entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const outSt = hass.states[cfg.entity], dcSt = hass.states[cfg.dc_entity];
+    if (!outSt) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
+    if (!dcSt) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.dc_entity }) }));
+
+    const a = outSt.attributes;
+    const path = a.output_path === "storage" ? "storage" : "direct";
+    const outLabel = t(hass, "conv_out_" + path);
+    const title = cfg.title ?? a.friendly_name ?? cfg.entity;
+    // Coordinator not ready is "not yet", never a contract error.
+    if (outSt.state === "unavailable" || dcSt.state === "unavailable") {
+      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span></div>
+        ${withheldHTML(t(hass, "conv_not_ready"))}`);
+    }
+    for (const [st, id, feats] of [[outSt, cfg.entity, ["forecast_list", "conv_output"]],
+      [dcSt, cfg.dc_entity, ["forecast_list"]]]) {
+      const need = requireFeatures(st, feats);
+      if (!need.ok) return card(problemHTML(hass, { entity: id, missing: need.missing }));
+    }
+
+    // ---- today's hours from both lists ----
+    const startMs = localMidnightMs(hass, Date.now());
+    const endMs = startMs + 25 * 3600000; // DST slack
+    const pick = (st) => {
+      const m = new Map();
+      for (const row of st.attributes.forecast ?? []) {
+        const ms = new Date(row.datetime).getTime();
+        if (ms >= startMs && ms < endMs && !m.has(ms)) m.set(ms, row.potential_kwh);
+      }
+      return m;
+    };
+    const dc = pick(dcSt), out = pick(outSt);
+
+    // ---- header chips ----
+    const neutral = a.curve_source === "neutral";
+    const dcToday = dcSt.attributes.today_kwh;
+    const outToday = a.today_kwh;
+    const chips = [];
+    if (!neutral && outToday != null && dcToday > 0) {
+      chips.push(`<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
+        title="${esc(t(hass, "conv_eff_tip_" + path))}">
+        ${t(hass, "conv_eff_today")} <span class="v">${fmtNum(hass, (outToday / dcToday) * 100, 1)} %</span></span>`);
+    }
+    if (a.curve_source) {
+      const curveTxt = ["datasheet", "custom", "neutral"].includes(a.curve_source)
+        ? t(hass, "conv_curve_" + a.curve_source) : esc(a.curve_source);
+      chips.push(`<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
+        title="${neutral ? esc(t(hass, "conv_neutral_note")) : esc(t(hass, "more_info"))}">${curveTxt}</span>`);
+    }
+    if (!neutral && a.clipped_kwh > 0) {
+      chips.push(`<span class="pvs-chip warn" title="${esc(t(hass, "conv_clipped_tip"))}">
+        <span class="ico">⚠︎</span> ${t(hass, "conv_clipped", { v: fmtNum(hass, a.clipped_kwh, 2) })}</span>`);
+    }
+    const heroDc = dcToday != null
+      ? `<div class="fc-hero-item clickable" data-more-info="${cfg.dc_entity}">
+          <span class="hv" style="color:var(--secondary-text-color)">${fmtNum(hass, dcToday, 1)}<span class="hu">kWh</span></span>
+          <span class="hl">${t(hass, "conv_hero_dc")}</span></div>` : "";
+    const heroOut = outToday != null
+      ? `<div class="fc-hero-item right clickable" data-more-info="${cfg.entity}">
+          <span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, outToday, 1)}<span class="hu">kWh</span></span>
+          <span class="hl">${t(hass, "conv_hero_" + path)}</span></div>` : "";
+    const head = `
+      <div class="fc-hero">${heroDc}<span class="fc-hero-title">${esc(title)}</span>${heroOut}</div>
+      ${chips.length ? `<div class="pvs-head" style="justify-content:flex-start">${chips.join("")}</div>` : ""}`;
+
+    if (!dc.size) return card(head + withheldHTML(t(hass, "fc_no_hours")));
+
+    // ---- geometry: hourly bars + ratio strip in one SVG ----
+    const nSlots = 24;
+    const SW = 26, PAD_L = 34, PAD_R = 6, PAD_T = 8, PH = 108;
+    const GAP = 12, STRIP_H = 30, PAD_B = 20;
+    const W = PAD_L + nSlots * SW + PAD_R;
+    const H = PAD_T + PH + GAP + STRIP_H + PAD_B;
+    const STRIP_Y = PAD_T + PH + GAP;
+    let maxV = 0;
+    for (const v of dc.values()) maxV = Math.max(maxV, v ?? 0);
+    const yMax = niceMax(maxV * 1.05);
+    const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
+    // materiality: below this DC an hourly quotient is noise, not signal
+    const thresh = Math.max(0.05, 0.04 * maxV);
+
+    let bars = "", strip = "", hits = "", labels = "";
+    for (let i = 0; i < nSlots; i++) {
+      const ms = startMs + i * 3600000;
+      const x0 = PAD_L + i * SW;
+      const lp = localParts(hass, ms);
+      if (lp.hour % 4 === 0) {
+        labels += `<text class="axis" x="${x0 + SW / 2}" y="${H - 6}" text-anchor="middle">${fmtHour(hass, ms)}</text>`;
+      }
+      const d = dc.get(ms), o = out.get(ms);
+      if (d != null && d > 0) {
+        bars += `<rect x="${x0 + 1}" y="${yOf(d)}" width="${SW - 2}" height="${PAD_T + PH - yOf(d)}"
+          fill="var(--pvs-model-ghost)" rx="1"/>`;
+      }
+      if (o != null && o > 0) {
+        bars += `<rect x="${x0 + 1}" y="${yOf(o)}" width="${SW - 2}" height="${PAD_T + PH - yOf(o)}"
+          fill="var(--pvs-model)" rx="1"/>`;
+      }
+      // ratio strip: honest — hatched where DC is immaterial
+      const material = d != null && d >= thresh;
+      const ratio = material && o != null ? o / d : null;
+      if (!neutral) {
+        if (ratio != null) {
+          const rh = Math.min(1, ratio) * STRIP_H;
+          strip += `<rect x="${x0 + 1}" y="${STRIP_Y + STRIP_H - rh}" width="${SW - 2}" height="${rh}"
+            fill="var(--pvs-model)" opacity="0.45" rx="1"/>`;
+        } else if (d != null && d > 0) {
+          strip += `<rect x="${x0 + 1}" y="${STRIP_Y}" width="${SW - 2}" height="${STRIP_H}"
+            fill="url(#pvs-conv-hatch)" stroke="none"/>`;
+        }
+      }
+      const tip = { h: lp.hour, dc: d ?? null, out: o ?? null,
+        ratio: ratio != null ? ratio : null, low: d != null && d > 0 && !material };
+      hits += `<rect x="${x0}" y="${PAD_T}" width="${SW}" height="${H - PAD_T - PAD_B}"
+        fill="transparent" data-conv='${esc(JSON.stringify(tip))}'/>`;
+    }
+
+    // axes: kWh ticks for the bars, 100 % line for the strip
+    let grid = "";
+    for (const v of [0, yMax / 2, yMax]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v, 1)}</text>`;
+    }
+    if (!neutral) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${STRIP_Y}" x2="${W - PAD_R}" y2="${STRIP_Y}"/>
+        <line class="grid" x1="${PAD_L}" y1="${STRIP_Y + STRIP_H}" x2="${W - PAD_R}" y2="${STRIP_Y + STRIP_H}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">100%</text>
+        <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">0</text>`;
+    }
+
+    const notes = [];
+    if (neutral) notes.push(`<div class="fc-note">${t(hass, "conv_neutral_note")}</div>`);
+    if (a.note) notes.push(`<div class="fc-note">${esc(a.note)}</div>`);
+
+    card(`
+      ${head}
+      ${notes.join("")}
+      <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        <defs>${hatchPattern("pvs-conv-hatch")}</defs>
+        ${grid}${bars}${strip}${labels}${hits}
+      </svg></div>
+      <div class="pvs-legend">
+        <span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "conv_dc")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${outLabel}</span>
+        ${neutral ? "" : `<span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.45"></span>${t(hass, "conv_strip", { out: outLabel })}</span>`}
+      </div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-conv]",
+      content: (el) => {
+        const hass = this._hass;
+        const c = JSON.parse(el.getAttribute("data-conv"));
+        const outLabel = t(hass, "conv_out_" +
+          (this._hass?.states[this._config?.entity]?.attributes?.output_path === "storage" ? "storage" : "direct"));
+        return `<div class="h">${String(c.h).padStart(2, "0")}:00–${String((c.h + 1) % 24).padStart(2, "0")}:00</div>
+          ${c.dc != null ? `<div class="r"><span class="k">${t(hass, "conv_dc")}</span><span class="v">${fmtNum(hass, c.dc, 2)} kWh</span></div>` : ""}
+          ${c.out != null ? `<div class="r"><span class="k">${outLabel}</span><span class="v">${fmtNum(hass, c.out, 2)} kWh</span></div>` : ""}
+          ${c.ratio != null ? `<div class="r"><span class="k">${outLabel} / DC</span><span class="v">${fmtNum(hass, c.ratio * 100, 1)} %</span></div>` : ""}
+          ${c.low ? `<div class="pvs-sub">${t(hass, "conv_low_dc")}</div>` : ""}`;
+      },
+    });
+  }
+
+  static getConfigElement() {
+    return document.createElement("pvstrings-conversion-editor");
+  }
+}
+
 /* ========================= SECTION: CARD:CHAIN =========================== */
 
 class PvsChainCard extends PvsBaseCard {
@@ -2178,6 +2443,13 @@ const DAYPARTS = ["morning", "midday", "afternoon"];
 
 class PvsKvTableCard extends PvsBaseCard {
   getCardSize() { return 3; }
+  // Row-based modes (sky_overview, conversion) read entities beyond
+  // cfg.entity — watch them all, or later rows render stale.
+  watchedEntities() {
+    const ids = this._config?.entity ? [this._config.entity] : [];
+    for (const r of this._config?.rows ?? []) ids.push(r.sky, r.shading, r.out, r.dc);
+    return ids.filter(Boolean);
+  }
 
   // missingKey: the plant table's absent bucket really was never seen; the
   // string x daypart layer publishes only buckets past their activation
@@ -2315,6 +2587,37 @@ class PvsKvTableCard extends PvsBaseCard {
           <td>${worst ? `<span class="pvs-num" style="white-space:nowrap">${esc(sector)}°</span> <span class="n">${fmtNum(hass, worst.shading_pct, 0)}%</span>` : "—"}</td></tr>`;
       }).join("");
       body = `<table><tr><th></th><th>cells</th><th>${t(hass, "sky_level")}</th><th>max</th></tr>${rows2}</table>`;
+    } else if (mode === "conversion") {
+      // Curves are configured (datasheet/custom) or absent (neutral) — they
+      // are not learned, so this table shows configuration + realized ratio,
+      // never a training progress. `stages` has no contracted shape yet:
+      // render defensively.
+      const rows3 = (cfg.rows ?? []).map((r) => {
+        const o = hass.states[r.out], d = hass.states[r.dc];
+        const oa = o?.attributes ?? {};
+        const pathTxt = oa.output_path
+          ? t(hass, "conv_out_" + (oa.output_path === "storage" ? "storage" : "direct")) : "—";
+        const neutral = oa.curve_source === "neutral";
+        const curveTxt = oa.curve_source
+          ? (["datasheet", "custom", "neutral"].includes(oa.curve_source)
+            ? t(hass, "conv_curve_" + oa.curve_source) : esc(oa.curve_source))
+          : "—";
+        const stages = oa.stages;
+        const stagesTxt = stages == null ? "—"
+          : Array.isArray(stages)
+            ? esc(stages.map((s) => s?.name ?? s?.kind ?? (typeof s === "string" ? s : "")).filter(Boolean).join(" → ") || String(stages.length))
+            : `<span class="dim">${esc(JSON.stringify(stages).slice(0, 60))}</span>`;
+        const ratio = !neutral && oa.today_kwh != null && d?.attributes?.today_kwh > 0
+          ? oa.today_kwh / d.attributes.today_kwh : null;
+        return `<tr><th class="clickable" data-more-info="${r.out}">${esc(r.name)}</th>
+          <td>${pathTxt}</td>
+          <td>${curveTxt}</td>
+          <td>${stagesTxt}</td>
+          <td>${oa.clipped_kwh > 0 ? `<span class="pvs-num">${fmtNum(hass, oa.clipped_kwh, 2)}</span> kWh` : "—"}</td>
+          <td>${neutral ? `<span class="dim">${t(hass, "conv_curve_neutral")}</span>`
+            : ratio != null ? `<span class="pvs-num">${fmtNum(hass, ratio * 100, 1)} %</span>` : "—"}</td></tr>`;
+      }).join("");
+      body = `<table><tr><th></th><th>${t(hass, "conv_path")}</th><th>${t(hass, "conv_curve")}</th><th>${t(hass, "conv_stages")}</th><th>${t(hass, "conv_clipped_col")}</th><th>${t(hass, "conv_today_col")}</th></tr>${rows3}</table>`;
     } else {
       // generic: dot-path into attributes -> k/v table
       let obj = a;
@@ -2474,6 +2777,13 @@ function tileOrMissing(hass, lang, node, key, extra = {}) {
   return { type: "tile", entity: id, ...(name ? { name } : {}), ...extra };
 }
 
+// For OPTIONAL entities (conversion layer): not configured means the entity
+// does not exist, and nothing should appear — that is not a missing_card
+// case, which is reserved for entities the contract promises.
+function tileIf(hass, lang, node, key, extra = {}) {
+  return node?.byKey?.[key] ? tileOrMissing(hass, lang, node, key, extra) : null;
+}
+
 async function buildViews(hass, config) {
   const lang = langOf(hass);
   const model = await getRegistryModel(hass);
@@ -2518,6 +2828,40 @@ async function buildViews(hass, config) {
         P("rain_probability_tomorrow"),
       ] },
     ];
+    // ---- conversion layer (>= 1.20, optional): own section right after the
+    // forecast chart, deliberately NOT inside the DC groups section — AC and
+    // battery charge must never read as summable with the DC tiles.
+    const directGroups = groups.filter((g) => g.byKey.group_forecast_ac);
+    const storageGroups = groups.filter((g) => g.byKey.group_forecast_battery_charge);
+    if (directGroups.length || storageGroups.length || plant.byKey.forecast_ac_today) {
+      const convCards = [heading(t(lang, "s_conversion"))];
+      convCards.push(...[
+        tileIf(hass, lang, plant, "forecast_ac_today"),
+        tileIf(hass, lang, plant, "forecast_ac_tomorrow"),
+      ].filter(Boolean));
+      for (const g of [...directGroups, ...storageGroups]) {
+        const outKey = g.byKey.group_forecast_ac ? "group_forecast_ac" : "group_forecast_battery_charge";
+        convCards.push(g.byKey.group_forecast_remaining
+          ? { type: "custom:pvstrings-conversion", entity: g.byKey[outKey],
+              dc_entity: g.byKey.group_forecast_remaining, title: g.name,
+              grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "group_forecast_remaining" })));
+      }
+      // partial hint: name the strings that are NOT in the AC number, each
+      // list labelled by where the energy actually is
+      const acSt = plant.byKey.forecast_ac_today ? hass.states[plant.byKey.forecast_ac_today] : null;
+      if (acSt?.attributes?.partial) {
+        const lines = [];
+        const sto = acSt.attributes.storage_strings ?? [];
+        const unc = acSt.attributes.unconverted_strings ?? [];
+        // names are user-configured — escape before they land in markdown
+        if (sto.length) lines.push("- " + t(lang, "conv_partial_storage", { list: esc(sto.join(", ")) }));
+        if (unc.length) lines.push("- " + t(lang, "conv_partial_unconverted", { list: esc(unc.join(", ")) }));
+        lines.push("- " + t(lang, "conv_never_sum"));
+        convCards.push(mdCard(lines.join("\n")));
+      }
+      overviewSections.splice(2, 0, { type: "grid", column_span: 2, cards: convCards });
+    }
     if (groups.length) {
       overviewSections.push({ type: "grid", cards: [
         heading(t(lang, "s_groups")),
@@ -2638,6 +2982,22 @@ async function buildViews(hass, config) {
       mo ? { type: "custom:pvstrings-kv-table", entity: mo, mode: "skip_reasons", title: t(lang, "nerd_skips") }
         : mdCard(t(lang, "missing_card", { key: "model_observations" })),
     ] });
+    // conversion layer (optional): configuration + realized ratio per group
+    const convNerd = groups.filter((g) =>
+      (g.byKey.group_forecast_ac || g.byKey.group_forecast_battery_charge) && g.byKey.group_forecast_remaining);
+    if (convNerd.length) {
+      nerdSections.push({ type: "grid", cards: [
+        heading(t(lang, "nerd_conversion")),
+        { type: "custom:pvstrings-kv-table",
+          entity: convNerd[0].byKey.group_forecast_ac ?? convNerd[0].byKey.group_forecast_battery_charge,
+          mode: "conversion", title: t(lang, "nerd_conversion"),
+          rows: convNerd.map((g) => ({
+            name: g.name,
+            out: g.byKey.group_forecast_ac ?? g.byKey.group_forecast_battery_charge,
+            dc: g.byKey.group_forecast_remaining,
+          })) },
+      ] });
+    }
     // Six columns next to long string names: scrolls inside a single-column
     // section, so censoring gets a double-width section of its own. A
     // section's grid density scales with its span (12 units per view
@@ -2652,7 +3012,7 @@ async function buildViews(hass, config) {
     // Educational footer: nerds know this, normal users may want to learn
     // it. Three balanced markdown columns under a full-width heading.
     const explBullets = t(lang, "nerd_explain").split("\n- ").map((b, i) => (i ? "- " + b : b));
-    const explCols = [explBullets.slice(0, 2), explBullets.slice(2, 4), explBullets.slice(4)]
+    const explCols = [explBullets.slice(0, 3), explBullets.slice(3, 6), explBullets.slice(6)]
       .filter((c) => c.length).map((c) => mdCard(c.join("\n")));
     nerdSections.push({ type: "grid", column_span: 3, cards: [
       heading(t(lang, "nerd_explain_title")), ...explCols,
@@ -2693,6 +3053,9 @@ const EDITORS = {
     { name: "show_unshaded", selector: { boolean: {} } },
     { name: "show_actual", selector: { boolean: {} } }],
   "pvstrings-chain-editor": [ENTITY_SCHEMA],
+  "pvstrings-conversion-editor": [ENTITY_SCHEMA,
+    { name: "dc_entity", selector: { entity: { filter: { integration: "pvstrings" } } } },
+    { name: "title", selector: { text: {} } }],
   "pvstrings-daily-editor": [ENTITY_SCHEMA,
     { name: "days", selector: { number: { min: 3, max: 60, mode: "box" } } }],
 };
@@ -2705,6 +3068,8 @@ const CARDS = [
     "The learned sky as a grid over sun position, with fit level and unobserved cells made explicit."],
   ["pvstrings-forecast", PvsForecastCard, "PV Strings Forecast",
     "Hourly forecast vs unshaded vs actual — the whole shading diagnostic in one chart."],
+  ["pvstrings-conversion", PvsConversionCard, "PV Strings Conversion",
+    "DC potential vs converted output (AC or battery charge), with an honest per-hour ratio strip."],
   ["pvstrings-chain", PvsChainCard, "PV Strings Chain",
     "What each model layer did to the raw physics for one hour, beside the measurement."],
   ["pvstrings-daily", PvsDailyCard, "PV Strings Daily",

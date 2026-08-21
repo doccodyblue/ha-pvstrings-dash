@@ -101,6 +101,46 @@ so on the card. The plant overview keeps bars.
 
 ---
 
+## 2b. `pvstrings-conversion` (PV Strings ≥ 1.20, optional)
+
+```yaml
+type: custom:pvstrings-conversion
+entity: sensor.<gruppe>_restprognose_ac_heute   # or …_akkuladung_heute
+dc_entity: sensor.<gruppe>_rest_heute
+```
+
+**Data.** Both entities carry the usual hourly `forecast` list plus
+`today_kwh`. The output entity adds `output_path` (`direct|storage`),
+`curve_source` (`datasheet|custom|neutral`), `stages` (shape not yet
+contracted — render defensively), for direct groups `clipped_kwh` and
+optionally `note`. These entities exist only when the user configured an
+output path — absence is normal and renders nothing (no missing_card).
+
+**Chart.** One day. DC potential as ghost bars, converted output in front;
+below, a 0–100 % ratio strip (output/DC per hour). Hours whose DC is below
+`max(0.05 kWh, 4 % of the day's peak DC hour)` get a hatched strip cell —
+a quotient of two near-zeros is noise, not a measurement.
+
+**Semantics (from the integration's contract).** AC and battery charge are
+never summed. AC is hardware potential: capped at the AC rating, never at
+regulatory limits — never labelled "feed-in". Clipping is a separate warn
+chip (a hardware cap is not a conversion loss). `curve_source: neutral`
+renders as "unconverted" with no ratio strip — output = DC by definition
+is not a measured 0 % loss. `unavailable` coordinator state shows the
+withheld "waiting" style, checked before feature detection, so startup
+never looks like a contract violation.
+
+**Strategy placement.** Overview view, own "conversion" section directly
+after the forecast chart — deliberately not inside the DC groups section,
+so AC/charge tiles never read as summable with DC tiles. Plant AC
+today/tomorrow appear as plain tiles; when the plant sensor says
+`partial: true`, a markdown card names `storage_strings` and
+`unconverted_strings` separately. The nerd view gets a per-group
+configuration table (path, curve, stages, clipping, realized ratio) —
+curves are configured, not learned, so there is no training display.
+
+---
+
 ## 3. `pvstrings-chain`
 
 ```yaml

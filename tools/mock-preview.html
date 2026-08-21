@@ -22,6 +22,9 @@
 <h4>normal (460px container)</h4><div class="narrow" id="n"></div>
 <h4>sky map (520px container)</h4><div style="width:520px" id="sky"></div>
 <h4>sky overview (460px container)</h4><div class="narrow" id="skyov"></div>
+<h4>conversion — direct group, clipping (820px)</h4><div style="width:820px" id="conv1"></div>
+<h4>conversion — storage group (460px)</h4><div class="narrow" id="conv2"></div>
+<h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -39,6 +42,25 @@
       potential_kwh: +bell(h).toFixed(3), unshaded_kwh: +(bell(h) * 1.12).toFixed(3) });
   }
   const nowH = 14.4;
+  // conversion layer (v1.20): direct group with datasheet curve + midday
+  // clipping, storage group with a flat custom curve
+  const dcG1 = [], acG1 = [], dcG2 = [], bcG2 = [];
+  let g1Dc = 0, g1Ac = 0, g1Clip = 0, g2Dc = 0, g2Bc = 0;
+  for (let h = 0; h < 24; h++) {
+    const dt = new Date(d0 + h * 3600e3).toISOString();
+    const d1 = +(bell(h) * 0.55).toFixed(3);
+    const eff = d1 <= 0 ? 0 : Math.min(0.97, 0.70 + 0.27 * Math.min(1, d1 / 0.5));
+    const cap = 1.05, acRaw = d1 * eff;
+    const a1 = +Math.min(acRaw, cap).toFixed(3);
+    g1Clip += Math.max(0, acRaw - cap);
+    const d2 = +(bell(h) * 0.4).toFixed(3);
+    const b2 = +(d2 * 0.985).toFixed(3);
+    g1Dc += d1; g1Ac += a1; g2Dc += d2; g2Bc += b2;
+    dcG1.push({ datetime: dt, potential_kwh: d1 });
+    acG1.push({ datetime: dt, potential_kwh: a1 });
+    dcG2.push({ datetime: dt, potential_kwh: d2 });
+    bcG2.push({ datetime: dt, potential_kwh: b2 });
+  }
   // synthetic sky map: an arc with an evening shadow, holes, and a low reference
   const cells = [];
   for (let az = 60; az <= 300; az += 10) {
@@ -99,6 +121,23 @@
         "Strang 5 CH4 Ost Gartenhaus": { today: { value_kinds: { measured: 10, lower_bound: 0, reconstructed: 0 },
           coverage_mean: 1, curtailed_fraction: 0 } },
       } } },
+    "sensor.g1_dc": { entity_id: "sensor.g1_dc", state: "2.1",
+      attributes: { forecast: dcG1, today_kwh: +g1Dc.toFixed(2), tomorrow_kwh: 4.4,
+        strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
+    "sensor.g1_ac": { entity_id: "sensor.g1_ac", state: "1.9",
+      attributes: { forecast: acG1, today_kwh: +g1Ac.toFixed(2), tomorrow_kwh: 4.1,
+        output_path: "direct", curve_source: "datasheet", clipped_kwh: +g1Clip.toFixed(2),
+        stages: [{ name: "MPPT" }, { name: "Wechselrichter" }],
+        semantics: "Energy behind the inverter. Never sum with battery charge.",
+        friendly_name: "Netz Restprognose AC heute" } },
+    "sensor.g2_dc": { entity_id: "sensor.g2_dc", state: "1.4",
+      attributes: { forecast: dcG2, today_kwh: +g2Dc.toFixed(2), tomorrow_kwh: 3.1,
+        strings: ["Strang Süd"], friendly_name: "Speicher Restprognose heute" } },
+    "sensor.g2_bc": { entity_id: "sensor.g2_bc", state: "1.38",
+      attributes: { forecast: bcG2, today_kwh: +g2Bc.toFixed(2), tomorrow_kwh: 3.05,
+        output_path: "storage", curve_source: "custom",
+        semantics: "DC energy into the storage; discharge timing is a control decision. Never sum with AC.",
+        friendly_name: "Speicher Restprognose Akkuladung heute" } },
     // a younger second string: half the sky seen, no level yet (absolute fit)
     "sensor.s2_sky": { entity_id: "sensor.s2_sky", state: String(cells.length >> 1),
       attributes: { cells: cells.filter((c, i) => i % 2 === 0), level: null, fit_method: "absolute",
@@ -146,6 +185,11 @@
         mode: "sky_overview", title: "Himmelskarten",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky", shading: "sensor.s1_shading" },
                { name: "Strang West", sky: "sensor.s2_sky" }] }],
+      ["#conv1", "pvstrings-conversion", { entity: "sensor.g1_ac", dc_entity: "sensor.g1_dc", title: "Netz" }],
+      ["#conv2", "pvstrings-conversion", { entity: "sensor.g2_bc", dc_entity: "sensor.g2_dc", title: "Speicher" }],
+      ["#convt", "pvstrings-kv-table", { entity: "sensor.g1_ac", mode: "conversion", title: "Wandlung",
+        rows: [{ name: "Netz", out: "sensor.g1_ac", dc: "sensor.g1_dc" },
+               { name: "Speicher", out: "sensor.g2_bc", dc: "sensor.g2_dc" }] }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",

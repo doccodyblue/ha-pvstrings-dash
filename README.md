@@ -100,6 +100,28 @@ from smoothing. Forecast and unshaded stay hourly, drawn as straight
 segments. If no 5-minute statistics exist, the card falls back to hourly
 means and says so on the card.
 
+### `pvstrings-conversion`
+
+DC potential vs converted output for one inverter group — AC behind the
+inverter for `direct` groups, battery charge for `storage` groups (PV
+Strings ≥ 1.20 with a configured output path; without one, none of this
+exists and none of it is drawn). Below the bars sits a per-hour ratio
+strip that makes the conversion curve visible: lower at dawn and dusk,
+dipping under clipping. Hours with too little DC for a meaningful
+quotient are hatched, not faked.
+
+```yaml
+type: custom:pvstrings-conversion
+entity: sensor.<gruppe>_restprognose_ac_heute   # or …_akkuladung_heute
+dc_entity: sensor.<gruppe>_rest_heute
+```
+
+Three semantic guard rails, straight from the integration's contract: AC
+and battery charge are never added (different kinds of energy); the AC
+figure is hardware potential — capped at the inverter's AC rating, never
+at regulatory limits; and clipping is shown as its own chip because a
+hardware cap is not a conversion loss.
+
 ### `pvstrings-chain`
 
 What each layer did to the raw physics for one hour: physics → × sky map →
@@ -179,6 +201,7 @@ card it meant to include.
 | chain card (per-hour factors) | ≥ 1.8.0 |
 | sky map with `level` / `fit_method` | ≥ 1.18.0 |
 | curtailment-group sections | ≥ 1.14.0 |
+| conversion cards (AC / battery charge, optional) | ≥ 1.20.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 
 The three design rules behind all of this, bought with the integration's own
