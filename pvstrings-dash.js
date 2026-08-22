@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.9.2";
+const PVS_VERSION = "0.10.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -582,12 +582,17 @@ function t(hass, key, vars) {
 //   step of the same hue, measurement = orange, loss = violet sequential.
 // Loss ramp = shadow ramp: light means clear sky, dark means shadow — the
 // iconic mapping (shading IS darkness) needs no legend to be learned. The
-// direction is the SAME in both themes (a sunny sky is bright, also at
-// night-mode); the dark end carries a cool violet cast, like real shadows.
-const LOSS_RAMP_LIGHT = ["#f4f2ee", "#e0ddd8", "#c8c5c2", "#aaa8a8",
-  "#8a888d", "#68656f", "#454250", "#262230"];
-const LOSS_RAMP_DARK = ["#eceae5", "#d3d0cc", "#b5b2b1", "#959398",
-  "#75727c", "#555260", "#393647", "#262230"];
+// direction is the SAME in both themes (a sunny sky is bright, also in
+// night mode).
+// The hue is violet and genuinely saturated, not a grey with a cast: a
+// near-neutral dark end sank into the card background on dark themes, which
+// put the deepest shadow within a whisker of an unobserved cell — the one
+// collision this map must never have. Violet also sits opposite the orange
+// sun marker and clear of the model blue, so all three read apart.
+const LOSS_RAMP_LIGHT = ["#f4f0fd", "#e5dbfa", "#d1bef5", "#b79ced",
+  "#9a77e0", "#7d55cd", "#6139b0", "#48268c"];
+const LOSS_RAMP_DARK = ["#f0ebfd", "#ded2fa", "#c6b2f3", "#ab8ee9",
+  "#8f6ada", "#744ec5", "#5c3aa8", "#472c86"];
 
 const BASE_CSS = `
   :host {

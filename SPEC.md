@@ -43,7 +43,11 @@ drawn, not the full hemisphere — a plant sees maybe a third of it.
 
 **Colour.** Loss is a magnitude, so a *sequential* ramp: one hue, light to dark.
 Not the blue-to-red currently in use — that is a diverging ramp doing a
-sequential job, and it invents a meaningless midpoint.
+sequential job, and it invents a meaningless midpoint. The hue is violet and
+carries real saturation: a near-neutral dark end sinks into the card
+background on dark themes, which puts the deepest shadow within a whisker of
+an unobserved cell — the one collision this map must never have. Violet also
+sits opposite the orange sun marker and clear of the model blue.
 
 **Unobserved cells are not on the ramp at all.** Neutral fill, or hatched. A
 cell the sun has never crossed must not read as a cell with no loss; they mean
