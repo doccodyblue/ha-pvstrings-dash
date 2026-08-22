@@ -27,7 +27,7 @@
 <h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
 <h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
 <h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
-<h4>curve — learning on, nothing moved yet (820px)</h4><div style="width:820px" id="curve2"></div>
+<h4>curve — collecting, no region built yet (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -195,12 +195,12 @@
       "g1|inverter": { rows: 19, usable: 16 },
       "s1|mppt": { rows: 18, usable: 15 },
       "s2|mppt": { rows: 0, usable: 0 },
+      "g3|inverter": { rows: 45, usable: 41 },
     },
-    // every learning region, including one that has not moved a point yet
-    model: { conversion_curves: {
-      "g1|inverter": learnedBlock,
-      "g3|inverter": { stage: "inverter_efficiency", coverage: 0, bins: mkBins(false) },
-    } },
+    // regions the integration has actually built. g3 is deliberately absent:
+    // collecting (see evidence above) but no region yet — the live state on
+    // Andy's plant, and the one the card must not call "learning is off".
+    model: { conversion_curves: { "g1|inverter": learnedBlock } },
   } };
   const stats5 = [];
   for (let m = 0; m < nowH * 60; m += 5) {

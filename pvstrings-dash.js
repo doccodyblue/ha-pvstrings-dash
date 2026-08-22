@@ -25,7 +25,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.7.0";
+const PVS_VERSION = "0.7.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -195,7 +195,9 @@ const STR = {
     "curve_delta": "correction vs prior (pp)",
     "curve_axis_load": "load (share of AC rating)",
     "curve_axis_eta": "efficiency",
-    "curve_off": "Curve learning is not switched on for this group — the configured curve is applied unchanged.",
+    "curve_pending": "No learned curve for this group yet. The collector is gathering: {usable} of {rows} measured pairs have cleared the censoring check. Support points only move once the evidence at a point suffices.",
+    "curve_silent": "Measurement pairs are set up for this group, but nothing is being collected (0 rows) — that is a real warning sign, not a waiting state.",
+    "curve_not_collected": "No measurement pairs are being collected for this group — no output sensor configured, or learning is off.",
     "curve_unsupported": "This integration version does not learn conversion curves.",
     "curve_gathering": "Learning is on, no support point has moved yet — every point still holds its prior. Evidence per point below.",
     "curve_point_learned": "learned from measurement",
@@ -369,7 +371,9 @@ const STR = {
     "curve_delta": "Korrektur ggü. Prior (pp)",
     "curve_axis_load": "Last (Anteil der AC-Nennleistung)",
     "curve_axis_eta": "Wirkungsgrad",
-    "curve_off": "Kennlinien-Lernen ist für diese Gruppe nicht eingeschaltet — die konfigurierte Kennlinie wird unverändert angewendet.",
+    "curve_pending": "Noch keine gelernte Kennlinie für diese Gruppe. Der Kollektor sammelt: {usable} von {rows} Messpaaren sind zensurgeprüft. Stützstellen bewegen sich erst, wenn die Evidenz an einem Punkt reicht.",
+    "curve_silent": "Für diese Gruppe sind Messpaare eingerichtet, aber es wird nichts gesammelt (0 Zeilen) — das ist ein echtes Warnsignal, kein Wartezustand.",
+    "curve_not_collected": "Für diese Gruppe werden keine Messpaare gesammelt — kein Ausgangs-Sensor eingerichtet, oder das Lernen ist aus.",
     "curve_unsupported": "Diese Integrationsversion lernt keine Wandlungs-Kennlinien.",
     "curve_gathering": "Lernen ist an, bisher wurde keine Stützstelle bewegt — jeder Punkt hält noch seinen Prior. Evidenz je Punkt unten.",
     "curve_point_learned": "aus Messung gelernt",
@@ -810,16 +814,28 @@ async function conversionEvidence(hass, entryId) {
   return d.error ? d : { evidence: d.data?.conversion_evidence ?? null };
 }
 
-// model.conversion_curves holds EVERY learning region, including those whose
-// support points have not moved yet — the only way to tell "learning is on,
-// still gathering" from "learning is off". A missing key means the
-// integration predates learned curves; an empty object means no region.
-async function conversionCurves(hass, entryId) {
+// model.conversion_curves holds the learning regions the integration has
+// actually built. A region appearing there means learning is on; a region
+// MISSING there does not prove it is off — observed live: learning on, pairs
+// collecting, still no region. So the absence is reported as "no curve yet",
+// with the collector's own evidence as the signal for whether it is working.
+async function conversionState(hass, entryId, scope) {
   const d = await entryDiagnostics(hass, entryId);
   if (d.error) return d;
   const model = d.data?.model;
   if (!model || !("conversion_curves" in model)) return { error: "unsupported" };
-  return { curves: model.conversion_curves ?? {} };
+  const curves = model.conversion_curves ?? {};
+  const hit = scope ? Object.entries(curves)
+    .find(([k]) => k === scope || k.startsWith(`${scope}|`))?.[1] : null;
+  if (hit) return { learning: hit };
+  const mine = Object.entries(d.data?.conversion_evidence ?? {})
+    .filter(([k]) => scope && (k === scope || k.startsWith(`${scope}|`)));
+  return {
+    error: "pending",
+    collecting: mine.length > 0,
+    rows: mine.reduce((s, [, v]) => s + (v?.rows ?? 0), 0),
+    usable: mine.reduce((s, [, v]) => s + (v?.usable ?? 0), 0),
+  };
 }
 
 // ---- statistics -----------------------------------------------------------
@@ -2176,16 +2192,9 @@ class PvsCurveCard extends PvsBaseCard {
       const m = await getRegistryModel(hass);
       const info = m.byEntityId.get(this._config.entity);
       const node = info?.node;
-      const res = await conversionCurves(hass, node?.entryId ?? m.plants[0]?.entryId);
-      if (res.error) out = res;
-      else {
-        // keys are "<scope_id>|<stage>" (as in conversion_evidence); accept a
-        // bare scope_id too — the shape is not contracted yet
-        const scope = node?.scopeId;
-        const hit = scope ? Object.entries(res.curves)
-          .find(([k]) => k === scope || k.startsWith(`${scope}|`))?.[1] : null;
-        out = hit ? { learning: hit } : { error: "off" };
-      }
+      // keys are "<scope_id>|<stage>" (as in conversion_evidence); a bare
+      // scope_id is accepted too — the shape is not contracted yet
+      out = await conversionState(hass, node?.entryId ?? m.plants[0]?.entryId, node?.scopeId);
     } catch (_) { /* stays unavailable */ }
     this._curves = out;
     this._render();
@@ -2217,7 +2226,13 @@ class PvsCurveCard extends PvsBaseCard {
       }
       if (d.error === "admin") return card(head() + `<div class="kv-note warn">${t(hass, "conv_ev_admin")}</div>`);
       if (d.error === "unsupported") return card(head() + withheldHTML(t(hass, "curve_unsupported")));
-      if (d.error === "off") return card(head() + withheldHTML(t(hass, "curve_off")));
+      if (d.error === "pending") {
+        // No region built yet. Whether learning is switched on cannot be read
+        // from here — so say what IS known: what the collector is doing.
+        return card(head() + withheldHTML(!d.collecting ? t(hass, "curve_not_collected")
+          : d.rows === 0 ? t(hass, "curve_silent")
+          : t(hass, "curve_pending", { usable: d.usable, rows: d.rows })));
+      }
       if (d.error) return card(head() + `<div class="kv-note warn">${t(hass, "conv_ev_unavailable")}</div>`);
       learning = d.learning;
       gathering = true;
