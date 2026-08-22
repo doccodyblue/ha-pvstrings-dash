@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.9.1";
+const PVS_VERSION = "0.9.2";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -672,7 +672,7 @@ const BASE_CSS = `
 function hatchPattern(id, stroke = "var(--secondary-text-color)") {
   return `<pattern id="${id}" width="6" height="6" patternTransform="rotate(45)"
     patternUnits="userSpaceOnUse">
-    <line x1="0" y="0" x2="0" y2="6" stroke="${stroke}" stroke-width="1.1" opacity="0.45"/>
+    <line x1="0" y="0" x2="0" y2="6" stroke="${stroke}" stroke-width="1.1" opacity="0.62"/>
   </pattern>`;
 }
 

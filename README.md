@@ -55,6 +55,51 @@ is a normal dashboard config — take it over and edit it if you want to.
 
 ## The cards
 
+Four conventions run through all of them, and each one exists to prevent a
+specific misreading.
+
+**Hatched means never observed — not "zero".**
+
+![Unobserved sky cells](docs/img/read-hatch-dark.png)
+
+A sky cell the sun has never crossed is hatched rather than painted with the
+light end of the loss ramp: "nobody measured this" and "nothing shades this"
+mean opposite things, and confusing them once made a broken map look healthy
+for two days. The same hatch marks hours whose DC is too small to divide by,
+and loads a plant will never reach.
+
+**Dashed means "not the thing itself".**
+
+![Prior, applied curve and measurement](docs/img/read-curve-dark.png)
+
+On the conversion-curve card the dashed line is the datasheet prior, the solid
+line is what the plant actually applies, and orange is the raw measurement —
+blue is the model and orange the measurement, in every card. Filled markers
+sit where evidence has moved a support point, hollow ones still hold their
+prior. While nothing has moved, the applied curve stays dashed as well: a
+solid "learned" line would claim a measurement that has not been accepted.
+
+**A second strip carries what the main scale would hide.**
+
+![Conversion ratio strip](docs/img/read-strip-dark.png)
+
+Hourly conversion runs somewhere between 70 and 97 %, which on the energy axis
+above would be invisible inside the bars. The strip below has its own 0–100 %
+scale: lower at dawn and dusk where the inverter is inefficient, dipping at
+midday where clipping cuts the AC — a hardware cap, not a conversion loss,
+which is why clipping also gets its own chip. The curve card uses the same
+device for its correction in percentage points.
+
+**A withheld figure says how far off it is.**
+
+![Withheld state with its reason](docs/img/read-withheld-dark.png)
+
+Nothing is ever silently blank. Where a value cannot be shown, its place is
+taken by the reason — here the nowcast shortly after a restart, waiting for
+enough measured intervals, which is a normal state and not an error. The same style covers "no cells learned yet", "no learning
+region built", and every other not-yet.
+
+
 ### `pvstrings-sky-map`
 
 The learned sky as a grid over sun position: ten degrees of azimuth by five of
