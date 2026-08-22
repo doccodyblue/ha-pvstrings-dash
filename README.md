@@ -124,6 +124,25 @@ hardware cap is not a conversion loss. A header chip names what produced
 the output figure — datasheet or custom curve, fixed factors with their
 applied multiplier, or "unconverted" when no path is configured.
 
+### `pvstrings-curve`
+
+The learned efficiency curve against the datasheet prior it started from
+(PV Strings ≥ 1.21). Efficiency over load on a log axis — the shape lives
+in the main plot, the correction in a strip below, because learning moves
+points by tenths of a percentage point and would be invisible at the
+curve's own scale.
+
+```yaml
+type: custom:pvstrings-curve
+entity: sensor.<gruppe>_restprognose_ac_heute
+```
+
+Three states the card keeps apart, because the integration does: learning
+switched off (nothing), switched on but no support point moved yet (the
+curve is drawn in the prior's own dashed style — a solid "learned" line
+would be a lie), and learned (solid line, filled markers where measurement
+moved the point, hollow where it still holds its prior).
+
 ### `pvstrings-chain`
 
 What each layer did to the raw physics for one hour: physics → × sky map →
@@ -204,6 +223,7 @@ card it meant to include.
 | sky map with `level` / `fit_method` | ≥ 1.18.0 |
 | curtailment-group sections | ≥ 1.14.0 |
 | conversion cards (AC / battery charge, optional) | ≥ 1.20.0 |
+| learned conversion curve (`conversion_learning`) | ≥ 1.21.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 
 The three design rules behind all of this, bought with the integration's own

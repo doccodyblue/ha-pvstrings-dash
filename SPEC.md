@@ -144,6 +144,41 @@ curves are configured, not learned, so there is no training display.
 
 ---
 
+## 2c. `pvstrings-curve` (learned conversion curves)
+
+```yaml
+type: custom:pvstrings-curve
+entity: sensor.<gruppe>_restprognose_ac_heute
+```
+
+**Data.** `conversion_learning` on the group conversion sensor once
+`curve_source: learned` (with `curve_prior`), otherwise
+`data.model.conversion_curves` from the entry diagnostics. `bins` is keyed
+by load fraction; each bin carries `eta`, `prior`, `n_eff` and `learned`.
+The storage path runs on fixed factors and never learns — no card.
+
+**Three states, kept apart.** Learning off (no block anywhere) says so and
+stops. Learning on with nothing moved yet is only visible in the
+diagnostics: the applied curve is drawn dashed, in the prior's style, with
+hollow markers — a solid "learned" line would claim a measurement that has
+not happened. Learned draws the applied curve solid over the dashed prior,
+markers filled only where evidence actually moved the point.
+
+**Two scales, deliberately.** Efficiency spans tens of percentage points
+while learning moves points by tenths of one. The main plot (log load
+axis) carries the curve's shape; a delta strip below carries `eta − prior`
+in percentage points. One shared axis would hide the correction, which is
+the whole reason the card exists.
+
+**Never implied.** `coverage` is the maturity figure the integration
+defines, so it may be shown as a share; the collector's evidence counts
+have no defined ceiling and get no bar (see the conversion evidence
+table). The card states what is excluded from learning — clipped
+intervals, sub-1 % load, censored hours — and that learned points are
+capped at ±5 pp around the prior.
+
+---
+
 ## 3. `pvstrings-chain`
 
 ```yaml

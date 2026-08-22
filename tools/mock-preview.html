@@ -26,6 +26,8 @@
 <h4>conversion — storage group (460px)</h4><div class="narrow" id="conv2"></div>
 <h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
 <h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
+<h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
+<h4>curve — learning on, nothing moved yet (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -62,6 +64,18 @@
     dcG2.push({ datetime: dt, potential_kwh: d2 });
     bcG2.push({ datetime: dt, potential_kwh: b2 });
   }
+  // learned inverter curve: datasheet prior, the mid-load points moved by
+  // measurement, the sparse ends still sitting on their prior
+  const priorEta = { "0.01": 0.72, "0.02": 0.83, "0.05": 0.905, "0.10": 0.935,
+    "0.20": 0.952, "0.35": 0.96, "0.50": 0.962, "0.75": 0.958, "1.00": 0.95 };
+  const learnedEta = { "0.05": [0.892, 63], "0.10": [0.926, 121], "0.20": [0.947, 204],
+    "0.35": [0.958, 176], "0.50": [0.955, 212] };
+  const mkBins = (learn) => Object.fromEntries(Object.entries(priorEta).map(([k, prior]) => {
+    const hit = learn ? learnedEta[k] : null;
+    return [k, { prior, eta: hit ? hit[0] : prior, n_eff: hit ? hit[1] : (k === "0.02" ? 19 : 8),
+      learned: !!hit }];
+  }));
+  const learnedBlock = { stage: "inverter_efficiency", coverage: 5 / 9, bins: mkBins(true) };
   // synthetic sky map: an arc with an evening shadow, holes, and a low reference
   const cells = [];
   for (let az = 60; az <= 300; az += 10) {
@@ -127,7 +141,8 @@
         strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
     "sensor.g1_ac": { entity_id: "sensor.g1_ac", state: "1.9",
       attributes: { forecast: acG1, today_kwh: +g1Ac.toFixed(2), tomorrow_kwh: 4.1,
-        output_path: "direct", curve_source: "datasheet", clipped_kwh: +g1Clip.toFixed(2),
+        output_path: "direct", curve_source: "learned", curve_prior: "datasheet",
+        conversion_learning: learnedBlock, clipped_kwh: +g1Clip.toFixed(2),
         stages: [{ name: "MPPT" }, { name: "Wechselrichter" }],
         semantics: "Energy behind the inverter. Never sum with battery charge.",
         friendly_name: "Netz Restprognose AC heute" } },
@@ -140,6 +155,12 @@
         stages: [{ name: "MPPT" }, { name: "Laden" }],
         semantics: "DC energy into the storage; discharge timing is a control decision. Never sum with AC.",
         friendly_name: "Speicher Restprognose Akkuladung heute" } },
+    // a second direct group: learning switched on, nothing moved yet
+    "sensor.g3_ac": { entity_id: "sensor.g3_ac", state: "0.9",
+      attributes: { forecast: acG1, today_kwh: 4.2, tomorrow_kwh: 3.6,
+        output_path: "direct", curve_source: "datasheet",
+        semantics: "Energy behind the inverter. Never sum with battery charge.",
+        friendly_name: "Ost-WR Restprognose AC heute" } },
     // a younger second string: half the sky seen, no level yet (absolute fit)
     "sensor.s2_sky": { entity_id: "sensor.s2_sky", state: String(cells.length >> 1),
       attributes: { cells: cells.filter((c, i) => i % 2 === 0), level: null, fit_method: "absolute",
@@ -151,6 +172,8 @@
     { entity_id: "sensor.plant_fc", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_today", translation_key: "forecast_today" },
     { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
+    { entity_id: "sensor.g1_ac", platform: "pvstrings", device_id: "dg", unique_id: "e_g1_forecast_ac", translation_key: "group_forecast_ac" },
+    { entity_id: "sensor.g3_ac", platform: "pvstrings", device_id: "dg3", unique_id: "e_g3_forecast_ac", translation_key: "group_forecast_ac" },
   ];
   const devReg = [
     { id: "dp", model: "PV plant", name: "PV Anlage", config_entry_id: "mock-entry",
@@ -161,15 +184,24 @@
       identifiers: [["pvstrings", "mock-entry_s2"]] },
     { id: "dg", model: "Curtailment group", name: "Netz", via_device_id: "dp",
       identifiers: [["pvstrings", "mock-entry_g1"]] },
+    { id: "dg3", model: "Curtailment group", name: "Ost-WR", via_device_id: "dp",
+      identifiers: [["pvstrings", "mock-entry_g3"]] },
   ];
   // entry diagnostics download -> conversion evidence incl. the real warning
   // case: a stage configured but collecting nothing (0/0). Keys are
   // <subentry-scope>|<stage>; names resolve via device identifiers.
-  const diagJson = { data: { conversion_evidence: {
-    "g1|inverter": { rows: 19, usable: 16 },
-    "s1|mppt": { rows: 18, usable: 15 },
-    "s2|mppt": { rows: 0, usable: 0 },
-  } } };
+  const diagJson = { data: {
+    conversion_evidence: {
+      "g1|inverter": { rows: 19, usable: 16 },
+      "s1|mppt": { rows: 18, usable: 15 },
+      "s2|mppt": { rows: 0, usable: 0 },
+    },
+    // every learning region, including one that has not moved a point yet
+    model: { conversion_curves: {
+      "g1|inverter": learnedBlock,
+      "g3|inverter": { stage: "inverter_efficiency", coverage: 0, bins: mkBins(false) },
+    } },
+  } };
   const stats5 = [];
   for (let m = 0; m < nowH * 60; m += 5) {
     const h = m / 60;
@@ -212,6 +244,8 @@
                { name: "Speicher", out: "sensor.g2_bc", dc: "sensor.g2_dc" }] }],
       ["#conve", "pvstrings-kv-table", { entity: "sensor.g1_ac",
         mode: "conversion_evidence", title: "Lernen — Wandlungs-Evidenz" }],
+      ["#curve1", "pvstrings-curve", { entity: "sensor.g1_ac", title: "Wandlungs-Kennlinie — Netz" }],
+      ["#curve2", "pvstrings-curve", { entity: "sensor.g3_ac", title: "Wandlungs-Kennlinie — Ost-WR" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",

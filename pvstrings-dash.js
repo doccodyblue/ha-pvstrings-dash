@@ -12,7 +12,8 @@
  *   FMT       number/date/energy formatting (Intl, HA timezone)
  *   DATA      websocket wrappers, registry model, statistics helpers
  *   UI        problem panel, withheld chip, tooltip, base card class
- *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:CHAIN / CARD:DAILY / CARD:KVTABLE
+ *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:CURVE / CARD:CHAIN
+ *   CARD:DAILY / CARD:KVTABLE
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
  *
@@ -24,7 +25,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.6.1";
+const PVS_VERSION = "0.7.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -180,7 +181,27 @@ const STR = {
     "conv_eff_tip_direct": "Day total AC / day total DC — after the conversion curve and the AC rating. Hardware potential: never capped at regulatory limits.",
     "conv_eff_tip_storage": "Day total charge / day total DC — after the charge path's conversion curve. DC energy into the storage, not AC.",
     "conv_curve_datasheet": "datasheet curve",
-    "conv_curve_custom": "custom curve",
+    // `custom` is hand-entered support points — a claim by the owner, not a
+    // measurement. Since measured curves now exist, the wording must not
+    // blur the two.
+    "conv_curve_custom": "self-entered curve",
+    "conv_curve_learned": "learned curve",
+    "conv_curve_prior": "on top of {prior}",
+    // learned-curve card
+    "curve_title": "Conversion curve",
+    "curve_learned": "learned",
+    "curve_prior_series": "prior (datasheet)",
+    "curve_coverage": "support points moved",
+    "curve_delta": "correction vs prior (pp)",
+    "curve_axis_load": "load (share of AC rating)",
+    "curve_axis_eta": "efficiency",
+    "curve_off": "Curve learning is not switched on for this group — the configured curve is applied unchanged.",
+    "curve_unsupported": "This integration version does not learn conversion curves.",
+    "curve_gathering": "Learning is on, no support point has moved yet — every point still holds its prior. Evidence per point below.",
+    "curve_point_learned": "learned from measurement",
+    "curve_point_prior": "still the prior — not enough evidence ({n} of {need})",
+    "curve_bins_missing": "The learning block carries no support points.",
+    "curve_note": "Not learned: intervals at the AC rating (the output stops following the input), below 1 % load (the inverter's own consumption dominates) and anything the censoring marked as curtailed. Learned points are capped at ±5 percentage points around the prior — one day with a broken sensor cannot rewrite the curve.",
     "conv_curve_neutral": "unconverted (output = DC)",
     "conv_curve_fixed_factors": "fixed factors",
     "conv_fixed_factors_tip": "Fixed per-stage factors applied to DC (e.g. MPPT × charge) — configured values, not measured.",
@@ -244,7 +265,7 @@ const STR = {
     "s_daily": "Day by day",
     "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. Conversion curves come from a datasheet or your own data, they are not learned; *unconverted* means no curve is configured, not a measured 0 % loss.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -338,7 +359,23 @@ const STR = {
     "conv_eff_tip_direct": "Tagessumme AC / Tagessumme DC — nach Kennlinie und AC-Nennwert. Hardware-Potenzial: nie an Regel- oder Rechtslimits gedeckelt.",
     "conv_eff_tip_storage": "Tagessumme Ladung / Tagessumme DC — nach Kennlinie des Ladepfads. DC-Energie in den Speicher, kein AC.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
-    "conv_curve_custom": "eigene Kennlinie",
+    "conv_curve_custom": "selbst eingetragen",
+    "conv_curve_learned": "gelernte Kennlinie",
+    "conv_curve_prior": "auf {prior}",
+    "curve_title": "Wandlungs-Kennlinie",
+    "curve_learned": "gelernt",
+    "curve_prior_series": "Prior (Datenblatt)",
+    "curve_coverage": "Stützstellen bewegt",
+    "curve_delta": "Korrektur ggü. Prior (pp)",
+    "curve_axis_load": "Last (Anteil der AC-Nennleistung)",
+    "curve_axis_eta": "Wirkungsgrad",
+    "curve_off": "Kennlinien-Lernen ist für diese Gruppe nicht eingeschaltet — die konfigurierte Kennlinie wird unverändert angewendet.",
+    "curve_unsupported": "Diese Integrationsversion lernt keine Wandlungs-Kennlinien.",
+    "curve_gathering": "Lernen ist an, bisher wurde keine Stützstelle bewegt — jeder Punkt hält noch seinen Prior. Evidenz je Punkt unten.",
+    "curve_point_learned": "aus Messung gelernt",
+    "curve_point_prior": "noch der Prior — Evidenz reicht nicht ({n} von {need})",
+    "curve_bins_missing": "Der Lern-Block enthält keine Stützstellen.",
+    "curve_note": "Nicht gelernt werden: Intervalle am AC-Nennwert (dort folgt der Ausgang dem Eingang nicht mehr), unter 1 % Last (dort dominiert der Eigenverbrauch des Wechselrichters) und alles, was die Zensur als gedrosselt markiert hat. Gelernte Punkte sind auf ±5 Prozentpunkte um den Prior gedeckelt — ein Tag mit kaputtem Sensor kann die Kennlinie nicht umschreiben.",
     "conv_curve_neutral": "ungewandelt (Ausgang = DC)",
     "conv_curve_fixed_factors": "feste Faktoren",
     "conv_fixed_factors_tip": "Feste Faktoren je Stufe auf DC angewendet (z. B. MPPT × Laden) — konfigurierte Werte, nicht gemessen.",
@@ -399,7 +436,7 @@ const STR = {
     "s_daily": "Tag für Tag",
     "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Kennlinien kommen aus dem Datenblatt oder eigener Messung, sie werden nicht gelernt; „ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -695,6 +732,16 @@ async function getRegistryModel(hass) {
           // config entry id — the stable handle for the entry-level
           // diagnostics download (data.conversion_evidence lives there)
           entryId: dev.config_entry_id ?? null,
+          // subentry ULID: the scope_id the diagnostics key their
+          // per-group/per-string blocks by (identifier = <entry>_<scope>)
+          scopeId: (() => {
+            for (const id of dev.identifiers ?? []) {
+              if (id[0] !== "pvstrings") continue;
+              const parts = String(id[1]).split("_");
+              if (parts.length >= 2) return parts.slice(1).join("_");
+            }
+            return null;
+          })(),
           name: dev.name_by_user || dev.name,
           viaDeviceId: dev.via_device_id ?? null, byKey: {},
         };
@@ -743,20 +790,36 @@ async function plantSibling(hass, entityId, key) {
 // The collector's conversion evidence (learning pairs rows/usable per stage)
 // lives under data.conversion_evidence; the block is absent until the
 // integration collects, which is "not configured", not an error.
-async function conversionEvidence(hass, entryId) {
+async function entryDiagnostics(hass, entryId) {
   if (!entryId) return { error: "no_entry" };
   try {
-    return await cachedWS(`conv_ev|${entryId}`, 5 * 60000, async () => {
+    return await cachedWS(`diag|${entryId}`, 5 * 60000, async () => {
       try {
         const res = await hass.fetchWithAuth(
           `/api/diagnostics/config_entry/${entryId}`);
         if (res.status === 401 || res.status === 403) return { error: "admin" };
         if (!res.ok) return { error: "unavailable" };
-        const json = await res.json();
-        return { evidence: json?.data?.conversion_evidence ?? null };
+        return { data: (await res.json())?.data ?? null };
       } catch (_) { return { error: "unavailable" }; }
     });
   } catch (_) { return { error: "unavailable" }; }
+}
+
+async function conversionEvidence(hass, entryId) {
+  const d = await entryDiagnostics(hass, entryId);
+  return d.error ? d : { evidence: d.data?.conversion_evidence ?? null };
+}
+
+// model.conversion_curves holds EVERY learning region, including those whose
+// support points have not moved yet — the only way to tell "learning is on,
+// still gathering" from "learning is off". A missing key means the
+// integration predates learned curves; an empty object means no region.
+async function conversionCurves(hass, entryId) {
+  const d = await entryDiagnostics(hass, entryId);
+  if (d.error) return d;
+  const model = d.data?.model;
+  if (!model || !("conversion_curves" in model)) return { error: "unsupported" };
+  return { curves: model.conversion_curves ?? {} };
 }
 
 // ---- statistics -----------------------------------------------------------
@@ -1890,11 +1953,17 @@ const FC_CSS = `
 // Curve-source label for chip and nerd table. fixed_factors carries the
 // applied multiplier (conversion_factor, e.g. 0.9312 = MPPT 0.97 × charge
 // 0.96) — showing it is the point; without it, the label alone.
-function curveLabel(hass, source, factor) {
+function curveLabel(hass, source, factor, prior) {
   if (!source) return null;
   if (source === "fixed_factors")
     return t(hass, "conv_curve_fixed_factors") +
       (factor != null ? ` × ${fmtNum(hass, factor, 3)}` : "");
+  if (source === "learned") {
+    const priorTxt = ["datasheet", "custom"].includes(prior)
+      ? t(hass, "conv_curve_" + prior) : null;
+    return t(hass, "conv_curve_learned") + (priorTxt
+      ? ` <span class="pvs-sub">· ${t(hass, "conv_curve_prior", { prior: priorTxt })}</span>` : "");
+  }
   return ["datasheet", "custom", "neutral"].includes(source)
     ? t(hass, "conv_curve_" + source) : esc(source);
 }
@@ -1960,7 +2029,7 @@ class PvsConversionCard extends PvsBaseCard {
       chips.push(`<span class="pvs-chip clickable" data-more-info="${cfg.entity}"
         title="${esc(neutral ? t(hass, "conv_neutral_note")
           : a.curve_source === "fixed_factors" ? t(hass, "conv_fixed_factors_tip")
-          : t(hass, "more_info"))}">${curveLabel(hass, a.curve_source, a.conversion_factor)}</span>`);
+          : t(hass, "more_info"))}">${curveLabel(hass, a.curve_source, a.conversion_factor, a.curve_prior)}</span>`);
     }
     if (!neutral && a.clipped_kwh > 0) {
       chips.push(`<span class="pvs-chip warn" title="${esc(t(hass, "conv_clipped_tip"))}">
@@ -2085,6 +2154,216 @@ class PvsConversionCard extends PvsBaseCard {
     return document.createElement("pvstrings-conversion-editor");
   }
 }
+
+/* ====================== SECTION: CARD:CURVE ============================== */
+
+// The learned conversion curve against the prior it started from.
+// Three states the integration deliberately keeps apart, and so does this
+// card (rule 1): learning off (nothing), learning on but no support point
+// moved yet (not yet — only visible in the diagnostics), and learned.
+// A point that has not moved is drawn hollow on the prior line, never as a
+// measurement.
+class PvsCurveCard extends PvsBaseCard {
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+
+  async _loadCurves() {
+    if (this._curves) return;
+    this._curves = "loading";
+    let out = { error: "unavailable" };
+    try {
+      const hass = this._hass;
+      const m = await getRegistryModel(hass);
+      const info = m.byEntityId.get(this._config.entity);
+      const node = info?.node;
+      const res = await conversionCurves(hass, node?.entryId ?? m.plants[0]?.entryId);
+      if (res.error) out = res;
+      else {
+        // keys are "<scope_id>|<stage>" (as in conversion_evidence); accept a
+        // bare scope_id too — the shape is not contracted yet
+        const scope = node?.scopeId;
+        const hit = scope ? Object.entries(res.curves)
+          .find(([k]) => k === scope || k.startsWith(`${scope}|`))?.[1] : null;
+        out = hit ? { learning: hit } : { error: "off" };
+      }
+    } catch (_) { /* stays unavailable */ }
+    this._curves = out;
+    this._render();
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${CURVE_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const st = hass.states[cfg.entity];
+    if (!st) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
+    const a = st.attributes;
+    const title = cfg.title ?? t(hass, "curve_title");
+    const head = (extra = "") => `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>${extra}</div>`;
+
+    // Learned state comes from the sensor; anything else needs diagnostics.
+    let learning = a.conversion_learning ?? null;
+    let gathering = false;
+    if (!learning) {
+      const d = this._curves;
+      if (!d || d === "loading") {
+        this._loadCurves();
+        return card(head() + `<div class="kv-note dim">${t(hass, "conv_ev_loading")}</div>`);
+      }
+      if (d.error === "admin") return card(head() + `<div class="kv-note warn">${t(hass, "conv_ev_admin")}</div>`);
+      if (d.error === "unsupported") return card(head() + withheldHTML(t(hass, "curve_unsupported")));
+      if (d.error === "off") return card(head() + withheldHTML(t(hass, "curve_off")));
+      if (d.error) return card(head() + `<div class="kv-note warn">${t(hass, "conv_ev_unavailable")}</div>`);
+      learning = d.learning;
+      gathering = true;
+    }
+
+    const bins = learning?.bins ?? {};
+    const pts = Object.entries(bins)
+      .map(([k, v]) => ({ load: parseFloat(k), eta: v?.eta, prior: v?.prior,
+        n: v?.n_eff ?? 0, learned: !!v?.learned }))
+      .filter((p) => isFinite(p.load) && p.load > 0 && p.eta != null)
+      .sort((x, y) => x.load - y.load);
+    if (!pts.length) return card(head() + withheldHTML(t(hass, "curve_bins_missing")));
+
+    const cov = learning?.coverage;
+    const chips = [];
+    if (cov != null) {
+      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "curve_coverage"))}">
+        ${t(hass, "curve_coverage")} <span class="v">${fmtNum(hass, cov * 100, 0)} %</span></span>`);
+    }
+    if (learning?.stage) chips.push(`<span class="pvs-chip">${esc(learning.stage)}</span>`);
+
+    // ---- geometry: log-x (load decades), plus a delta strip ----------------
+    // The curve spans ~70..96 %, while learning moves points by a few tenths
+    // of a percentage point. At one shared scale the correction is invisible,
+    // so the shape lives in the main plot and the correction in its own strip
+    // below — the comparison the card exists for must be readable.
+    const anyLearned = pts.some((p) => p.learned);
+    const PAD_L = 40, PAD_R = 26, PAD_T = 18, PW = 620, PH = 170;
+    const GAP = 14, STRIP_H = anyLearned ? 42 : 0, PAD_B = 30;
+    const STRIP_Y = PAD_T + PH + GAP;
+    const W = PAD_L + PW + PAD_R;
+    const H = STRIP_Y + STRIP_H + PAD_B;
+    const loads = pts.map((p) => p.load);
+    const lMin = Math.min(...loads), lMax = Math.max(...loads);
+    const lgMin = Math.log10(lMin), lgMax = Math.log10(Math.max(lMax, lMin * 1.5));
+    const xOf = (l) => PAD_L + ((Math.log10(l) - lgMin) / (lgMax - lgMin || 1)) * PW;
+    const vals = pts.flatMap((p) => [p.eta, p.prior].filter((v) => v != null));
+    let vMin = Math.min(...vals), vMax = Math.max(...vals);
+    const padV = Math.max(0.005, (vMax - vMin) * 0.12);
+    vMin = Math.max(0, vMin - padV); vMax = Math.min(1, vMax + padV);
+    const yOf = (v) => PAD_T + PH - ((v - vMin) / (vMax - vMin || 1)) * PH;
+
+    let grid = "";
+    for (const tick of [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1]) {
+      if (tick < lMin * 0.99 || tick > lMax * 1.01) continue;
+      const x = xOf(tick);
+      grid += `<line class="grid" x1="${x}" y1="${PAD_T}" x2="${x}" y2="${STRIP_Y + STRIP_H}"/>
+        <text class="axis" x="${x}" y="${H - 14}" text-anchor="middle">${fmtNum(hass, tick * 100, 0)} %</text>`;
+    }
+    for (let i = 0; i <= 2; i++) {
+      const v = vMin + (i / 2) * (vMax - vMin);
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v * 100, 1)}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 8}" text-anchor="end" style="font-size:8.5px">${t(hass, "curve_axis_eta")} %</text>
+      <text class="axis" x="${PAD_L + PW / 2}" y="${H - 3}" text-anchor="middle">${t(hass, "curve_axis_load")}</text>`;
+
+    // delta strip: eta - prior in percentage points, zero line centred
+    let strip = "";
+    if (anyLearned) {
+      const deltas = pts.filter((p) => p.learned && p.prior != null)
+        .map((p) => (p.eta - p.prior) * 100);
+      const dMax = Math.max(0.5, ...deltas.map(Math.abs));
+      const zeroY = STRIP_Y + STRIP_H / 2;
+      const dOf = (d) => zeroY - (d / dMax) * (STRIP_H / 2 - 3);
+      strip += `<line class="grid" x1="${PAD_L}" y1="${zeroY}" x2="${W - PAD_R}" y2="${zeroY}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 8}" text-anchor="end">+${fmtNum(hass, dMax, 1)}</text>
+        <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H}" text-anchor="end">−${fmtNum(hass, dMax, 1)}</text>
+        <text class="axis" x="${W - PAD_R + 3}" y="${zeroY + 3}" style="font-size:8.5px">pp</text>`;
+      for (const p of pts) {
+        if (!p.learned || p.prior == null) continue;
+        const d = (p.eta - p.prior) * 100;
+        const y = dOf(d), x = xOf(p.load);
+        strip += `<rect x="${(x - 5).toFixed(1)}" y="${Math.min(y, zeroY).toFixed(1)}"
+          width="10" height="${Math.max(1, Math.abs(y - zeroY)).toFixed(1)}"
+          fill="var(--pvs-model)" opacity="0.55" rx="1"/>`;
+      }
+    }
+
+    const line = (sel) => pts.map((p, i) => {
+      const v = sel(p);
+      return v == null ? "" : `${i === 0 ? "M" : "L"}${xOf(p.load).toFixed(1)} ${yOf(v).toFixed(1)}`;
+    }).join("");
+    const hasPrior = pts.some((p) => p.prior != null);
+    // Nothing learned yet: the applied curve IS the prior, so it is drawn in
+    // the prior's own style — a solid "learned" line would be a lie.
+    const appliedStroke = anyLearned
+      ? `stroke="var(--pvs-model)" stroke-width="2.4"`
+      : `stroke="var(--pvs-model-ghost)" stroke-width="2" stroke-dasharray="4 3"`;
+    // hollow marker = the point still IS its prior; filled = moved by measurement
+    const marks = pts.map((p) => `<circle cx="${xOf(p.load).toFixed(1)}" cy="${yOf(p.eta).toFixed(1)}"
+      r="${p.learned ? 3.6 : 3}" fill="${p.learned ? "var(--pvs-model)" : "var(--card-background-color)"}"
+      stroke="${p.learned ? "var(--pvs-model)" : "var(--pvs-model-ghost)"}" stroke-width="1.4"/>`).join("");
+    const hits = pts.map((p) => `<rect x="${(xOf(p.load) - 9).toFixed(1)}" y="${PAD_T}" width="18"
+      height="${STRIP_Y + STRIP_H - PAD_T}" fill="transparent" data-pt='${esc(JSON.stringify(p))}'/>`).join("");
+
+    card(`
+      ${head(chips.join(""))}
+      ${gathering ? `<div class="kv-note">${t(hass, "curve_gathering")}</div>` : ""}
+      <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}
+        ${hasPrior && anyLearned ? `<path d="${line((p) => p.prior)}" fill="none" stroke="var(--pvs-model-ghost)"
+          stroke-width="1.8" stroke-dasharray="4 3" stroke-linejoin="round"/>` : ""}
+        <path d="${line((p) => p.eta)}" fill="none" ${appliedStroke} stroke-linejoin="round"/>
+        ${marks}${strip}${hits}
+      </svg></div>
+      <div class="pvs-legend">
+        ${hasPrior ? `<span class="it"><span class="sw dash" style="background:var(--pvs-model-ghost)"></span>${t(hass, "curve_prior_series")}</span>` : ""}
+        ${anyLearned ? `<span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "curve_learned")}</span>
+          <span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.55"></span>${t(hass, "curve_delta")}</span>` : ""}
+      </div>
+      <div class="kv-note">${t(hass, "curve_note")}</div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-pt]",
+      content: (el) => {
+        const hass = this._hass;
+        const p = JSON.parse(el.getAttribute("data-pt"));
+        const delta = p.prior != null ? (p.eta - p.prior) * 100 : null;
+        return `<div class="h">${fmtNum(hass, p.load * 100, p.load < 0.1 ? 1 : 0)} % ${t(hass, "curve_axis_load").split(" ")[0]}</div>
+          <div class="r"><span class="k">${t(hass, "curve_axis_eta")}</span><span class="v">${fmtNum(hass, p.eta * 100, 2)} %</span></div>
+          ${p.prior != null ? `<div class="r"><span class="k">${t(hass, "curve_prior_series")}</span><span class="v">${fmtNum(hass, p.prior * 100, 2)} %</span></div>` : ""}
+          ${delta != null && p.learned ? `<div class="r"><span class="k">Δ</span><span class="v">${delta > 0 ? "+" : ""}${fmtNum(hass, delta, 2)} pp</span></div>` : ""}
+          <div class="r"><span class="k">n_eff</span><span class="v">${fmtNum(hass, p.n, 1)}</span></div>
+          <div class="pvs-sub">${p.learned ? t(hass, "curve_point_learned")
+            : t(hass, "curve_point_prior", { n: fmtNum(hass, p.n, 1), need: "50" })}</div>`;
+      },
+    });
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entity: "" }; }
+}
+
+const CURVE_CSS = `
+  .pvs-legend .sw.dash { height: 2px; border-radius: 0; }
+  .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px;
+    background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 8px; }
+  .kv-note.warn { background: color-mix(in srgb, var(--warning-color, #ffa600) 12%, transparent); color: var(--primary-text-color); }
+  .kv-note.dim { color: var(--secondary-text-color); }
+`;
 
 /* ========================= SECTION: CARD:CHAIN =========================== */
 
@@ -2688,7 +2967,7 @@ class PvsKvTableCard extends PvsBaseCard {
         const pathTxt = oa.output_path
           ? t(hass, "conv_out_" + (oa.output_path === "storage" ? "storage" : "direct")) : "—";
         const neutral = oa.curve_source === "neutral";
-        const curveTxt = curveLabel(hass, oa.curve_source, oa.conversion_factor) ?? "—";
+        const curveTxt = curveLabel(hass, oa.curve_source, oa.conversion_factor, oa.curve_prior) ?? "—";
         const stages = oa.stages;
         const stagesTxt = stages == null ? "—"
           : Array.isArray(stages)
@@ -3134,6 +3413,19 @@ async function buildViews(hass, config) {
           entity: convEntity,
           mode: "conversion_evidence", title: t(lang, "nerd_conv_evidence"),
           grid_options: { columns: "full" } },
+        // learned curve vs prior, per group that has a curve at all: the
+        // storage path runs on fixed factors and never learns, a neutral
+        // path has no curve to draw
+        ...convNerd
+          .filter((g) => {
+            const id = g.byKey.group_forecast_ac;
+            const src = id ? hass.states[id]?.attributes?.curve_source : null;
+            return src && src !== "neutral" && src !== "fixed_factors";
+          })
+          .map((g) => ({ type: "custom:pvstrings-curve",
+            entity: g.byKey.group_forecast_ac,
+            title: `${t(lang, "curve_title")} — ${g.name}`,
+            grid_options: { columns: "full" } })),
       ] });
     }
     // Six columns next to long string names: scrolls inside a single-column
@@ -3206,6 +3498,8 @@ const CARDS = [
     "The learned sky as a grid over sun position, with fit level and unobserved cells made explicit."],
   ["pvstrings-forecast", PvsForecastCard, "PV Strings Forecast",
     "Hourly forecast vs unshaded vs actual — the whole shading diagnostic in one chart."],
+  ["pvstrings-curve", PvsCurveCard, "PV Strings Conversion Curve",
+    "The learned efficiency curve against the datasheet prior it started from."],
   ["pvstrings-conversion", PvsConversionCard, "PV Strings Conversion",
     "DC potential vs converted output (AC or battery charge), with an honest per-hour ratio strip."],
   ["pvstrings-chain", PvsChainCard, "PV Strings Chain",
