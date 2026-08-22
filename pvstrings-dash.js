@@ -25,7 +25,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.7.1";
+const PVS_VERSION = "0.8.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -189,7 +189,22 @@ const STR = {
     "conv_curve_prior": "on top of {prior}",
     // learned-curve card
     "curve_title": "Conversion curve",
-    "curve_learned": "learned",
+    "curve_learned": "learned curve",
+    "curve_applied": "applied curve",
+    "curve_measured": "measured",
+    "curve_maxload": "highest load seen",
+    "curve_maxload_tip": "The highest load this plant has ever reached. Points beyond it can never gather evidence.",
+    "curve_coverage_tip": "Share of the reachable support points that measurement has moved.",
+    "curve_unreachable": "never reached",
+    "curve_unreachable_band": "never reached",
+    "curve_collecting": "Learning is on and measurements are coming in — points move gradually with their evidence, there is no threshold they jump at.",
+    "curve_blocked_derived": "This inverter reports a calculated AC value (input × a fixed factor), not a measurement — so the curve stays on the datasheet. That is a property of the hardware, not a fault. With a real metering socket on the AC output, entered as the measured AC power, learning runs. The socket must feed the inverter alone: anything else on it distorts exactly the low-load end where the curve is most interesting.",
+    "curve_blocked_other": "Learning is paused for this curve: {reason}. The applied curve stays on its prior.",
+    "curve_tip_load": "load",
+    "curve_point_moving": "measurement is in — the point follows it in proportion to its evidence",
+    "curve_point_nodata": "no measurement at this load yet",
+    "curve_point_blocked": "measurement discarded — see the note above",
+    "curve_point_unreachable": "never reached (highest load {max} %) — stays on the datasheet and is not counted in maturity",
     "curve_prior_series": "prior (datasheet)",
     "curve_coverage": "support points moved",
     "curve_delta": "correction vs prior (pp)",
@@ -201,9 +216,8 @@ const STR = {
     "curve_unsupported": "This integration version does not learn conversion curves.",
     "curve_gathering": "Learning is on, no support point has moved yet — every point still holds its prior. Evidence per point below.",
     "curve_point_learned": "learned from measurement",
-    "curve_point_prior": "still the prior — not enough evidence ({n} of {need})",
     "curve_bins_missing": "The learning block carries no support points.",
-    "curve_note": "Not learned: intervals at the AC rating (the output stops following the input), below 1 % load (the inverter's own consumption dominates) and anything the censoring marked as curtailed. Learned points are capped at ±5 percentage points around the prior — one day with a broken sensor cannot rewrite the curve.",
+    "curve_note": "Not learned: intervals at the AC rating (the output stops following the input), below 1 % load (the inverter's own consumption dominates) and anything the censoring marked as curtailed. Learned points are capped at ±5 percentage points around the prior — one day with a broken sensor cannot rewrite the curve. A whole curve is discarded when the measurement is too flat to be one.",
     "conv_curve_neutral": "unconverted (output = DC)",
     "conv_curve_fixed_factors": "fixed factors",
     "conv_fixed_factors_tip": "Fixed per-stage factors applied to DC (e.g. MPPT × charge) — configured values, not measured.",
@@ -365,7 +379,22 @@ const STR = {
     "conv_curve_learned": "gelernte Kennlinie",
     "conv_curve_prior": "auf {prior}",
     "curve_title": "Wandlungs-Kennlinie",
-    "curve_learned": "gelernt",
+    "curve_learned": "gelernte Kennlinie",
+    "curve_applied": "angewendete Kennlinie",
+    "curve_measured": "gemessen",
+    "curve_maxload": "höchste Last",
+    "curve_maxload_tip": "Die höchste Last, die diese Anlage je erreicht hat. Punkte darüber können nie Evidenz sammeln.",
+    "curve_coverage_tip": "Anteil der erreichbaren Stützstellen, die die Messung bewegt hat.",
+    "curve_unreachable": "nie erreicht",
+    "curve_unreachable_band": "nie erreicht",
+    "curve_collecting": "Lernen ist an und Messungen laufen ein — die Punkte wandern stufenlos mit ihrer Evidenz, es gibt keine Schwelle, an der sie springen.",
+    "curve_blocked_derived": "Dieser Wechselrichter meldet einen rechnerischen AC-Wert (Eingang × fester Faktor), keine Messung — deshalb bleibt die Kennlinie beim Datenblatt. Das ist eine Eigenschaft der Hardware, kein Defekt. Mit einer echten Messsteckdose am AC-Ausgang, als gemessene AC-Leistung eingetragen, läuft das Lernen. Die Steckdose muss allein den Wechselrichter versorgen: alles andere daran verfälscht genau das Schwachlast-Ende, wo die Kennlinie am interessantesten ist.",
+    "curve_blocked_other": "Lernen ist für diese Kennlinie ausgesetzt: {reason}. Die angewendete Kennlinie bleibt auf ihrem Prior.",
+    "curve_tip_load": "Last",
+    "curve_point_moving": "Messung liegt vor — der Punkt folgt ihr anteilig zu seiner Evidenz",
+    "curve_point_nodata": "noch keine Messung bei dieser Last",
+    "curve_point_blocked": "Messung verworfen — siehe Hinweis oben",
+    "curve_point_unreachable": "nie erreicht (höchste Last {max} %) — bleibt beim Datenblatt und zählt nicht in den Reifegrad",
     "curve_prior_series": "Prior (Datenblatt)",
     "curve_coverage": "Stützstellen bewegt",
     "curve_delta": "Korrektur ggü. Prior (pp)",
@@ -377,9 +406,8 @@ const STR = {
     "curve_unsupported": "Diese Integrationsversion lernt keine Wandlungs-Kennlinien.",
     "curve_gathering": "Lernen ist an, bisher wurde keine Stützstelle bewegt — jeder Punkt hält noch seinen Prior. Evidenz je Punkt unten.",
     "curve_point_learned": "aus Messung gelernt",
-    "curve_point_prior": "noch der Prior — Evidenz reicht nicht ({n} von {need})",
     "curve_bins_missing": "Der Lern-Block enthält keine Stützstellen.",
-    "curve_note": "Nicht gelernt werden: Intervalle am AC-Nennwert (dort folgt der Ausgang dem Eingang nicht mehr), unter 1 % Last (dort dominiert der Eigenverbrauch des Wechselrichters) und alles, was die Zensur als gedrosselt markiert hat. Gelernte Punkte sind auf ±5 Prozentpunkte um den Prior gedeckelt — ein Tag mit kaputtem Sensor kann die Kennlinie nicht umschreiben.",
+    "curve_note": "Nicht gelernt werden: Intervalle am AC-Nennwert (dort folgt der Ausgang dem Eingang nicht mehr), unter 1 % Last (dort dominiert der Eigenverbrauch des Wechselrichters) und alles, was die Zensur als gedrosselt markiert hat. Gelernte Punkte sind auf ±5 Prozentpunkte um den Prior gedeckelt — ein Tag mit kaputtem Sensor kann die Kennlinie nicht umschreiben. Ganze Kennlinien werden verworfen, wenn die Messung zu flach ist, um eine zu sein.",
     "conv_curve_neutral": "ungewandelt (Ausgang = DC)",
     "conv_curve_fixed_factors": "feste Faktoren",
     "conv_fixed_factors_tip": "Feste Faktoren je Stufe auf DC angewendet (z. B. MPPT × Laden) — konfigurierte Werte, nicht gemessen.",
@@ -2241,26 +2269,36 @@ class PvsCurveCard extends PvsBaseCard {
     const bins = learning?.bins ?? {};
     const pts = Object.entries(bins)
       .map(([k, v]) => ({ load: parseFloat(k), eta: v?.eta, prior: v?.prior,
-        n: v?.n_eff ?? 0, learned: !!v?.learned }))
+        measured: v?.measured ?? null, spread: v?.spread ?? null,
+        n: v?.n_eff ?? 0, learned: !!v?.learned, reachable: v?.reachable !== false }))
       .filter((p) => isFinite(p.load) && p.load > 0 && p.eta != null)
       .sort((x, y) => x.load - y.load);
     if (!pts.length) return card(head() + withheldHTML(t(hass, "curve_bins_missing")));
 
+    const blocked = learning?.blocked ?? null;
+    const maxLoad = learning?.max_load ?? null;
     const cov = learning?.coverage;
+    const anyLearned = pts.some((p) => p.learned);
+    const anyMeasured = pts.some((p) => p.measured != null);
+
     const chips = [];
-    if (cov != null) {
-      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "curve_coverage"))}">
+    // A coverage of 0 next to a blocked note would read as failure; the note
+    // already says why nothing moved.
+    if (cov != null && !blocked) {
+      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "curve_coverage_tip"))}">
         ${t(hass, "curve_coverage")} <span class="v">${fmtNum(hass, cov * 100, 0)} %</span></span>`);
     }
-    if (learning?.stage) chips.push(`<span class="pvs-chip">${esc(learning.stage)}</span>`);
+    if (maxLoad != null) {
+      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "curve_maxload_tip"))}">
+        ${t(hass, "curve_maxload")} <span class="v">${fmtNum(hass, maxLoad * 100, 0)} %</span></span>`);
+    }
+    if (learning?.stage) chips.push(`<span class="pvs-chip dim">${esc(learning.stage)}</span>`);
 
     // ---- geometry: log-x (load decades), plus a delta strip ----------------
-    // The curve spans ~70..96 %, while learning moves points by a few tenths
-    // of a percentage point. At one shared scale the correction is invisible,
-    // so the shape lives in the main plot and the correction in its own strip
-    // below — the comparison the card exists for must be readable.
-    const anyLearned = pts.some((p) => p.learned);
-    const PAD_L = 40, PAD_R = 26, PAD_T = 18, PW = 620, PH = 170;
+    // The curve spans tens of percentage points while learning moves points by
+    // tenths of one. At a single scale the correction is invisible, so shape
+    // lives in the main plot and correction in its own strip below.
+    const PAD_L = 42, PAD_R = 28, PAD_T = 18, PW = 620, PH = 176;
     const GAP = 14, STRIP_H = anyLearned ? 42 : 0, PAD_B = 30;
     const STRIP_Y = PAD_T + PH + GAP;
     const W = PAD_L + PW + PAD_R;
@@ -2269,7 +2307,7 @@ class PvsCurveCard extends PvsBaseCard {
     const lMin = Math.min(...loads), lMax = Math.max(...loads);
     const lgMin = Math.log10(lMin), lgMax = Math.log10(Math.max(lMax, lMin * 1.5));
     const xOf = (l) => PAD_L + ((Math.log10(l) - lgMin) / (lgMax - lgMin || 1)) * PW;
-    const vals = pts.flatMap((p) => [p.eta, p.prior].filter((v) => v != null));
+    const vals = pts.flatMap((p) => [p.eta, p.prior, p.measured].filter((v) => v != null));
     let vMin = Math.min(...vals), vMax = Math.max(...vals);
     const padV = Math.max(0.005, (vMax - vMin) * 0.12);
     vMin = Math.max(0, vMin - padV); vMax = Math.min(1, vMax + padV);
@@ -2287,8 +2325,65 @@ class PvsCurveCard extends PvsBaseCard {
       grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v * 100, 1)}</text>`;
     }
-    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 8}" text-anchor="end" style="font-size:8.5px">${t(hass, "curve_axis_eta")} %</text>
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 7}" text-anchor="end" style="font-size:8.5px">%</text>
+      <text class="axis" x="${PAD_L + 2}" y="${PAD_T - 7}" style="font-size:8.5px">${t(hass, "curve_axis_eta")}</text>
       <text class="axis" x="${PAD_L + PW / 2}" y="${H - 3}" text-anchor="middle">${t(hass, "curve_axis_load")}</text>`;
+
+    // Loads the plant has never reached: hatched, exactly like an unobserved
+    // sky cell — same grammar for the same meaning ("never seen"), and never
+    // confusable with "measured and found equal to the datasheet".
+    let unreach = "";
+    const firstUnreach = pts.find((p) => !p.reachable);
+    if (firstUnreach) {
+      const x0 = maxLoad != null ? xOf(Math.min(Math.max(maxLoad, lMin), lMax))
+        : xOf(firstUnreach.load);
+      unreach = `<rect x="${x0.toFixed(1)}" y="${PAD_T}" width="${(W - PAD_R - x0).toFixed(1)}"
+          height="${PH}" fill="url(#pvs-curve-hatch)"/>
+        <line x1="${x0.toFixed(1)}" y1="${PAD_T}" x2="${x0.toFixed(1)}" y2="${PAD_T + PH}"
+          stroke="var(--pvs-cell-stroke)" stroke-width="1" stroke-dasharray="3 2"/>
+        <text class="axis" x="${(x0 + 5).toFixed(1)}" y="${PAD_T + 10}">${t(hass, "curve_unreachable_band")}</text>`;
+    }
+
+    const seg = (sel, filter = () => true) => {
+      let d = "", pen = false;
+      for (const p of pts) {
+        const v = sel(p);
+        if (v == null || !filter(p)) { pen = false; continue; }
+        d += `${pen ? "L" : "M"}${xOf(p.load).toFixed(1)} ${yOf(v).toFixed(1)}`;
+        pen = true;
+      }
+      return d;
+    };
+    const hasPrior = pts.some((p) => p.prior != null);
+    // Nothing learned yet: the applied curve IS the prior, so it carries the
+    // prior's dashed style — a solid "learned" line would claim a measurement
+    // that has not been accepted.
+    const appliedStroke = anyLearned
+      ? `stroke="var(--pvs-model)" stroke-width="2.4"`
+      : `stroke="var(--pvs-model)" stroke-width="2" stroke-dasharray="5 3"`;
+    // measurement in the measurement colour (as everywhere in this dashboard),
+    // with its scatter as a whisker where the integration reports one
+    let measured = "";
+    if (anyMeasured) {
+      measured += `<path d="${seg((p) => p.measured)}" fill="none" stroke="var(--pvs-measure)"
+        stroke-width="1.6" stroke-linejoin="round" opacity="0.85"/>`;
+      for (const p of pts) {
+        if (p.measured == null) continue;
+        const x = xOf(p.load).toFixed(1);
+        if (p.spread) {
+          measured += `<line x1="${x}" y1="${yOf(Math.min(1, p.measured + p.spread)).toFixed(1)}"
+            x2="${x}" y2="${yOf(Math.max(0, p.measured - p.spread)).toFixed(1)}"
+            stroke="var(--pvs-measure)" stroke-width="1" opacity="0.5"/>`;
+        }
+        measured += `<circle cx="${x}" cy="${yOf(p.measured).toFixed(1)}" r="2.8"
+          fill="var(--pvs-measure)"/>`;
+      }
+    }
+    const marks = pts.map((p) => `<circle cx="${xOf(p.load).toFixed(1)}" cy="${yOf(p.eta).toFixed(1)}"
+      r="${p.learned ? 3.6 : 3}" fill="${p.learned ? "var(--pvs-model)" : "var(--card-background-color)"}"
+      stroke="${p.reachable ? "var(--pvs-model)" : "var(--pvs-model-ghost)"}" stroke-width="1.4"/>`).join("");
+    const hits = pts.map((p) => `<rect x="${(xOf(p.load) - 9).toFixed(1)}" y="${PAD_T}" width="18"
+      height="${STRIP_Y + STRIP_H - PAD_T}" fill="transparent" data-pt='${esc(JSON.stringify({ ...p, maxLoad, blocked }))}'/>`).join("");
 
     // delta strip: eta - prior in percentage points, zero line centred
     let strip = "";
@@ -2312,39 +2407,37 @@ class PvsCurveCard extends PvsBaseCard {
       }
     }
 
-    const line = (sel) => pts.map((p, i) => {
-      const v = sel(p);
-      return v == null ? "" : `${i === 0 ? "M" : "L"}${xOf(p.load).toFixed(1)} ${yOf(v).toFixed(1)}`;
-    }).join("");
-    const hasPrior = pts.some((p) => p.prior != null);
-    // Nothing learned yet: the applied curve IS the prior, so it is drawn in
-    // the prior's own style — a solid "learned" line would be a lie.
-    const appliedStroke = anyLearned
-      ? `stroke="var(--pvs-model)" stroke-width="2.4"`
-      : `stroke="var(--pvs-model-ghost)" stroke-width="2" stroke-dasharray="4 3"`;
-    // hollow marker = the point still IS its prior; filled = moved by measurement
-    const marks = pts.map((p) => `<circle cx="${xOf(p.load).toFixed(1)}" cy="${yOf(p.eta).toFixed(1)}"
-      r="${p.learned ? 3.6 : 3}" fill="${p.learned ? "var(--pvs-model)" : "var(--card-background-color)"}"
-      stroke="${p.learned ? "var(--pvs-model)" : "var(--pvs-model-ghost)"}" stroke-width="1.4"/>`).join("");
-    const hits = pts.map((p) => `<rect x="${(xOf(p.load) - 9).toFixed(1)}" y="${PAD_T}" width="18"
-      height="${STRIP_Y + STRIP_H - PAD_T}" fill="transparent" data-pt='${esc(JSON.stringify(p))}'/>`).join("");
+    // State line above the chart. Blocked is a property of the hardware, not a
+    // fault: it gets a calm note, never the warning style.
+    let stateNote = "";
+    if (blocked) {
+      const known = blocked === "output_appears_derived_from_input";
+      stateNote = `<div class="kv-note">${known ? t(hass, "curve_blocked_derived")
+        : t(hass, "curve_blocked_other", { reason: esc(blocked) })}</div>`;
+    } else if (!anyLearned) {
+      stateNote = `<div class="kv-note">${anyMeasured
+        ? t(hass, "curve_collecting") : t(hass, "curve_gathering")}</div>`;
+    }
 
     card(`
       ${head(chips.join(""))}
-      ${gathering ? `<div class="kv-note">${t(hass, "curve_gathering")}</div>` : ""}
+      ${stateNote}
       <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
-        ${grid}
-        ${hasPrior && anyLearned ? `<path d="${line((p) => p.prior)}" fill="none" stroke="var(--pvs-model-ghost)"
+        <defs>${hatchPattern("pvs-curve-hatch")}${hatchPattern("pvs-curve-hatch-l")}</defs>
+        ${grid}${unreach}
+        ${hasPrior && anyLearned ? `<path d="${seg((p) => p.prior)}" fill="none" stroke="var(--pvs-model-ghost)"
           stroke-width="1.8" stroke-dasharray="4 3" stroke-linejoin="round"/>` : ""}
-        <path d="${line((p) => p.eta)}" fill="none" ${appliedStroke} stroke-linejoin="round"/>
-        ${marks}${strip}${hits}
+        <path d="${seg((p) => p.eta)}" fill="none" ${appliedStroke} stroke-linejoin="round"/>
+        ${measured}${marks}${strip}${hits}
       </svg></div>
       <div class="pvs-legend">
-        ${hasPrior ? `<span class="it"><span class="sw dash" style="background:var(--pvs-model-ghost)"></span>${t(hass, "curve_prior_series")}</span>` : ""}
-        ${anyLearned ? `<span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "curve_learned")}</span>
-          <span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.55"></span>${t(hass, "curve_delta")}</span>` : ""}
+        ${hasPrior && anyLearned ? `<span class="it"><span class="sw dash" style="background:var(--pvs-model-ghost)"></span>${t(hass, "curve_prior_series")}</span>` : ""}
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${anyLearned ? t(hass, "curve_learned") : t(hass, "curve_applied")}</span>
+        ${anyMeasured ? `<span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "curve_measured")}</span>` : ""}
+        ${firstUnreach ? `<span class="it"><svg width="14" height="12"><rect x="0.5" y="0.5" width="13" height="11" rx="2" fill="url(#pvs-curve-hatch-l)" stroke="var(--pvs-cell-stroke)" stroke-width="1"/></svg>${t(hass, "curve_unreachable")}</span>` : ""}
+        ${anyLearned ? `<span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.55"></span>${t(hass, "curve_delta")}</span>` : ""}
       </div>
-      <div class="kv-note">${t(hass, "curve_note")}</div>`);
+      <div class="kv-note dim">${t(hass, "curve_note")}</div>`);
   }
 
   _wire() {
@@ -2357,13 +2450,21 @@ class PvsCurveCard extends PvsBaseCard {
         const hass = this._hass;
         const p = JSON.parse(el.getAttribute("data-pt"));
         const delta = p.prior != null ? (p.eta - p.prior) * 100 : null;
-        return `<div class="h">${fmtNum(hass, p.load * 100, p.load < 0.1 ? 1 : 0)} % ${t(hass, "curve_axis_load").split(" ")[0]}</div>
-          <div class="r"><span class="k">${t(hass, "curve_axis_eta")}</span><span class="v">${fmtNum(hass, p.eta * 100, 2)} %</span></div>
+        // status, most specific first: never reached beats "no evidence",
+        // and a blocked curve beats "still gathering"
+        const status = !p.reachable
+          ? t(hass, "curve_point_unreachable", { max: p.maxLoad != null ? fmtNum(hass, p.maxLoad * 100, 0) : "?" })
+          : p.blocked ? t(hass, "curve_point_blocked")
+          : p.learned ? t(hass, "curve_point_learned")
+          : p.measured != null ? t(hass, "curve_point_moving")
+          : t(hass, "curve_point_nodata");
+        return `<div class="h">${fmtNum(hass, p.load * 100, p.load < 0.1 ? 1 : 0)} % ${t(hass, "curve_tip_load")}</div>
+          <div class="r"><span class="k">${t(hass, "curve_applied")}</span><span class="v">${fmtNum(hass, p.eta * 100, 2)} %</span></div>
           ${p.prior != null ? `<div class="r"><span class="k">${t(hass, "curve_prior_series")}</span><span class="v">${fmtNum(hass, p.prior * 100, 2)} %</span></div>` : ""}
+          ${p.measured != null ? `<div class="r"><span class="k">${t(hass, "curve_measured")}</span><span class="v" style="color:var(--pvs-measure)">${fmtNum(hass, p.measured * 100, 2)} %${p.spread ? ` ± ${fmtNum(hass, p.spread * 100, 2)}` : ""}</span></div>` : ""}
           ${delta != null && p.learned ? `<div class="r"><span class="k">Δ</span><span class="v">${delta > 0 ? "+" : ""}${fmtNum(hass, delta, 2)} pp</span></div>` : ""}
           <div class="r"><span class="k">n_eff</span><span class="v">${fmtNum(hass, p.n, 1)}</span></div>
-          <div class="pvs-sub">${p.learned ? t(hass, "curve_point_learned")
-            : t(hass, "curve_point_prior", { n: fmtNum(hass, p.n, 1), need: "50" })}</div>`;
+          <div class="pvs-sub">${status}</div>`;
       },
     });
   }

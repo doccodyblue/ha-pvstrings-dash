@@ -151,24 +151,34 @@ type: custom:pvstrings-curve
 entity: sensor.<gruppe>_restprognose_ac_heute
 ```
 
-**Data.** `conversion_learning` on the group conversion sensor once
-`curve_source: learned` (with `curve_prior`), otherwise
-`data.model.conversion_curves` from the entry diagnostics. `bins` is keyed
-by load fraction; each bin carries `eta`, `prior`, `n_eff` and `learned`.
-The storage path runs on fixed factors and never learns — no card.
+**Data.** `conversion_learning` on the group conversion sensor — the block
+travels with the sensor as soon as learning is on, so its presence is the
+switch indicator, not `curve_source`. Each bin carries `eta` (applied),
+`prior` (datasheet), `measured` (raw), `spread`, `n_eff`, `learned` and
+`reachable`; `eta` sits between prior and measurement, moving in proportion
+to evidence — there is no threshold it jumps at. `coverage` counts moved
+against *reachable* points, `max_load` is the highest load ever seen. The
+storage path runs on fixed factors and never learns — no card.
 
-**Three states, kept apart.** Learning off (no block anywhere) says so and
-stops. Learning on with nothing moved yet is only visible in the
-diagnostics: the applied curve is drawn dashed, in the prior's style, with
-hollow markers — a solid "learned" line would claim a measurement that has
-not happened. Learned draws the applied curve solid over the dashed prior,
-markers filled only where evidence actually moved the point.
+**Four states, kept apart.** Learning off (no block) says so. Learning on
+draws the curve with the measurement beside it, applied curve dashed while
+nothing has moved — a solid "learned" line would claim a measurement that
+has not been accepted. Learned draws it solid over the dashed prior.
+Blocked (`blocked` set, e.g. an inverter reporting a calculated AC value)
+gets a calm note, never the warning style: it is a property of the
+hardware, not a fault — and the measurement stays on the chart, because
+seeing it flat is what explains the refusal.
 
 **Two scales, deliberately.** Efficiency spans tens of percentage points
 while learning moves points by tenths of one. The main plot (log load
 axis) carries the curve's shape; a delta strip below carries `eta − prior`
 in percentage points. One shared axis would hide the correction, which is
 the whole reason the card exists.
+
+**Never reached is not missing evidence.** Loads beyond `max_load` are
+hatched, the same grammar an unobserved sky cell uses, and excluded from
+maturity — otherwise the bar would sit under 100 % forever and read as
+"never finishes".
 
 **Never implied.** `coverage` is the maturity figure the integration
 defines, so it may be shown as a share; the collector's evidence counts

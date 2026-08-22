@@ -27,7 +27,7 @@
 <h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
 <h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
 <h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
-<h4>curve — collecting, no region built yet (820px)</h4><div style="width:820px" id="curve2"></div>
+<h4>curve — blocked: inverter reports derived AC (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
@@ -64,18 +64,32 @@
     dcG2.push({ datetime: dt, potential_kwh: d2 });
     bcG2.push({ datetime: dt, potential_kwh: b2 });
   }
-  // learned inverter curve: datasheet prior, the mid-load points moved by
-  // measurement, the sparse ends still sitting on their prior
-  const priorEta = { "0.01": 0.72, "0.02": 0.83, "0.05": 0.905, "0.10": 0.935,
+  // learned inverter curve: datasheet prior, mid-load points moved by
+  // measurement, the top end never reached by this generator
+  const priorEta = { "0.02": 0.86, "0.05": 0.905, "0.10": 0.935,
     "0.20": 0.952, "0.35": 0.96, "0.50": 0.962, "0.75": 0.958, "1.00": 0.95 };
-  const learnedEta = { "0.05": [0.892, 63], "0.10": [0.926, 121], "0.20": [0.947, 204],
-    "0.35": [0.958, 176], "0.50": [0.955, 212] };
+  const meas = { "0.02": [0.878, 0.006, 15.8], "0.05": [0.898, 0.004, 63],
+    "0.10": [0.928, 0.003, 121], "0.20": [0.946, 0.002, 204],
+    "0.35": [0.957, 0.002, 176], "0.50": [0.954, 0.003, 212] };
   const mkBins = (learn) => Object.fromEntries(Object.entries(priorEta).map(([k, prior]) => {
-    const hit = learn ? learnedEta[k] : null;
-    return [k, { prior, eta: hit ? hit[0] : prior, n_eff: hit ? hit[1] : (k === "0.02" ? 19 : 8),
-      learned: !!hit }];
+    const m = meas[k];
+    const reachable = parseFloat(k) <= 0.7;
+    // eta sits between prior and measurement, weighted by evidence
+    const w = learn && m ? Math.min(0.85, m[2] / 250) : 0;
+    return [k, { prior, measured: m ? m[0] : null, spread: m ? m[1] : null,
+      eta: +(prior + (m ? (m[0] - prior) * w : 0)).toFixed(4),
+      n_eff: m ? m[2] : 0, learned: !!(learn && m && m[2] >= 50), reachable }];
   }));
-  const learnedBlock = { stage: "inverter_efficiency", coverage: 5 / 9, bins: mkBins(true) };
+  const learnedBlock = { stage: "inverter_efficiency", coverage: 5 / 6,
+    max_load: 0.702, blocked: null, bins: mkBins(true) };
+  // the live case on Andy's HMS-1600-4T: the DTU reports DC x 0.95 instead of
+  // a measured AC value, so the fit refuses — measurement dead flat at 95 %
+  const blockedBlock = { stage: "inverter_efficiency", coverage: 0,
+    max_load: 0.702, blocked: "output_appears_derived_from_input",
+    bins: Object.fromEntries(Object.entries(priorEta).map(([k, prior], i) => [k, {
+      prior, eta: prior, measured: parseFloat(k) <= 0.7 ? [0.9528, 0.9509, 0.9505, 0.9503, 0.9504, 0.9508][i] : null,
+      spread: null, n_eff: parseFloat(k) <= 0.7 ? [15.8, 14.7, 12.2, 16.8, 12.8, 15.4][i] : 0,
+      learned: false, reachable: parseFloat(k) <= 0.7 }])) };
   // synthetic sky map: an arc with an evening shadow, holes, and a low reference
   const cells = [];
   for (let az = 60; az <= 300; az += 10) {
@@ -158,7 +172,8 @@
     // a second direct group: learning switched on, nothing moved yet
     "sensor.g3_ac": { entity_id: "sensor.g3_ac", state: "0.9",
       attributes: { forecast: acG1, today_kwh: 4.2, tomorrow_kwh: 3.6,
-        output_path: "direct", curve_source: "datasheet",
+        output_path: "direct", curve_source: "datasheet", curve_prior: "datasheet",
+        conversion_learning: blockedBlock,
         semantics: "Energy behind the inverter. Never sum with battery charge.",
         friendly_name: "Ost-WR Restprognose AC heute" } },
     // a younger second string: half the sky seen, no level yet (absolute fit)
