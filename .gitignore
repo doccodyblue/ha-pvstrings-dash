@@ -3,3 +3,10 @@ node_modules/
 dist/
 *.log
 AGENTS.md
+
+# Working documents: internal notes, integration handovers and the design
+# spec stay on disk and out of the public repo — they carry live plant
+# details and unreleased integration internals.
+SPEC.md
+feature.md
+handover*.md
