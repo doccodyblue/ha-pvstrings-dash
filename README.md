@@ -13,7 +13,7 @@ and attributes and works perfectly well without any of this.
 | | |
 |---|---|
 | ![Sky map](docs/img/sky-map-dark.png) | ![Forecast line](docs/img/forecast-line-dark.png) |
-| ![Chain](docs/img/chain-dark.png) | ![Daily](docs/img/daily-dark.png) |
+| ![Conversion](docs/img/conversion-dark.png) | ![Learned conversion curve](docs/img/curve-dark.png) |
 
 ---
 
@@ -46,7 +46,7 @@ That is the entire configuration. The strategy reads the entity registry and
 builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield),
-**Accuracy** (nowcast vs day-ahead, with the day-by-day comparison), and
+**Accuracy** (short-term vs day-ahead, with the day-by-day comparison), and
 **Nerd** (training maturity, learning buckets, source-bias table, collection
 health, skip reasons). Views follow `hass.language` (German/English). The generated YAML
 is a normal dashboard config — take it over and edit it if you want to.
@@ -143,6 +143,8 @@ so the card shows the *reason* rather than an error. The fade curve is
 computed from the two published figures and says so — the integration
 publishes no per-interval curve.
 
+![Nowcast card](docs/img/nowcast-dark.png)
+
 ### `pvstrings-curve`
 
 The learned efficiency curve against the datasheet prior it started from
@@ -156,11 +158,16 @@ type: custom:pvstrings-curve
 entity: sensor.<gruppe>_restprognose_ac_heute
 ```
 
-Three states the card keeps apart, because the integration does: learning
-switched off (nothing), switched on but no support point moved yet (the
-curve is drawn in the prior's own dashed style — a solid "learned" line
-would be a lie), and learned (solid line, filled markers where measurement
-moved the point, hollow where it still holds its prior).
+Four states the card keeps apart, because the integration does: learning
+switched off (nothing to draw), switched on and collecting (the applied
+curve stays dashed — a solid "learned" line would be a lie), learned
+(solid line over the dashed prior, filled markers where measurement moved
+the point), and refused — when the inverter reports a calculated AC value
+instead of a measured one, the fit is blocked and the card says so
+calmly, with the flat measurement still on the chart because seeing it
+flat is what explains the refusal. Loads the plant has never reached are
+hatched, the same grammar the sky map uses for cells the sun never
+crossed.
 
 ### `pvstrings-chain`
 
@@ -176,6 +183,8 @@ entity: sensor.<string>_forecast_today   # needs the per-string chain attrs
 hour: now
 ```
 
+![Chain card](docs/img/chain-dark.png)
+
 ### `pvstrings-daily`
 
 Day-ahead forecast against actual production, day by day. The day-ahead value
@@ -190,6 +199,8 @@ type: custom:pvstrings-daily
 entity: sensor.<plant>_forecast_today    # any sensor of the target device
 days: 14
 ```
+
+![Daily card](docs/img/daily-dark.png)
 
 ### `pvstrings-kv-table`
 
@@ -218,6 +229,8 @@ rows:
   - name: East
     sky: sensor.<string>_sky_map
 ```
+
+![Maturity card](docs/img/maturity-dark.png)
 
 ---
 

@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.9.0";
+const PVS_VERSION = "0.9.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2323,7 +2323,9 @@ class PvsNowcastCard extends PvsBaseCard {
           <div class="nc-mark" style="left:${ktPct.toFixed(1)}%"></div>
           ${[0.25, 0.5, 0.75, 1].map((v) => `<div class="nc-tick" style="left:${(v / KT_MAX * 100).toFixed(1)}%"></div>`).join("")}
         </div>
-        <div class="nc-scale-ax"><span>0</span><span>0,5</span><span>1,0</span></div>
+        <div class="nc-scale-ax">
+          ${[0, 0.5, 1].map((v) => `<span style="left:${(v / KT_MAX * 100).toFixed(1)}%">${fmtNum(hass, v, 1)}</span>`).join("")}
+        </div>
       </div>`;
 
     // ---- decay: w(t) = w0 * 2^(-t/halflife), cut at the two-hour reach ----
@@ -2402,8 +2404,12 @@ const NC_CSS = `
     background: var(--primary-text-color); transform: translateX(-1px); }
   .nc-tick { position: absolute; top: 3px; width: 1px; height: 4px;
     background: var(--card-background-color); opacity: 0.6; }
-  .nc-scale-ax { display: flex; justify-content: space-between; font-size: 9.5px;
+  /* labels sit at their true fraction of the 0..1.1 scale, not spread evenly —
+     a "1,0" pinned to the right edge would mislabel the 1.1 end */
+  .nc-scale-ax { position: relative; height: 12px; font-size: 9.5px;
     color: var(--secondary-text-color); margin-top: 2px; }
+  .nc-scale-ax span { position: absolute; transform: translateX(-50%); }
+  .nc-scale-ax span:first-child { transform: none; }
   .nc-wsub { font-size: 11.5px; color: var(--secondary-text-color); margin: 8px 0 2px; }
   .nc-wsub b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
   .nc-ax { font-size: 9.5px; color: var(--secondary-text-color); text-align: center; margin-top: -4px; }
