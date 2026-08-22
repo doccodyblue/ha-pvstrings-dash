@@ -144,6 +144,32 @@ curves are configured, not learned, so there is no training display.
 
 ---
 
+## 2bb. `pvstrings-nowcast`
+
+```yaml
+type: custom:pvstrings-nowcast
+entity: sensor.<anlage>_einstrahlung_prognose
+```
+
+**Data.** `nowcast_active` plus, when running, `nowcast_kt`,
+`nowcast_weight_now`, `nowcast_halflife_min`, `nowcast_sky`,
+`nowcast_spread`, `nowcast_intervals`, `nowcast_trust`. When not running
+only `nowcast_reason` is published — and that is the content, not an
+error: night and "no sensor" are normal states.
+
+**Chart.** The blend weight over the next two hours, drawn from
+`weight_now` and the half-life, with the half-life marked. It is
+*derived*, not published per interval, and a note under it says so —
+otherwise it would read as measured data.
+
+**Two names, one word.** `truth_source: "nowcast"` on the same entity is
+older and means nearly the opposite (the bias is learned against the
+source's own short run). The card names the difference; the accuracy
+view's section is called "short-term accuracy" rather than "nowcast" so
+the two never collide on screen.
+
+---
+
 ## 2c. `pvstrings-curve` (learned conversion curves)
 
 ```yaml

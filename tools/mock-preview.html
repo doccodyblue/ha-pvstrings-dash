@@ -26,6 +26,8 @@
 <h4>conversion — storage group (460px)</h4><div class="narrow" id="conv2"></div>
 <h4>conversion table (nerd, 460px)</h4><div class="narrow" id="convt"></div>
 <h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
+<h4>nowcast — running (460px)</h4><div class="narrow" id="nc1"></div>
+<h4>nowcast — inactive, reason is the content (460px)</h4><div class="narrow" id="nc2"></div>
 <h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
 <h4>curve — blocked: inverter reports derived AC (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
@@ -170,6 +172,17 @@
         semantics: "DC energy into the storage; discharge timing is a control decision. Never sum with AC.",
         friendly_name: "Speicher Restprognose Akkuladung heute" } },
     // a second direct group: learning switched on, nothing moved yet
+    "sensor.ghi_on": { entity_id: "sensor.ghi_on", state: "612",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
+        forecast_error_wm2: -141.5, nowcast_active: true, nowcast_reason: null,
+        nowcast_kt: 0.82, nowcast_weight_now: 0.64, nowcast_halflife_min: 31,
+        nowcast_sky: "broken", nowcast_spread: 0.061, nowcast_intervals: 3,
+        nowcast_trust: 0.8, friendly_name: "PV Anlage Einstrahlung Prognose" } },
+    // the live state on Andy's plant right after a restart
+    "sensor.ghi_off": { entity_id: "sensor.ghi_off", state: "49",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
+        forecast_error_wm2: -141.5, nowcast_active: false,
+        nowcast_reason: "thin_window", friendly_name: "PV Anlage Einstrahlung Prognose" } },
     "sensor.g3_ac": { entity_id: "sensor.g3_ac", state: "0.9",
       attributes: { forecast: acG1, today_kwh: 4.2, tomorrow_kwh: 3.6,
         output_path: "direct", curve_source: "datasheet", curve_prior: "datasheet",
@@ -259,6 +272,8 @@
                { name: "Speicher", out: "sensor.g2_bc", dc: "sensor.g2_dc" }] }],
       ["#conve", "pvstrings-kv-table", { entity: "sensor.g1_ac",
         mode: "conversion_evidence", title: "Lernen — Wandlungs-Evidenz" }],
+      ["#nc1", "pvstrings-nowcast", { entity: "sensor.ghi_on" }],
+      ["#nc2", "pvstrings-nowcast", { entity: "sensor.ghi_off" }],
       ["#curve1", "pvstrings-curve", { entity: "sensor.g1_ac", title: "Wandlungs-Kennlinie — Netz" }],
       ["#curve2", "pvstrings-curve", { entity: "sensor.g3_ac", title: "Wandlungs-Kennlinie — Ost-WR" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",

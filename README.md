@@ -124,6 +124,25 @@ hardware cap is not a conversion loss. A header chip names what produced
 the output figure — datasheet or custom curve, fixed factors with their
 applied multiplier, or "unconverted" when no path is configured.
 
+### `pvstrings-nowcast`
+
+The forecast reacting to your own irradiance sensor (PV Strings ≥ 1.21).
+The measured clearness of the last quarter hour is blended into the
+coming intervals and fades back to the provider's forecast; the card
+shows the clearness on a 0–1.1 scale, the weight on the next interval,
+and how fast it fades — half-life marked on the curve, reach capped at
+two hours.
+
+```yaml
+type: custom:pvstrings-nowcast
+entity: sensor.<anlage>_einstrahlung_prognose
+```
+
+Inactive at night and on plants without a sensor is the normal state,
+so the card shows the *reason* rather than an error. The fade curve is
+computed from the two published figures and says so — the integration
+publishes no per-interval curve.
+
 ### `pvstrings-curve`
 
 The learned efficiency curve against the datasheet prior it started from
@@ -224,6 +243,7 @@ card it meant to include.
 | curtailment-group sections | ≥ 1.14.0 |
 | conversion cards (AC / battery charge, optional) | ≥ 1.20.0 |
 | learned conversion curve (`conversion_learning`) | ≥ 1.21.0 |
+| nowcast card (`nowcast_active`) | ≥ 1.21.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 
 The three design rules behind all of this, bought with the integration's own

@@ -12,7 +12,8 @@
  *   FMT       number/date/energy formatting (Intl, HA timezone)
  *   DATA      websocket wrappers, registry model, statistics helpers
  *   UI        problem panel, withheld chip, tooltip, base card class
- *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:CURVE / CARD:CHAIN
+ *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST / CARD:CURVE
+ *   CARD:CHAIN
  *   CARD:DAILY / CARD:KVTABLE
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
@@ -25,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.8.0";
+const PVS_VERSION = "0.9.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -79,6 +80,12 @@ const FEATURES = {
   unshaded: {
     test: (a) => a?.forecast?.[0]?.unshaded_kwh !== undefined,
     attr: "forecast[].unshaded_kwh", since: "1.7.0",
+  },
+  // the plant's irradiance sensor gained the nowcast block (>= 1.21); the
+  // reason field is the interesting half when it is inactive
+  nowcast: {
+    test: (a) => a != null && "nowcast_active" in a,
+    attr: "nowcast_active", since: "1.21.0",
   },
   // conversion entities must say what they are — without output_path and
   // curve_source the card would silently assume AC semantics
@@ -180,6 +187,32 @@ const STR = {
     "conv_eff_today": "conversion today",
     "conv_eff_tip_direct": "Day total AC / day total DC — after the conversion curve and the AC rating. Hardware potential: never capped at regulatory limits.",
     "conv_eff_tip_storage": "Day total charge / day total DC — after the charge path's conversion curve. DC energy into the storage, not AC.",
+    // nowcast (the plant forecast reacting to its own irradiance sensor).
+    // Deliberately NOT the same thing as truth_source "nowcast" below.
+    "nc_title": "Nowcast",
+    "nc_active": "running",
+    "nc_inactive": "not running",
+    "nc_kt": "measured clearness",
+    "nc_weight": "weight on the next interval",
+    "nc_halflife": "half-life",
+    "nc_sky_calm": "calm sky",
+    "nc_sky_broken": "broken sky",
+    "nc_sky_unknown": "sky unclassified",
+    "nc_spread": "error scatter",
+    "nc_intervals": "{n} measured intervals",
+    "nc_trust": "damping",
+    "nc_trust_tip": "The correction is damped while the bias model behind it is still thin.",
+    "nc_axis_min": "minutes ahead",
+    "nc_decay_note": "The fade is computed from the two published figures (weight now, half-life) — the integration publishes no per-interval curve. Reach is capped at two hours.",
+    "nc_reason_no_source": "no irradiance sensor configured — nothing to correct against",
+    "nc_reason_no_measurement": "the sensor is delivering no readings",
+    "nc_reason_too_dark": "too dark — at night there is nothing to correct",
+    "nc_reason_thin_window": "not enough measured intervals yet (normal in the first minutes after a restart)",
+    "nc_reason_stale": "the readings are too old to correct with",
+    "nc_reason_frozen_sensor": "the sensor is not moving — its readings are not trusted",
+    "nc_reason_learning_off": "learning is switched off",
+    "nc_reason_other": "not running: {reason}",
+    "nc_not_confused": "Not the same as “learned against the source's own short-horizon run” in the source-bias table — that phrase is about where the bias is learned from, almost the opposite claim.",
     "conv_curve_datasheet": "datasheet curve",
     // `custom` is hand-entered support points — a claim by the owner, not a
     // measurement. Since measured curves now exist, the wording must not
@@ -276,12 +309,12 @@ const STR = {
     "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
     "conv_ev_silent": "collecting nothing",
     "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour — the gate working, not a fault. A 0 / 0 row is configured but collecting nothing. No progress bar: the fit that would define \"enough\" does not exist yet, so a full bar would be an invented scale — a few hundred usable pairs per stage and sunny day is the realistic order of magnitude.",
-    "s_nowcast": "Nowcast (continuously updated)",
+    "s_nowcast": "Short-term accuracy (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
-    "acc_note": "**Nowcast** may correct itself during the day; **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
+    "acc_note": "The **short-term** figure may correct itself during the day (and since the nowcast it also carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer says \"not yet active\" instead: those buckets only switch on past ~70 % of the evidence ceiling, and only active ones are published.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case, and then the reason is the interesting figure. Not to be confused with *nowcast* in the source-bias table, which says where the bias is learned from.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
@@ -374,6 +407,30 @@ const STR = {
     "conv_eff_today": "Wandlung heute",
     "conv_eff_tip_direct": "Tagessumme AC / Tagessumme DC — nach Kennlinie und AC-Nennwert. Hardware-Potenzial: nie an Regel- oder Rechtslimits gedeckelt.",
     "conv_eff_tip_storage": "Tagessumme Ladung / Tagessumme DC — nach Kennlinie des Ladepfads. DC-Energie in den Speicher, kein AC.",
+    "nc_title": "Nowcast",
+    "nc_active": "läuft",
+    "nc_inactive": "läuft nicht",
+    "nc_kt": "gemessene Klarheit",
+    "nc_weight": "Gewicht im nächsten Intervall",
+    "nc_halflife": "Halbwertszeit",
+    "nc_sky_calm": "ruhiger Himmel",
+    "nc_sky_broken": "aufgerissener Himmel",
+    "nc_sky_unknown": "Himmel nicht klassifiziert",
+    "nc_spread": "Fehlerstreuung",
+    "nc_intervals": "{n} Messintervalle",
+    "nc_trust": "Dämpfung",
+    "nc_trust_tip": "Die Korrektur wird gedämpft, solange das Bias-Modell dahinter noch dünn ist.",
+    "nc_axis_min": "Minuten voraus",
+    "nc_decay_note": "Der Abfall ist aus den zwei veröffentlichten Zahlen gerechnet (Gewicht jetzt, Halbwertszeit) — die Integration liefert keine Kurve je Intervall. Reichweite maximal zwei Stunden.",
+    "nc_reason_no_source": "kein Einstrahlungs-Sensor konfiguriert — es gibt nichts, wogegen korrigiert werden könnte",
+    "nc_reason_no_measurement": "der Sensor liefert keine Messwerte",
+    "nc_reason_too_dark": "zu dunkel — nachts gibt es nichts zu korrigieren",
+    "nc_reason_thin_window": "noch zu wenige Messintervalle (normal in den ersten Minuten nach einem Neustart)",
+    "nc_reason_stale": "die Messwerte sind zu alt, um damit zu korrigieren",
+    "nc_reason_frozen_sensor": "der Sensor bewegt sich nicht — seinen Werten wird nicht vertraut",
+    "nc_reason_learning_off": "das Lernen ist ausgeschaltet",
+    "nc_reason_other": "läuft nicht: {reason}",
+    "nc_not_confused": "Nicht dasselbe wie „nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt“ in der Source-Bias-Tabelle — das sagt, woher der Bias gelernt wird, und ist fast die gegenteilige Aussage.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
     "conv_curve_custom": "selbst eingetragen",
     "conv_curve_learned": "gelernte Kennlinie",
@@ -463,12 +520,12 @@ const STR = {
     "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
     "conv_ev_silent": "sammelt nichts",
     "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — die Leitplanke arbeitet, kein Fehler. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Kein Fortschrittsbalken: Der Fit, der „genug“ definieren würde, existiert noch nicht — ein voller Balken wäre eine erfundene Skala. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag.",
-    "s_nowcast": "Nowcast (laufend aktualisiert)",
+    "s_nowcast": "Kurzfrist-Treffsicherheit (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
-    "acc_note": "**Nowcast** darf sich tagsüber nachkorrigieren; **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
+    "acc_note": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer sagt stattdessen „noch nicht aktiv\": Diese Buckets schalten sich erst ab ~70 % der Beweis-Decke zu, und nur aktive werden veröffentlicht.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall, und dann ist der Grund die interessantere Zahl. Nicht zu verwechseln mit *nowcast* in der Source-Bias-Tabelle, das sagt, woher der Bias gelernt wird.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Log-Ratio-Buckets",
@@ -2199,6 +2256,163 @@ class PvsConversionCard extends PvsBaseCard {
   }
 }
 
+/* ======================== SECTION: CARD:NOWCAST =========================== */
+
+// The plant forecast reacting to its own irradiance sensor: how clear the
+// last quarter hour measured, how heavily that is blended into the coming
+// intervals, and how fast it fades back to the provider's forecast.
+// Inactive is the normal state at night and on plants without a sensor —
+// then the REASON is the content, not an error.
+class PvsNowcastCard extends PvsBaseCard {
+  getCardSize() { return 3; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${NC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wireMoreInfo();
+    };
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const st = hass.states[cfg.entity];
+    if (!st) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
+    const need = requireFeatures(st, ["nowcast"]);
+    if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
+
+    const a = st.attributes;
+    const on = !!a.nowcast_active;
+    const title = cfg.title ?? t(hass, "nc_title");
+    const stateChip = `<span class="pvs-chip ${on ? "on" : "dim"}">
+      <span class="dot${on ? " live" : ""}"></span>${t(hass, on ? "nc_active" : "nc_inactive")}</span>`;
+    const head = (extra = "") => `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
+      ${stateChip}${extra}</div>`;
+
+    // ---- inactive: the reason is the whole content ------------------------
+    if (!on) {
+      const r = a.nowcast_reason;
+      const known = ["no_source", "no_measurement", "too_dark", "thin_window",
+        "stale", "frozen_sensor", "learning_off"].includes(r);
+      return card(head() + withheldHTML(known ? t(hass, "nc_reason_" + r)
+        : t(hass, "nc_reason_other", { reason: esc(r ?? "?") })));
+    }
+
+    // ---- active -----------------------------------------------------------
+    const kt = a.nowcast_kt, w0 = a.nowcast_weight_now ?? 0;
+    const half = a.nowcast_halflife_min ?? null;
+    const sky = ["calm", "broken"].includes(a.nowcast_sky) ? a.nowcast_sky : "unknown";
+    const trust = a.nowcast_trust;
+    const chips = [`<span class="pvs-chip">${t(hass, "nc_sky_" + sky)}</span>`];
+    if (half != null) {
+      chips.push(`<span class="pvs-chip">${t(hass, "nc_halflife")} <span class="v">${fmtNum(hass, half, 0)}</span> min</span>`);
+    }
+    if (trust != null && trust < 1) {
+      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "nc_trust_tip"))}">
+        ${t(hass, "nc_trust")} <span class="v">${fmtNum(hass, trust * 100, 0)} %</span></span>`);
+    }
+
+    // clearness scale: 0 (dark) .. 1.1 (brighter than the clear-sky model)
+    const KT_MAX = 1.1;
+    const ktPct = kt != null ? Math.max(0, Math.min(1, kt / KT_MAX)) * 100 : null;
+    const ktRow = kt == null ? "" : `
+      <div class="nc-kt">
+        <div class="nc-lbl">${t(hass, "nc_kt")}<span class="nc-big">${fmtNum(hass, kt, 2)}</span></div>
+        <div class="nc-scale">
+          <div class="nc-fill" style="width:${ktPct.toFixed(1)}%"></div>
+          <div class="nc-mark" style="left:${ktPct.toFixed(1)}%"></div>
+          ${[0.25, 0.5, 0.75, 1].map((v) => `<div class="nc-tick" style="left:${(v / KT_MAX * 100).toFixed(1)}%"></div>`).join("")}
+        </div>
+        <div class="nc-scale-ax"><span>0</span><span>0,5</span><span>1,0</span></div>
+      </div>`;
+
+    // ---- decay: w(t) = w0 * 2^(-t/halflife), cut at the two-hour reach ----
+    // Derived from the two published numbers, not published per interval —
+    // the note under the chart says so.
+    const REACH = 120;
+    const PAD_L = 34, PAD_R = 10, PAD_T = 10, PAD_B = 20, PW = 560, PH = 92;
+    const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
+    const xOf = (m) => PAD_L + (m / REACH) * PW;
+    const yOf = (v) => PAD_T + PH - Math.max(0, Math.min(1, v)) * PH;
+    const wAt = (m) => (half ? w0 * Math.pow(2, -m / half) : (m === 0 ? w0 : 0));
+    let dPath = "", area = "";
+    for (let m = 0; m <= REACH; m += 4) {
+      const x = xOf(m).toFixed(1), y = yOf(wAt(m)).toFixed(1);
+      dPath += `${m === 0 ? "M" : "L"}${x} ${y}`;
+    }
+    area = `${dPath}L${xOf(REACH).toFixed(1)} ${yOf(0).toFixed(1)}L${xOf(0).toFixed(1)} ${yOf(0).toFixed(1)}Z`;
+    let grid = "";
+    for (const v of [0, 0.5, 1]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v * 100, 0)}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 2}" text-anchor="end" style="font-size:8.5px">%</text>`;
+    for (const m of [0, 30, 60, 90, 120]) {
+      grid += `<text class="axis" x="${xOf(m)}" y="${H - 6}" text-anchor="middle">${m}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L + PW / 2}" y="${H - 6}" text-anchor="middle" style="opacity:0"> </text>`;
+    let halfMark = "";
+    if (half != null && half <= REACH) {
+      halfMark = `<line x1="${xOf(half).toFixed(1)}" y1="${PAD_T}" x2="${xOf(half).toFixed(1)}" y2="${PAD_T + PH}"
+          stroke="var(--pvs-model)" stroke-width="1" stroke-dasharray="3 2" opacity="0.7"/>
+        <text class="axis" x="${(xOf(half) + 4).toFixed(1)}" y="${PAD_T + 9}">${t(hass, "nc_halflife")}</text>`;
+    }
+
+    const stats = [];
+    if (a.nowcast_intervals != null) stats.push(t(hass, "nc_intervals", { n: a.nowcast_intervals }));
+    if (a.nowcast_spread != null) stats.push(`${t(hass, "nc_spread")} ± ${fmtNum(hass, a.nowcast_spread, 3)}`);
+
+    card(`
+      ${head(chips.join(""))}
+      ${ktRow}
+      <div class="nc-wsub">${t(hass, "nc_weight")} <b>${fmtNum(hass, w0 * 100, 0)} %</b></div>
+      <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}
+        <path d="${area}" fill="var(--pvs-model)" opacity="0.16"/>
+        <path d="${dPath}" fill="none" stroke="var(--pvs-model)" stroke-width="2.2" stroke-linejoin="round"/>
+        ${halfMark}
+        <circle cx="${xOf(0).toFixed(1)}" cy="${yOf(w0).toFixed(1)}" r="3.4" fill="var(--pvs-model)"/>
+      </svg></div>
+      <div class="nc-ax">${t(hass, "nc_axis_min")}</div>
+      ${stats.length ? `<div class="nc-stats">${stats.join(" · ")}</div>` : ""}
+      <div class="kv-note dim">${t(hass, "nc_decay_note")}</div>`);
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entity: "" }; }
+}
+
+const NC_CSS = `
+  .pvs-chip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+    margin-right: 5px; background: var(--secondary-text-color); }
+  .pvs-chip .dot.live { background: var(--pvs-model);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pvs-model) 25%, transparent); }
+  .nc-kt { margin: 6px 0 2px; }
+  .nc-lbl { font-size: 11px; color: var(--secondary-text-color); display: flex;
+    align-items: baseline; gap: 8px; }
+  .nc-big { font-size: 24px; font-weight: 600; color: var(--primary-text-color);
+    font-variant-numeric: tabular-nums; }
+  .nc-scale { position: relative; height: 10px; border-radius: 5px; margin-top: 3px;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--pvs-model) 8%, transparent),
+      color-mix(in srgb, var(--pvs-model) 20%, transparent)); overflow: hidden; }
+  .nc-fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px;
+    background: var(--pvs-model); opacity: 0.75; }
+  .nc-mark { position: absolute; top: -2px; width: 2px; height: 14px;
+    background: var(--primary-text-color); transform: translateX(-1px); }
+  .nc-tick { position: absolute; top: 3px; width: 1px; height: 4px;
+    background: var(--card-background-color); opacity: 0.6; }
+  .nc-scale-ax { display: flex; justify-content: space-between; font-size: 9.5px;
+    color: var(--secondary-text-color); margin-top: 2px; }
+  .nc-wsub { font-size: 11.5px; color: var(--secondary-text-color); margin: 8px 0 2px; }
+  .nc-wsub b { color: var(--primary-text-color); font-variant-numeric: tabular-nums; }
+  .nc-ax { font-size: 9.5px; color: var(--secondary-text-color); text-align: center; margin-top: -4px; }
+  .nc-stats { font-size: 11px; color: var(--secondary-text-color); margin-top: 6px; }
+  .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px;
+    background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 8px; }
+  .kv-note.dim { color: var(--secondary-text-color); }
+`;
+
 /* ====================== SECTION: CARD:CURVE ============================== */
 
 // The learned conversion curve against the prior it started from.
@@ -3482,6 +3696,10 @@ async function buildViews(hass, config) {
         { type: "custom:pvstrings-kv-table", entity: mo, mode: "ghi_bias",
           title: t(lang, "nerd_source_bias"), ...(ghi ? { truth_entity: ghi } : {}) },
         ...(ghi ? [{ type: "tile", entity: ghi }] : []),
+        // the nowcast lives on the same sensor and is the other half of the
+        // story: the bias table says what the source gets wrong on average,
+        // the nowcast what the sensor says about the next two hours
+        ...(ghi ? [{ type: "custom:pvstrings-nowcast", entity: ghi }] : []),
       ] });
     } else {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
@@ -3614,6 +3832,8 @@ const CARDS = [
     "The learned sky as a grid over sun position, with fit level and unobserved cells made explicit."],
   ["pvstrings-forecast", PvsForecastCard, "PV Strings Forecast",
     "Hourly forecast vs unshaded vs actual — the whole shading diagnostic in one chart."],
+  ["pvstrings-nowcast", PvsNowcastCard, "PV Strings Nowcast",
+    "How the measured clearness of the last quarter hour is blended into the coming forecast."],
   ["pvstrings-curve", PvsCurveCard, "PV Strings Conversion Curve",
     "The learned efficiency curve against the datasheet prior it started from."],
   ["pvstrings-conversion", PvsConversionCard, "PV Strings Conversion",
