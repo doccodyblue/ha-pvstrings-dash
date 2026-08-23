@@ -133,8 +133,9 @@
         "rain|midday": { factor: 1.4, n_eff: 1.2 },
       }, string_daypart: {
         "s1|morning": { factor: 0.948, n_eff: 18.2 },
-        // s1|midday absent: below the activation threshold, not "never seen"
-        "s1|afternoon": { factor: 1.059, n_eff: 19.5 },
+        // thin bucket: published from the first learn cycle, shrunk near 1
+        "s1|midday": { factor: 1.002, n_eff: 1.4 },
+        // s1|afternoon absent: never a usable observation there, and it says so
       } } } },
     // a mature learning state: all buckets near the ceiling (green zone)
     "sensor.plant_mo2": { entity_id: "sensor.plant_mo2", state: "241.8",

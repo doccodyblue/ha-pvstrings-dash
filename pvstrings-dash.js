@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.10.0";
+const PVS_VERSION = "0.10.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -323,7 +323,6 @@ const STR = {
     "nerd_string_offsets": "Per-string offsets",
     "nerd_string_daypart": "String × daypart",
     "nerd_bucket_missing": "never seen",
-    "nerd_bucket_below": "not yet active",
     "cens_coverage": "coverage",
     "cens_curtailed": "curtailed",
     "nerd_source_bias": "Source bias (local hour × horizon)",
@@ -533,7 +532,6 @@ const STR = {
     "nerd_string_offsets": "Strang-Offsets",
     "nerd_string_daypart": "Strang × Tagesabschnitt",
     "nerd_bucket_missing": "nie gesehen",
-    "nerd_bucket_below": "noch nicht aktiv",
     "cens_coverage": "Erfassung",
     "cens_curtailed": "Abregelung",
     "nerd_source_bias": "Source-Bias (lokale Stunde × Horizont)",
@@ -3137,11 +3135,8 @@ class PvsKvTableCard extends PvsBaseCard {
     return ids.filter(Boolean);
   }
 
-  // missingKey: the plant table's absent bucket really was never seen; the
-  // string x daypart layer publishes only buckets past their activation
-  // threshold, so an absent cell there may hold plenty of evidence.
-  _factorCell(hass, cell, missingKey = "nerd_bucket_missing") {
-    if (!cell) return `<td class="miss">${t(hass, missingKey)}</td>`;
+  _factorCell(hass, cell) {
+    if (!cell) return `<td class="miss">${t(hass, "nerd_bucket_missing")}</td>`;
     const dev = Math.abs(cell.factor - 1);
     const tone = dev > 0.15 ? "hot" : dev > 0.05 ? "warm" : "";
     return `<td class="${tone}"><span class="pvs-num">${fmtNum(hass, cell.factor, 3)}</span>
@@ -3230,7 +3225,7 @@ class PvsKvTableCard extends PvsBaseCard {
         const ids = [...new Set(Object.keys(src).map((k) => k.split("|")[0]))];
         body = `<table><tr><th></th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
           ${ids.map((id) => `<tr><th>${esc(names.get(id) ?? id.slice(0, 8))}</th>
-            ${DAYPARTS.map((d) => this._factorCell(hass, src[`${id}|${d}`], "nerd_bucket_below")).join("")}</tr>`).join("")}</table>`;
+            ${DAYPARTS.map((d) => this._factorCell(hass, src[`${id}|${d}`])).join("")}</tr>`).join("")}</table>`;
       }
     } else if (mode === "ghi_bias") {
       const src = a.ghi_bias;
