@@ -330,6 +330,20 @@ for.
 
 ---
 
+## Data and licence
+
+The cards render what the integration has already published to Home Assistant,
+plus recorder statistics for the measured series. **Nothing is loaded from a
+third party at runtime** — no CDN, no web fonts, no telemetry. The only outbound
+requests are the ones Home Assistant itself makes.
+
+The generated screenshots in `docs/img` carry synthetic data from
+`tools/mock-preview.html`, so no real plant's production is in this repository.
+
+MIT, see [LICENSE](LICENSE).
+
+---
+
 ## Development
 
 Screenshots in `docs/img` are generated, not taken by hand: start
