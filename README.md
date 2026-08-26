@@ -47,9 +47,10 @@ builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield),
 **Accuracy** (short-term vs day-ahead, with the day-by-day comparison), and
-**Nerd** (training maturity, learning buckets, source-bias table, collection
-health, skip reasons). Views follow `hass.language` (German/English). The generated YAML
-is a normal dashboard config — take it over and edit it if you want to.
+**Diagnostics** (training maturity, learning buckets, source-bias table,
+collection health, skip reasons). Views follow `hass.language` (German and
+English). The generated YAML is a normal dashboard config — take it over and
+edit it if you want to.
 
 ---
 
@@ -96,8 +97,9 @@ device for its correction in percentage points.
 
 Nothing is ever silently blank. Where a value cannot be shown, its place is
 taken by the reason — here the nowcast shortly after a restart, waiting for
-enough measured intervals, which is a normal state and not an error. The same style covers "no cells learned yet", "no learning
-region built", and every other not-yet.
+enough measured intervals, which is a normal state and not an error. The same
+style covers "no cells learned yet", "no learning region built", and every
+other not-yet.
 
 
 ### `pvstrings-sky-map`
@@ -348,7 +350,7 @@ MIT, see [LICENSE](LICENSE).
 
 Screenshots in `docs/img` are generated, not taken by hand: start
 `node tools/serve.mjs`, then run `node tools/shots.mjs` for the card images
-and `node tools/details.mjs` for the crops used in *Reading the cards*. Both
+and `node tools/details.mjs` for the detail crops used in *The cards*. Both
 render `tools/mock-preview.html`, so the images carry synthetic data and no
 plant of anyone's.
 

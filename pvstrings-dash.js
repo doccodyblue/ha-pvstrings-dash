@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.10.1";
+const PVS_VERSION = "0.10.2";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -212,7 +212,7 @@ const STR = {
     "nc_reason_frozen_sensor": "the sensor is not moving — its readings are not trusted",
     "nc_reason_learning_off": "learning is switched off",
     "nc_reason_other": "not running: {reason}",
-    "nc_not_confused": "Not the same as “learned against the source's own short-horizon run” in the source-bias table — that phrase is about where the bias is learned from, almost the opposite claim.",
+    "nc_not_confused": "Not the same as “learned against the source's own short-horizon run” in the source-bias table: that phrase describes where the bias is learned from, not what corrects the forecast here.",
     "conv_curve_datasheet": "datasheet curve",
     // `custom` is hand-entered support points — a claim by the owner, not a
     // measurement. Since measured curves now exist, the wording must not
@@ -244,7 +244,7 @@ const STR = {
     "curve_axis_load": "load (share of AC rating)",
     "curve_axis_eta": "efficiency",
     "curve_pending": "No learned curve for this group yet. The collector is gathering: {usable} of {rows} measured pairs have cleared the censoring check. Support points only move once the evidence at a point suffices.",
-    "curve_silent": "Measurement pairs are set up for this group, but nothing is being collected (0 rows) — that is a real warning sign, not a waiting state.",
+    "curve_silent": "Measurement pairs are set up for this group, but nothing is being collected (0 rows). This is not a waiting state — check the configured output sensor.",
     "curve_not_collected": "No measurement pairs are being collected for this group — no output sensor configured, or learning is off.",
     "curve_unsupported": "This integration version does not learn conversion curves.",
     "curve_gathering": "Learning is on, no support point has moved yet — every point still holds its prior. Evidence per point below.",
@@ -267,7 +267,7 @@ const STR = {
     "chain_published": "published",
     "chain_measured": "measured",
     "chain_source_bias": "source bias ×{v} — applied upstream to the irradiance, already inside the physics figure. Shown as context, not a link.",
-    "chain_discrepancy": "physics × shading × model ≠ published ({a} vs {b}) — this should never happen; the integration has a bug or this card mis-parses.",
+    "chain_discrepancy": "physics × shading × model ≠ published ({a} vs {b}). The factors published for this hour do not multiply out to the published value — please report it with the diagnostics download.",
     "chain_hour": "Hour",
     "chain_no_hour": "No forecast row for this hour.",
     "chain_needs_string": "This card reads the per-hour chain, which only string forecast sensors publish.",
@@ -283,7 +283,7 @@ const STR = {
     "v_overview": "Overview",
     "v_strings": "Strings",
     "v_accuracy": "Accuracy",
-    "v_nerd": "Nerd",
+    "v_nerd": "Diagnostics",
     "s_today": "Today",
     "s_tomorrow": "Tomorrow & weather",
     "s_savings": "Savings",
@@ -308,7 +308,7 @@ const STR = {
     "conv_ev_unavailable": "The entry diagnostics could not be loaded — from here, whether collection runs cannot be checked.",
     "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
     "conv_ev_silent": "collecting nothing",
-    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour — the gate working, not a fault. A 0 / 0 row is configured but collecting nothing. No progress bar: the fit that would define \"enough\" does not exist yet, so a full bar would be an invented scale — a few hundred usable pairs per stage and sunny day is the realistic order of magnitude.",
+    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour, which is the gate working. A 0 / 0 row is configured but collecting nothing. A few hundred usable pairs per stage and sunny day is the realistic order of magnitude; there is no progress bar because no threshold defines \"enough\".",
     "s_nowcast": "Short-term accuracy (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
@@ -429,7 +429,7 @@ const STR = {
     "nc_reason_frozen_sensor": "der Sensor bewegt sich nicht — seinen Werten wird nicht vertraut",
     "nc_reason_learning_off": "das Lernen ist ausgeschaltet",
     "nc_reason_other": "läuft nicht: {reason}",
-    "nc_not_confused": "Nicht dasselbe wie „nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt“ in der Source-Bias-Tabelle — das sagt, woher der Bias gelernt wird, und ist fast die gegenteilige Aussage.",
+    "nc_not_confused": "Nicht dasselbe wie „nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt“ in der Source-Bias-Tabelle: das beschreibt, woher der Bias gelernt wird, nicht was hier die Prognose korrigiert.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
     "conv_curve_custom": "selbst eingetragen",
     "conv_curve_learned": "gelernte Kennlinie",
@@ -457,7 +457,7 @@ const STR = {
     "curve_axis_load": "Last (Anteil der AC-Nennleistung)",
     "curve_axis_eta": "Wirkungsgrad",
     "curve_pending": "Noch keine gelernte Kennlinie für diese Gruppe. Der Kollektor sammelt: {usable} von {rows} Messpaaren sind zensurgeprüft. Stützstellen bewegen sich erst, wenn die Evidenz an einem Punkt reicht.",
-    "curve_silent": "Für diese Gruppe sind Messpaare eingerichtet, aber es wird nichts gesammelt (0 Zeilen) — das ist ein echtes Warnsignal, kein Wartezustand.",
+    "curve_silent": "Für diese Gruppe sind Messpaare eingerichtet, aber es wird nichts gesammelt (0 Zeilen). Das ist kein Wartezustand — den konfigurierten Ausgangssensor prüfen.",
     "curve_not_collected": "Für diese Gruppe werden keine Messpaare gesammelt — kein Ausgangs-Sensor eingerichtet, oder das Lernen ist aus.",
     "curve_unsupported": "Diese Integrationsversion lernt keine Wandlungs-Kennlinien.",
     "curve_gathering": "Lernen ist an, bisher wurde keine Stützstelle bewegt — jeder Punkt hält noch seinen Prior. Evidenz je Punkt unten.",
@@ -479,7 +479,7 @@ const STR = {
     "chain_published": "veröffentlicht",
     "chain_measured": "gemessen",
     "chain_source_bias": "Source-Bias ×{v} — wurde upstream auf die Einstrahlung angewendet und steckt bereits in der Physik-Zahl. Kontext, kein Kettenglied.",
-    "chain_discrepancy": "Physik × Verschattung × Modell ≠ veröffentlicht ({a} vs {b}) — das darf nie passieren; Bug in der Integration oder diese Karte liest falsch.",
+    "chain_discrepancy": "Physik × Verschattung × Modell ≠ veröffentlicht ({a} vs {b}). Die für diese Stunde veröffentlichten Faktoren ergeben multipliziert nicht den veröffentlichten Wert — bitte mit dem Diagnose-Download melden.",
     "chain_hour": "Stunde",
     "chain_no_hour": "Keine Prognosezeile für diese Stunde.",
     "chain_needs_string": "Diese Karte liest die Stundenkette, die nur Strang-Prognosesensoren publizieren.",
@@ -493,7 +493,7 @@ const STR = {
     "v_overview": "Übersicht",
     "v_strings": "Stränge",
     "v_accuracy": "Genauigkeit",
-    "v_nerd": "Nerd",
+    "v_nerd": "Diagnose",
     "s_today": "Heute",
     "s_tomorrow": "Morgen & Wetter",
     "s_savings": "Ersparnis",
@@ -518,7 +518,7 @@ const STR = {
     "conv_ev_unavailable": "Die Entry-Diagnosen ließen sich nicht laden — ob die Sammlung läuft, lässt sich von hier nicht prüfen.",
     "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
     "conv_ev_silent": "sammelt nichts",
-    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — die Leitplanke arbeitet, kein Fehler. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Kein Fortschrittsbalken: Der Fit, der „genug“ definieren würde, existiert noch nicht — ein voller Balken wäre eine erfundene Skala. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag.",
+    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — so arbeitet die Leitplanke. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag; einen Fortschrittsbalken gibt es nicht, weil kein Schwellwert „genug“ definiert.",
     "s_nowcast": "Kurzfrist-Treffsicherheit (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
@@ -3788,6 +3788,9 @@ async function buildViews(hass, config) {
       heading(t(lang, "nerd_explain_title")), ...explCols,
     ] });
     views.push({
+      // The path stays `nerd` although the title no longer is: it is the URL
+      // people bookmark, and renaming it would break links into a view that
+      // is otherwise unchanged.
       title: prefix + t(lang, "v_nerd"), path: `${slug}nerd`,
       icon: "mdi:flask-outline", type: "sections", max_columns: 3,
       sections: nerdSections,
