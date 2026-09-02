@@ -978,9 +978,9 @@ async function dailyActuals(hass, producedEntityId, nDays) {
 // Day-ahead issued values, keyed by the evening they were issued.
 //
 // Two sources, in this order. Since integration 1.20.6 the numbers come from
-// the integration itself: deviation_yesterday carries a `history` block, day
-// by day, plant and per string, on exactly the pairing its own accuracy
-// figures use. Before that they had to be rebuilt from recorder statistics of
+// the integration itself: the day-ahead accuracy sensor carries a `history`
+// block, day by day, plant and per string -- the very pairs that score is
+// computed from. Before that they had to be rebuilt from recorder statistics of
 // forecast_tomorrow — which worked only as a side effect of a `state_class`
 // that a forecast should never have carried, and silently produced nothing
 // for anyone whose recorder excluded the entity. That path stays for older
@@ -1004,8 +1004,11 @@ function previousDayKey(dayKey) {
 }
 
 async function issuedFromIntegration(hass, scope) {
-  const devId = await plantSibling(hass, scope.entityId, "deviation_yesterday");
-  const history = devId ? hass.states[devId]?.attributes?.history : null;
+  // On the day-ahead accuracy sensor, not on deviation_yesterday: these are
+  // the scored pairs, and deviation_yesterday sums every logged hour and the
+  // whole measured day, which is a slightly different number for the same day.
+  const srcId = await plantSibling(hass, scope.entityId, "wmape_day_ahead_30d");
+  const history = srcId ? hass.states[srcId]?.attributes?.history : null;
   if (!history) return null;
   let series = history.plant;
   if (scope.stringName) {

@@ -235,10 +235,11 @@ hour: now
 ### `pvstrings-daily`
 
 Day-ahead forecast against actual production, day by day. The day-ahead value
-comes from the integration's own record — `deviation_yesterday`, attribute
-`history`, day by day for the plant and per string — which is the very pairing
-its accuracy sensors are scored on, so the card and the sensors cannot
-disagree.
+comes from the integration's own record — the day-ahead accuracy sensor's
+`history` attribute, day by day for the plant and per string — which holds the
+very pairs that score is computed from, so the card and the sensor cannot
+disagree. (Not `deviation_yesterday`: that one sums every logged hour and the
+whole measured day, a slightly different number for the same day.)
 
 Integrations before 1.20.6 do not publish it. There the card falls back to
 long-term statistics of `forecast_tomorrow` as recorded in the issue hour
