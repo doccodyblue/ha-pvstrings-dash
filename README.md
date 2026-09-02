@@ -21,10 +21,12 @@ and attributes and works perfectly well without any of this.
 
 ### HACS (recommended)
 
-1. HACS → three-dot menu → **Custom repositories**
-2. Repository: `doccodyblue/ha-pvstrings-dash`, type: **Dashboard**
-3. Install **PV Strings Dashboard**. HACS registers the Lovelace resource
-   automatically.
+Search for **PV Strings Dashboard** in HACS and install it; HACS registers the
+Lovelace resource automatically.
+
+Not there yet? The repository is awaiting inclusion in the HACS default store,
+which takes a while. Until then: HACS → three-dot menu → **Custom
+repositories** → `doccodyblue/ha-pvstrings-dash`, type **Dashboard**.
 
 ### Manual
 
