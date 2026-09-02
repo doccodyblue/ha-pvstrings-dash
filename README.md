@@ -235,11 +235,20 @@ hour: now
 ### `pvstrings-daily`
 
 Day-ahead forecast against actual production, day by day. The day-ahead value
-is reconstructed from long-term statistics: the value of `forecast_tomorrow`
-as recorded in the issue hour (18:00) of the evening before — the same
-definition the integration's own `deviation_yesterday` uses, and verified
-against it. Days without an evening forecast show a hatched "no forecast
-issued" marker, never a zero bar.
+comes from the integration's own record — `deviation_yesterday`, attribute
+`history`, day by day for the plant and per string — which is the very pairing
+its accuracy sensors are scored on, so the card and the sensors cannot
+disagree.
+
+Integrations before 1.20.6 do not publish it. There the card falls back to
+long-term statistics of `forecast_tomorrow` as recorded in the issue hour
+(18:00) of the evening before; that path needs the recorder to keep the entity
+and only ever worked because the forecast sensors carried a `state_class`,
+which as of 1.20.5 they correctly no longer do. The tooltip says which of the
+two a bar came from.
+
+Days without an evening forecast show a hatched "no forecast issued" marker,
+never a zero bar.
 
 ```yaml
 type: custom:pvstrings-daily

@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.10.2";
+const PVS_VERSION = "0.10.3";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -277,6 +277,7 @@ const STR = {
     "daily_ist": "Actual",
     "daily_no_issue": "no forecast issued that evening",
     "daily_provenance": "day-ahead = {entity} as recorded {date} {hour}:00 (recorder statistics)",
+    "daily_provenance_own": "day-ahead = what was issued {date} {hour}:00, from the integration's own record",
     "daily_window_sum": "{n} days: forecast {soll} — actual {ist}",
     "daily_wabs": "weighted |error|",
     // accuracy / strategy
@@ -488,6 +489,7 @@ const STR = {
     "daily_ist": "Ist",
     "daily_no_issue": "an dem Abend keine Prognose ausgegeben",
     "daily_provenance": "Day-Ahead = {entity}, Stand {date} {hour}:00 (Recorder-Statistik)",
+    "daily_provenance_own": "Day-Ahead = ausgegeben {date} {hour}:00, aus der Aufzeichnung der Integration",
     "daily_window_sum": "{n} Tage: Prognose {soll} — Ist {ist}",
     "daily_wabs": "gewichteter |Fehler|",
     "v_overview": "Übersicht",
@@ -973,13 +975,67 @@ async function dailyActuals(hass, producedEntityId, nDays) {
   return m.get(producedEntityId) ?? [];
 }
 
-// Day-ahead issued values: for each local day D, the forecast_tomorrow state
-// as recorded in the hour bucket that STARTS at issue_hour on D-1 (the
-// integration floor_hour()-stamps 18:xx runs to issued_at=18:00 and
-// overwrites within the issue hour, so the last state in the 18->19 bucket
-// IS the final day-ahead figure). Fallback: last bucket ending within
-// (issue_hour, issue_hour+2]. Missing bucket => null ("no forecast issued").
-async function issuedForecasts(hass, tomorrowEntityId, nDays, issueHour) {
+// Day-ahead issued values, keyed by the evening they were issued.
+//
+// Two sources, in this order. Since integration 1.20.6 the numbers come from
+// the integration itself: deviation_yesterday carries a `history` block, day
+// by day, plant and per string, on exactly the pairing its own accuracy
+// figures use. Before that they had to be rebuilt from recorder statistics of
+// forecast_tomorrow — which worked only as a side effect of a `state_class`
+// that a forecast should never have carried, and silently produced nothing
+// for anyone whose recorder excluded the entity. That path stays for older
+// installs and is where the second function below comes from.
+async function issuedForecasts(hass, scope, nDays, issueHour) {
+  const own = await issuedFromIntegration(hass, scope);
+  if (own) { own.source = "integration"; return own; }
+  const stats = await issuedFromStatistics(hass, scope.tomorrowId, nDays, issueHour);
+  stats.source = "statistics";
+  return stats;
+}
+
+// "2026-08-03" -> "2026-08-02". Component arithmetic through UTC, so a DST
+// boundary cannot shift a calendar day.
+function previousDayKey(dayKey) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d) - 86400000;
+  const p = new Date(t);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${p.getUTCFullYear()}-${pad(p.getUTCMonth() + 1)}-${pad(p.getUTCDate())}`;
+}
+
+async function issuedFromIntegration(hass, scope) {
+  const devId = await plantSibling(hass, scope.entityId, "deviation_yesterday");
+  const history = devId ? hass.states[devId]?.attributes?.history : null;
+  if (!history) return null;
+  let series = history.plant;
+  if (scope.stringName) {
+    // The history is keyed by string_id, which survives a rename; the name
+    // the registry model carries is mapped through strings_detail.
+    const sdId = await plantSibling(hass, scope.entityId, "strings_detail");
+    const sid = sdId
+      ? hass.states[sdId]?.attributes?.strings?.[scope.stringName]?.string_id
+      : null;
+    series = sid ? history.strings?.[sid] : null;
+  }
+  if (!Array.isArray(series)) return null;
+  const byIssueDay = new Map();
+  for (const row of series) {
+    const [dayKey, predicted] = row ?? [];
+    // The integration keys a row by the day it was FOR; the caller asks by
+    // the evening it was issued.
+    if (dayKey && predicted != null) byIssueDay.set(previousDayKey(dayKey), predicted);
+  }
+  return byIssueDay;
+}
+
+// Fallback for integrations before 1.20.6: for each local day D, the
+// forecast_tomorrow state as recorded in the hour bucket that STARTS at
+// issue_hour on D-1 (the integration floor_hour()-stamps 18:xx runs to
+// issued_at=18:00 and overwrites within the issue hour, so the last state in
+// the 18->19 bucket IS the final day-ahead figure). Fallback: last bucket
+// ending within (issue_hour, issue_hour+2]. Missing bucket => null ("no
+// forecast issued").
+async function issuedFromStatistics(hass, tomorrowEntityId, nDays, issueHour) {
   const start = new Date(localMidnightMs(hass, Date.now(), nDays + 1)).toISOString();
   const m = await wsStats(hass, {
     ids: [tomorrowEntityId], startISO: start, endISO: null,
@@ -2959,10 +3015,22 @@ class PvsDailyCard extends PvsBaseCard {
       const days = cfg.days ?? 14;
       const plantTomorrowId = isString
         ? await plantSibling(hass, cfg.entity, "forecast_tomorrow") : null;
+      const scope = {
+        entityId: cfg.entity,
+        tomorrowId,
+        stringName: isString ? info.node.name : null,
+      };
       const [actualRows, issued, plantIssued] = await Promise.all([
         dailyActuals(hass, producedId, days),
-        issuedForecasts(hass, tomorrowId, days, issueHour),
-        plantTomorrowId ? issuedForecasts(hass, plantTomorrowId, days, issueHour) : null,
+        issuedForecasts(hass, scope, days, issueHour),
+        plantTomorrowId
+          ? issuedForecasts(
+              hass,
+              { entityId: cfg.entity, tomorrowId: plantTomorrowId, stringName: null },
+              days,
+              issueHour,
+            )
+          : null,
       ]);
       if (token !== this._renderToken) return;
       const actualByDay = new Map();
@@ -2988,7 +3056,10 @@ class PvsDailyCard extends PvsBaseCard {
         });
       }
       const anyStats = actualRows.length > 0 || issued.size > 0;
-      this._data = { rows: out, issueHour, tomorrowId, producedId, anyStats };
+      this._data = {
+        rows: out, issueHour, tomorrowId, producedId, anyStats,
+        sollSource: issued.source ?? "statistics",
+      };
       this._problem = anyStats ? null
         : { entity: `${tomorrowId}, ${producedId}`, reason: t(hass, "stats_unavailable", { entity: `${tomorrowId} / ${producedId}` }) };
     } catch (e) {
@@ -3100,7 +3171,7 @@ class PvsDailyCard extends PvsBaseCard {
           <div class="r"><span class="k">${t(hass, "daily_soll")}</span><span class="v">${r.soll == null ? "—" : fmtKwh(hass, r.soll)}</span></div>
           <div class="r"><span class="k">${t(hass, "daily_ist")}</span><span class="v">${r.ist == null ? "—" : fmtKwh(hass, r.ist)}</span></div>
           ${delta != null && !r.isToday ? `<div class="r"><span class="k">Δ</span><span class="v">${fmtSigned(hass, delta)} kWh (${fmtSigned(hass, r.soll > 0 ? delta / r.soll * 100 : 0, 0)} %)</span></div>` : ""}
-          ${r.soll == null ? `<div class="pvs-sub">${t(hass, "daily_no_issue")}</div>` : `<div class="pvs-sub">${t(hass, "daily_provenance", { entity: "forecast_tomorrow", date: r.evePrevKey, hour: issueHour })}</div>`}`;
+          ${r.soll == null ? `<div class="pvs-sub">${t(hass, "daily_no_issue")}</div>` : `<div class="pvs-sub">${t(hass, this._data?.sollSource === "integration" ? "daily_provenance_own" : "daily_provenance", { entity: "forecast_tomorrow", date: r.evePrevKey, hour: issueHour })}</div>`}`;
       },
     });
   }
