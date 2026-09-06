@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.10.3";
+const PVS_VERSION = "0.11.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -346,6 +346,18 @@ const STR = {
     "daypart_afternoon": "afternoon",
     "vk_measured": "measured", "vk_lower_bound": "lower bound",
     "vk_reconstructed": "reconstructed",
+    // savings provenance (PV Strings >= 1.22): both blocks are optional and
+    // independent — a plant on a fixed tariff with a sane meter sees neither
+    "nerd_price": "Savings — provenance",
+    "price_win_today": "today", "price_win_total": "total",
+    "price_recorded": "recorded", "price_configured": "fixed price",
+    "price_hours": "hours priced",
+    "price_import": "⌀ import", "price_export": "⌀ feed-in",
+    "price_dropped": "export not credited",
+    "price_none_yet": "no hour priced yet",
+    "price_note": "Recorded and fixed price add up to the window's delivered energy. Fixed price is whatever no recorded price covered — hours from before the price sensor existed, gaps in it, and the side this tariff model values where only the other one was recorded. The hour count is hours carrying any recorded price, so the energy split is the authoritative one. The mean prices are energy-weighted, not arithmetic: 0.21 is a tariff, 21 is a hundredfold slip in the sensor's unit.",
+    "price_dropped_note": "Export not credited is grid export the strings did not make in the same hour — a battery discharging, a second generator behind the meter, a reversed meter sign. It is not PV energy, and it is not a loss either.",
+    "price_tou_caveat": "Annual estimate under a time-varying tariff: weighted by irradiance, not by price — winter has few hours, but expensive ones. Disappears once a full year is on the record.",
     /* i18n-en-end */
   },
   de: {
@@ -556,6 +568,16 @@ const STR = {
     "daypart_afternoon": "Nachmittag",
     "vk_measured": "gemessen", "vk_lower_bound": "Untergrenze",
     "vk_reconstructed": "rekonstruiert",
+    "nerd_price": "Ersparnis — Herkunft",
+    "price_win_today": "heute", "price_win_total": "gesamt",
+    "price_recorded": "aufgezeichnet", "price_configured": "Festpreis",
+    "price_hours": "Stunden mit Preis",
+    "price_import": "⌀ Bezug", "price_export": "⌀ Einspeisung",
+    "price_dropped": "Export ohne Deckung",
+    "price_none_yet": "noch keine Stunde bepreist",
+    "price_note": "Aufgezeichnet und Festpreis summieren sich auf die gelieferte Energie des Fensters. Festpreis ist alles, was kein aufgezeichneter Preis gedeckt hat — Stunden vor Einrichtung des Preissensors, Lücken darin, und die Seite, die dieses Tarifmodell bewertet, wo nur die andere aufgezeichnet war. Die Stundenzahl zählt Stunden mit irgendeinem aufgezeichneten Preis; maßgeblich ist die Energieaufteilung. Die Mittelpreise sind energiegewichtet, nicht arithmetisch: 0,21 ist ein Tarif, 21 ist ein Faktor-100-Fehler in der Sensoreinheit.",
+    "price_dropped_note": "Export ohne Deckung ist Netzexport, den die Stränge in derselben Stunde nicht erzeugt haben — eine Akku-Entladung, ein zweiter Erzeuger hinter dem Zähler, ein falsch vorzeichenbehafteter Zähler. Es ist keine PV-Energie — und kein Verlust.",
+    "price_tou_caveat": "Jahreshochrechnung bei zeitvariablem Tarif: gewichtet nach Einstrahlung, nicht nach Preis — im Winter sind es wenige, aber teure Stunden. Verschwindet, sobald ein volles Jahr aufgezeichnet ist.",
     /* i18n-de-end */
   },
 };
@@ -3201,11 +3223,11 @@ const DAYPARTS = ["morning", "midday", "afternoon"];
 
 class PvsKvTableCard extends PvsBaseCard {
   getCardSize() { return 3; }
-  // Row-based modes (sky_overview, conversion) read entities beyond
+  // Row-based modes (sky_overview, conversion, price) read entities beyond
   // cfg.entity — watch them all, or later rows render stale.
   watchedEntities() {
     const ids = this._config?.entity ? [this._config.entity] : [];
-    for (const r of this._config?.rows ?? []) ids.push(r.sky, r.shading, r.out, r.dc);
+    for (const r of this._config?.rows ?? []) ids.push(r.sky, r.shading, r.out, r.dc, r.entity);
     return ids.filter(Boolean);
   }
 
@@ -3434,6 +3456,66 @@ class PvsKvTableCard extends PvsBaseCard {
             <th>${t(hass, "conv_ev_pairs")}</th></tr>${rows4}</table>
           <div class="kv-note">${t(hass, "conv_ev_note")}</div>`;
       }
+    } else if (mode === "price") {
+      // Where the savings figure's inputs came from, per window. Two
+      // independent optional blocks share the table because they answer the
+      // same question — what the money rests on:
+      //   price.*           only where a price sensor recorded something
+      //   export_dropped_kwh only where the per-hour export cap bit, which
+      //                      has nothing to do with the tariff (a fixed-price
+      //                      plant with a battery has it, and no price block)
+      // Each set of columns therefore appears on its own evidence.
+      const rows5 = (cfg.rows ?? [])
+        .map((r) => ({ name: r.name, id: r.entity, a: hass.states[r.entity]?.attributes }))
+        .filter((r) => r.a);
+      const hasPrice = rows5.some((r) => r.a.price);
+      const hasDropped = rows5.some((r) => r.a.export_dropped_kwh != null);
+      if (!hasPrice && !hasDropped) return empty("price");
+      // The savings sensors carry the site currency; the mean prices are in
+      // the same unit, and naming it is half the plausibility check.
+      const cur = hass.config?.currency || "EUR";
+      const money = (v) => v == null ? "–"
+        : `<span class="pvs-num">${fmtNum(hass, v, 4)}</span> <span class="n">${esc(cur)}/kWh</span>`;
+      const kwh = (v) => `<span class="pvs-num">${fmtNum(hass, v, 2)}</span> <span class="n">kWh</span>`;
+      // An hour can be priced while carrying no energy (a tariff sensor runs
+      // through the night), so the split can be empty with a price block
+      // present — no percentage rather than a division by zero.
+      const share = (v, total) => total > 0
+        ? ` <span class="n">${fmtNum(hass, (v / total) * 100, 0)} %</span>` : "";
+      const priceCells = (r) => {
+        const p = r.a.price;
+        // "not priced yet" is a state of its own, not an empty row
+        if (!p) return `<td class="miss" colspan="5">${t(hass, "price_none_yet")}</td>`;
+        const rec = p.by_basis_kwh?.recorded ?? 0;
+        const conf = p.by_basis_kwh?.configured ?? 0;
+        const tot = rec + conf;
+        return `<td>${kwh(rec)}${share(rec, tot)}</td>
+          <td>${kwh(conf)}${share(conf, tot)}</td>
+          <td><span class="pvs-num">${p.hours_recorded ?? 0}</span> <span class="n">/ ${p.hours ?? 0}</span></td>
+          <td>${money(p.import_per_kwh)}</td>
+          <td>${money(p.export_per_kwh)}</td>`;
+      };
+      const header = `<tr><th></th>
+        ${hasPrice ? `<th>${t(hass, "price_recorded")}</th><th>${t(hass, "price_configured")}</th>
+          <th>${t(hass, "price_hours")}</th><th>${t(hass, "price_import")}</th>
+          <th>${t(hass, "price_export")}</th>` : ""}
+        ${hasDropped ? `<th>${t(hass, "price_dropped")}</th>` : ""}</tr>`;
+      // Deliberately uncoloured: dropped export is a fact about the meter,
+      // not a fault and not a loss.
+      const dropCell = (r) => `<td>${r.a.export_dropped_kwh != null
+        ? kwh(r.a.export_dropped_kwh) : "–"}</td>`;
+      // The caveat belongs to the annual estimate on savings_total. It lives
+      // in the card rather than in a markdown card of its own so its source
+      // stays one click away (design rule 2). The key is always published,
+      // carrying null where it does not apply — test the value, never the
+      // presence.
+      const caveat = rows5.some((r) => r.a.annual_estimate_caveat === "time_of_use");
+      body = `<table>${header}
+        ${rows5.map((r) => `<tr><th class="clickable" data-more-info="${r.id}">${esc(r.name)}</th>
+          ${hasPrice ? priceCells(r) : ""}${hasDropped ? dropCell(r) : ""}</tr>`).join("")}</table>
+        ${hasPrice ? `<div class="kv-note">${t(hass, "price_note")}</div>` : ""}
+        ${hasDropped ? `<div class="kv-note">${t(hass, "price_dropped_note")}</div>` : ""}
+        ${caveat ? `<div class="kv-note">${t(hass, "price_tou_caveat")}</div>` : ""}`;
     } else {
       // generic: dot-path into attributes -> k/v table
       let obj = a;
@@ -3853,6 +3935,30 @@ async function buildViews(hass, config) {
         title: t(lang, "nerd_censoring"), grid_options: { columns: "full" } }
         : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
     ] });
+    // Savings provenance (PV Strings >= 1.22, optional): what the money
+    // rests on — which share of the energy was valued at a recorded price
+    // and which fell back to the fixed tariff, plus grid export the strings
+    // did not make. Both blocks only exist where they have something to say,
+    // so a plant on a fixed tariff with a sane meter never sees this section
+    // at all. Deliberately here and not on the overview: that view is for
+    // reading, not for auditing.
+    const savRows = [
+      ["savings_today", "price_win_today"], ["savings_total", "price_win_total"],
+    ].filter(([key]) => plant.byKey[key])
+      .map(([key, label]) => ({ name: t(lang, label), entity: plant.byKey[key] }));
+    const hasProvenance = savRows.some((r) => {
+      const pa = hass.states[r.entity]?.attributes;
+      return pa?.price || pa?.export_dropped_kwh != null;
+    });
+    if (hasProvenance) {
+      nerdSections.push({ type: "grid", column_span: 2, cards: [
+        heading(t(lang, "nerd_price")),
+        { type: "custom:pvstrings-kv-table",
+          entity: plant.byKey.savings_total ?? plant.byKey.savings_today,
+          mode: "price", title: t(lang, "nerd_price"),
+          grid_options: { columns: "full" }, rows: savRows },
+      ] });
+    }
     // Educational footer: nerds know this, normal users may want to learn
     // it. Three balanced markdown columns under a full-width heading.
     const explBullets = t(lang, "nerd_explain").split("\n- ").map((b, i) => (i ? "- " + b : b));
@@ -3926,7 +4032,7 @@ const CARDS = [
   ["pvstrings-daily", PvsDailyCard, "PV Strings Daily",
     "Day-ahead forecast vs actual production, day by day."],
   ["pvstrings-kv-table", PvsKvTableCard, "PV Strings KV Table",
-    "Diagnostic attribute tables (learning buckets, source bias, collection)."],
+    "Diagnostic attribute tables (learning buckets, source bias, collection, savings provenance)."],
   ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",
     "How far the training has come: weather-bucket evidence and sun-path coverage."],
 ];

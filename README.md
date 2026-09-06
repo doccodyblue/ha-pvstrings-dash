@@ -50,7 +50,8 @@ chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield),
 **Accuracy** (short-term vs day-ahead, with the day-by-day comparison), and
 **Diagnostics** (training maturity, learning buckets, source-bias table,
-collection health, skip reasons). Views follow `hass.language` (German and
+collection health, skip reasons, and — where a price sensor or a battery
+makes it meaningful — what the savings figure rests on). Views follow `hass.language` (German and
 English). The generated YAML is a normal dashboard config — take it over and
 edit it if you want to.
 
@@ -264,9 +265,16 @@ days: 14
 ### `pvstrings-kv-table`
 
 Small diagnostic table renderer the nerd view is built from (learning
-buckets, source-bias matrix, censoring split, skip reasons). Every table
-header links to its source entity. Usable standalone via `mode:` —
-see the strategy-generated YAML for examples.
+buckets, source-bias matrix, censoring split, skip reasons, savings
+provenance). Every table header links to its source entity. Usable standalone
+via `mode:` — see the strategy-generated YAML for examples.
+
+The `price` mode is the one that appears on its own evidence: it shows, per
+window, how much of the energy behind the savings figure was valued at a
+recorded price and how much fell back to the configured tariff, the
+energy-weighted mean prices, and grid export the strings did not make in the
+same hour. Each half only appears where the integration publishes it, so a
+plant on a fixed tariff with a plain meter never sees the table at all.
 
 ### `pvstrings-maturity`
 
@@ -317,6 +325,7 @@ card it meant to include.
 | learned conversion curve (`conversion_learning`) | ≥ 1.21.0 |
 | nowcast card (`nowcast_active`) | ≥ 1.21.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
+| savings provenance (`price.by_basis_kwh`, `export_dropped_kwh`) | ≥ 1.22.0 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not

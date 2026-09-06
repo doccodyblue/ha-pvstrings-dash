@@ -103,6 +103,9 @@
   const sdId = find((s) => s.attributes.strings && typeof s.attributes.strings === "object" && !Array.isArray(s.attributes.strings));
   const collId = find((s) => s.attributes.intervals_written !== undefined);
   const ghiId = find((s) => s.attributes.truth_source !== undefined);
+  // savings provenance: the price block, or the export cap on its own
+  const savProv = statesList.filter((s) => s.attributes.price?.by_basis_kwh
+    || s.attributes.export_dropped_kwh !== undefined);
 
   const cards = [
     ["sky-map", "pvstrings-sky-map", { entity: skyId }],
@@ -120,6 +123,9 @@
     ["kv collector", "pvstrings-kv-table", { entity: collId, mode: "collector", title: "Erfassung" }],
     ["kv conversion_evidence", "pvstrings-kv-table", { entity: collId, mode: "conversion_evidence", title: "Wandlungs-Evidenz" }],
     ["kv skip_reasons", "pvstrings-kv-table", { entity: moId, mode: "skip_reasons", title: "Skip-Gründe" }],
+    ["kv price", "pvstrings-kv-table", { entity: savProv[0]?.entity_id,
+      mode: "price", title: "Ersparnis — Herkunft",
+      rows: savProv.map((s) => ({ name: s.attributes.friendly_name ?? s.entity_id, entity: s.entity_id })) }],
     ["problem panel (broken entity)", "pvstrings-sky-map", { entity: "sensor.does_not_exist" }],
   ];
   const grid = document.getElementById("grid");

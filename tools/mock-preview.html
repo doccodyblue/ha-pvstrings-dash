@@ -33,6 +33,8 @@
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
 <h4>string × daypart (460px container)</h4><div class="narrow" id="sdp"></div>
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
+<h4>savings provenance — time-of-use tariff (820px)</h4><div style="width:820px" id="prov1"></div>
+<h4>savings provenance — fixed tariff, battery export only (820px)</h4><div style="width:820px" id="prov2"></div>
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
 <script type="module">
   import "/pvstrings-dash.js";
@@ -153,6 +155,33 @@
         "Strang 5 CH4 Ost Gartenhaus": { today: { value_kinds: { measured: 10, lower_bound: 0, reconstructed: 0 },
           coverage_mean: 1, curtailed_fraction: 0 } },
       } } },
+    // savings provenance on a time-of-use tariff: today is fully recorded,
+    // the lifetime figure still carries the hours from before the price
+    // sensor existed. The battery discharging at night shows up as export
+    // the strings did not make.
+    "sensor.plant_sav_today": { entity_id: "sensor.plant_sav_today", state: "3.42",
+      attributes: { kwh: 14.8, export_kwh: 4.1, eur_per_kwh: 0.2311,
+        price: { by_basis_kwh: { recorded: 14.8 }, hours: 11, hours_recorded: 11,
+          import_per_kwh: 0.2611, export_per_kwh: 0.0812 },
+        export_dropped_kwh: 0.9,
+        friendly_name: "PV Anlage Ersparnis heute" } },
+    "sensor.plant_sav_total": { entity_id: "sensor.plant_sav_total", state: "1284.60",
+      attributes: { kwh_total: 6120.4, dc_kwh_total: 6503.1, eur_per_kwh: 0.2099,
+        annual_estimate_eur: 1490.2, annual_estimate_caveat: "time_of_use",
+        price: { by_basis_kwh: { recorded: 1204.6, configured: 4915.8 },
+          hours: 9840, hours_recorded: 1806,
+          import_per_kwh: 0.2143, export_per_kwh: 0.0812 },
+        export_dropped_kwh: 61.3,
+        friendly_name: "PV Anlage Ersparnis gesamt" } },
+    // fixed tariff with a battery: no price block anywhere, so the five
+    // tariff columns are gone and only the cap column is left — the other
+    // half of the feature detection
+    "sensor.plant_sav_today_fix": { entity_id: "sensor.plant_sav_today_fix", state: "3.10",
+      attributes: { kwh: 14.8, export_kwh: 4.1, eur_per_kwh: 0.2095,
+        friendly_name: "PV Anlage Ersparnis heute" } },
+    "sensor.plant_sav_total_fix": { entity_id: "sensor.plant_sav_total_fix", state: "1190.20",
+      attributes: { kwh_total: 6120.4, eur_per_kwh: 0.1944, export_dropped_kwh: 61.3,
+        friendly_name: "PV Anlage Ersparnis gesamt" } },
     "sensor.g1_dc": { entity_id: "sensor.g1_dc", state: "2.1",
       attributes: { forecast: dcG1, today_kwh: +g1Dc.toFixed(2), tomorrow_kwh: 4.4,
         strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
@@ -281,6 +310,14 @@
         mode: "log_ratio_string_daypart", title: "Strang × Tagesabschnitt" }],
       ["#cen", "pvstrings-kv-table", { entity: "sensor.plant_sd",
         mode: "censoring", title: "Zensur-Split (heute)" }],
+      ["#prov1", "pvstrings-kv-table", { entity: "sensor.plant_sav_total",
+        mode: "price", title: "Ersparnis — Herkunft",
+        rows: [{ name: "heute", entity: "sensor.plant_sav_today" },
+               { name: "gesamt", entity: "sensor.plant_sav_total" }] }],
+      ["#prov2", "pvstrings-kv-table", { entity: "sensor.plant_sav_total_fix",
+        mode: "price", title: "Ersparnis — Herkunft",
+        rows: [{ name: "heute", entity: "sensor.plant_sav_today_fix" },
+               { name: "gesamt", entity: "sensor.plant_sav_total_fix" }] }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
