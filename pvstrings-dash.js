@@ -14,7 +14,7 @@
  *   UI        problem panel, withheld chip, tooltip, base card class
  *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST / CARD:CURVE
  *   CARD:CHAIN
- *   CARD:DAILY / CARD:KVTABLE
+ *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
  *
@@ -26,7 +26,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.11.0";
+const PVS_VERSION = "0.12.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -92,6 +92,14 @@ const FEATURES = {
   conv_output: {
     test: (a) => a != null && "output_path" in a && "curve_source" in a,
     attr: "output_path & curve_source", since: "1.20.0",
+  },
+  // the 30 d day-ahead sensor gained the per-hour fold of its own scored
+  // pairs (>= 1.23). Deliberately tested on the key, not on a non-empty
+  // list: the profile is published before the accuracy state is, so an
+  // empty list would be a state to draw, not a missing feature.
+  hourly_profile: {
+    test: (a) => Array.isArray(a?.hourly_profile),
+    attr: "hourly_profile", since: "1.23.0",
   },
   sky_cells: {
     test: (a) => Array.isArray(a?.cells),
@@ -358,6 +366,16 @@ const STR = {
     "price_note": "Recorded and fixed price add up to the window's delivered energy. Fixed price is whatever no recorded price covered — hours from before the price sensor existed, gaps in it, and the side this tariff model values where only the other one was recorded. The hour count is hours carrying any recorded price, so the energy split is the authoritative one. The mean prices are energy-weighted, not arithmetic: 0.21 is a tariff, 21 is a hundredfold slip in the sensor's unit.",
     "price_dropped_note": "Export not credited is grid export the strings did not make in the same hour — a battery discharging, a second generator behind the meter, a reversed meter sign. It is not PV energy, and it is not a loss either.",
     "price_tou_caveat": "Annual estimate under a time-varying tariff: weighted by irradiance, not by price — winter has few hours, but expensive ones. Disappears once a full year is on the record.",
+    // hourly profile of the day-ahead error (PV Strings >= 1.23)
+    "hp_title": "Day-ahead error by hour",
+    "hp_forecast": "announced", "hp_actual": "arrived",
+    "hp_deviation": "deviation", "hp_days": "days",
+    "hp_days_scored_one": "1 day scored", "hp_days_scored_many": "{n} days scored",
+    "hp_thin_one": "thin basis — 1 day", "hp_thin_many": "thin basis — {n} days",
+    "hp_thin_hours_one": "1 hour on a thin basis", "hp_thin_hours_many": "{n} hours on a thin basis",
+    "hp_too_high": "announced too high", "hp_too_low": "announced too low",
+    "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
+    "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
     /* i18n-en-end */
   },
   de: {
@@ -578,6 +596,15 @@ const STR = {
     "price_note": "Aufgezeichnet und Festpreis summieren sich auf die gelieferte Energie des Fensters. Festpreis ist alles, was kein aufgezeichneter Preis gedeckt hat — Stunden vor Einrichtung des Preissensors, Lücken darin, und die Seite, die dieses Tarifmodell bewertet, wo nur die andere aufgezeichnet war. Die Stundenzahl zählt Stunden mit irgendeinem aufgezeichneten Preis; maßgeblich ist die Energieaufteilung. Die Mittelpreise sind energiegewichtet, nicht arithmetisch: 0,21 ist ein Tarif, 21 ist ein Faktor-100-Fehler in der Sensoreinheit.",
     "price_dropped_note": "Export ohne Deckung ist Netzexport, den die Stränge in derselben Stunde nicht erzeugt haben — eine Akku-Entladung, ein zweiter Erzeuger hinter dem Zähler, ein falsch vorzeichenbehafteter Zähler. Es ist keine PV-Energie — und kein Verlust.",
     "price_tou_caveat": "Jahreshochrechnung bei zeitvariablem Tarif: gewichtet nach Einstrahlung, nicht nach Preis — im Winter sind es wenige, aber teure Stunden. Verschwindet, sobald ein volles Jahr aufgezeichnet ist.",
+    "hp_title": "Day-Ahead-Fehler nach Stunde",
+    "hp_forecast": "angesagt", "hp_actual": "gekommen",
+    "hp_deviation": "Abweichung", "hp_days": "Tage",
+    "hp_days_scored_one": "1 Tag gescort", "hp_days_scored_many": "{n} Tage gescort",
+    "hp_thin_one": "dünne Basis — 1 Tag", "hp_thin_many": "dünne Basis — {n} Tage",
+    "hp_thin_hours_one": "1 Stunde auf dünner Basis", "hp_thin_hours_many": "{n} Stunden auf dünner Basis",
+    "hp_too_high": "zu hoch angesagt", "hp_too_low": "zu niedrig angesagt",
+    "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
+    "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
     /* i18n-de-end */
   },
 };
@@ -594,6 +621,13 @@ function t(hass, key, vars) {
     s = s.replaceAll(`{${k}}`, String(v));
   }
   return s;
+}
+
+// Singular/plural for the few counted strings that can legitimately be 1
+// (a single thin hour, a plant one day old). German and English agree on
+// where the split is, so one suffix pair covers both dictionaries.
+function tn(hass, key, n, vars) {
+  return t(hass, `${key}_${n === 1 ? "one" : "many"}`, { n, ...vars });
 }
 
 /* ============================ SECTION: THEME ============================= */
@@ -3218,6 +3252,187 @@ const DAILY_CSS = `
 
 // Generic attribute renderer for the nerd view: every table header links to
 // its source entity (rule 2 — Markdown tables cannot do that).
+/* ======================= SECTION: CARD:HOURPROFILE ======================= */
+
+// Where in the day the day-ahead error sits. The same scored pairs the
+// 30-day figure is built from, folded by local hour by the integration
+// (>= 1.23) — a daily WMAPE cannot tell a morning that runs hot from an
+// afternoon that runs cold, and for anyone sizing a battery reserve for
+// their own window that is the entire question.
+//
+// Two scales, because one would hide the other: the bars carry the energy
+// behind an hour, the strip below carries the deviation the reader copies
+// into their window.
+//
+// The percentage is (announced - arrived) / announced, matching the
+// integration README's template. That denominator is not a style choice:
+// the margin is applied to TOMORROW'S ANNOUNCEMENT, so it has to be a share
+// of an announcement. Dividing by what arrived yields a different number
+// for the same hour and answers a question nobody asked.
+class PvsHourProfileCard extends PvsBaseCard {
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${HP_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const st = hass.states[cfg.entity];
+    if (!st) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
+    const need = requireFeatures(st, ["hourly_profile"]);
+    if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
+
+    const a = st.attributes;
+    const title = cfg.title ?? t(hass, "hp_title");
+    const head = (extraChip = "") => `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
+      ${a.days_scored != null ? `<span class="pvs-chip clickable" data-more-info="${cfg.entity}">${tn(hass, "hp_days_scored", a.days_scored)}</span>` : ""}
+      ${extraChip}
+    </div>`;
+
+    // Rows worth drawing. Two kinds get dropped, for two different reasons:
+    // a 0/0 night row is an aged leftover from before the integration's
+    // night fix and measures nothing; everything else stays, including a
+    // dawn hour with no announcement and a trace of yield — that one has a
+    // pair but no percentage, which the strip handles below.
+    const rows = (a.hourly_profile ?? [])
+      .filter((r) => r && Number.isFinite(r.hour)
+        && ((r.forecast_kwh ?? 0) > 0 || (r.actual_kwh ?? 0) > 0))
+      .sort((x, y) => x.hour - y.hour);
+    // The accuracy state can still be unknown while the profile has rows —
+    // the profile is not gated on the three-day threshold, so the drawing
+    // must not be gated on the state either.
+    if (!rows.length) return card(head() + withheldHTML(t(hass, "hp_no_hours")));
+
+    const n = rows.length;
+    const PAD_L = 36, PAD_R = 8, PAD_T = 8, PH = 104;
+    // The SVG is stretched to the card's width, which scales the text with
+    // it — a five-hour profile in a narrow world would render its labels
+    // twice the size of an eighteen-hour one. Widen the slots instead.
+    const SW = Math.max(26, Math.floor((420 - PAD_L - PAD_R) / n));
+    const GAP = 16, STRIP_H = 56, PAD_B = 18;
+    const W = PAD_L + n * SW + PAD_R;
+    const STRIP_Y = PAD_T + PH + GAP;
+    const MID = STRIP_Y + STRIP_H / 2;
+    const H = STRIP_Y + STRIP_H + PAD_B;
+
+    let peak = 0;
+    for (const r of rows) peak = Math.max(peak, r.forecast_kwh ?? 0, r.actual_kwh ?? 0);
+    const yMax = niceMax(peak * 1.05);
+    const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
+
+    // Deviation, per the README formula. An hour with nothing announced has
+    // no share to be wrong by — null, not zero, and not drawn.
+    const devOf = (r) => (r.forecast_kwh ?? 0) > 0
+      ? ((r.forecast_kwh - (r.actual_kwh ?? 0)) / r.forecast_kwh) * 100 : null;
+    const devs = rows.map(devOf).filter((d) => d != null).map(Math.abs);
+    // Symmetric, so "too high" and "too low" stay comparable at a glance;
+    // floored so a near-perfect month does not magnify its own noise.
+    const devMax = niceMax(Math.max(10, ...devs));
+    const dOf = (d) => MID - (d / devMax) * (STRIP_H / 2);
+
+    // Dimming only reads as dimming next to something bright. On a fresh
+    // plant every hour is thin, so the chip says it in words — otherwise
+    // "thin" and "normal" would look identical (design rule 1).
+    const thinCount = rows.filter((r) => (r.days ?? 0) < 3).length;
+
+    const bw = (SW - 7) / 2;
+    let bars = "", strip = "", hits = "", labels = "";
+    rows.forEach((r, i) => {
+      const x0 = PAD_L + i * SW;
+      // A thin hour is dimmed, never dropped: "not much evidence" and "no
+      // evidence" must not look alike (design rule 1).
+      const thin = (r.days ?? 0) < 3;
+      const op = thin ? ' opacity="0.5"' : "";
+      if (n <= 14 || i % 2 === 0) {
+        labels += `<text class="axis" x="${x0 + SW / 2}" y="${H - 5}" text-anchor="middle">${String(r.hour).padStart(2, "0")}</text>`;
+      }
+      const f = r.forecast_kwh ?? 0, ac = r.actual_kwh ?? 0;
+      if (f > 0) {
+        bars += `<rect x="${x0 + 2}" y="${yOf(f)}" width="${bw}" height="${PAD_T + PH - yOf(f)}"
+          fill="var(--pvs-model)" rx="1"${op}/>`;
+      }
+      if (ac > 0) {
+        bars += `<rect x="${x0 + 3 + bw}" y="${yOf(ac)}" width="${bw}" height="${PAD_T + PH - yOf(ac)}"
+          fill="var(--pvs-measure)" rx="1"${op}/>`;
+      }
+      const dev = devOf(r);
+      if (dev != null) {
+        // Colour carries the direction in the palette the whole dashboard
+        // reads by: blue is the model, so a bar above the line is the model
+        // having promised too much; orange is measurement, so a bar below
+        // is reality having beaten it.
+        const y = dOf(Math.max(-devMax, Math.min(devMax, dev)));
+        strip += `<rect x="${x0 + 2}" y="${Math.min(MID, y)}" width="${SW - 4}"
+          height="${Math.max(1, Math.abs(MID - y))}"
+          fill="${dev >= 0 ? "var(--pvs-model)" : "var(--pvs-measure)"}" opacity="${thin ? 0.3 : 0.7}" rx="1"/>`;
+      }
+      const tip = { h: r.hour, f, a: ac, dev, days: r.days ?? null, thin };
+      hits += `<rect class="hit" x="${x0}" y="${PAD_T}" width="${SW}" height="${H - PAD_T - PAD_B}"
+        fill="transparent" data-hp='${esc(JSON.stringify(tip))}'/>`;
+    });
+
+    let grid = "";
+    for (const v of [0, yMax / 2, yMax]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v, 1)}</text>`;
+    }
+    grid += `<line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, devMax, 0)}</text>
+      <text class="axis" x="${PAD_L - 5}" y="${MID + 3}" text-anchor="end">0</text>
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">−${fmtNum(hass, devMax, 0)}</text>`;
+
+    card(`${head(thinCount
+      ? `<span class="pvs-chip">${tn(hass, "hp_thin_hours", thinCount)}</span>` : "")}
+      <div class="fc-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}${bars}${strip}${labels}${hits}
+      </svg></div>
+      <div class="pvs-legend">
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "hp_forecast")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "hp_actual")}</span>
+        <span class="it" style="margin-left:4px">${t(hass, "hp_deviation")}:</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.7"></span>${t(hass, "hp_too_high")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-measure);opacity:0.7"></span>${t(hass, "hp_too_low")}</span>
+      </div>
+      <div class="fc-note">${t(hass, "hp_note")}</div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-hp]",
+      content: (el) => {
+        const hass = this._hass;
+        const c = JSON.parse(el.getAttribute("data-hp"));
+        return `<div class="h">${String(c.h).padStart(2, "0")}:00–${String((c.h + 1) % 24).padStart(2, "0")}:00</div>
+          <div class="r"><span class="k">${t(hass, "hp_forecast")}</span><span class="v">${fmtKwh(hass, c.f, 2)}</span></div>
+          <div class="r"><span class="k">${t(hass, "hp_actual")}</span><span class="v">${fmtKwh(hass, c.a, 2)}</span></div>
+          ${c.dev != null ? `<div class="r"><span class="k">${t(hass, "hp_deviation")}</span>
+            <span class="v">${fmtSigned(hass, c.dev, 1)} %</span></div>` : ""}
+          ${c.days != null ? `<div class="r"><span class="k">${t(hass, "hp_days")}</span><span class="v">${c.days}</span></div>` : ""}
+          ${c.thin ? `<div class="pvs-sub">${tn(hass, "hp_thin", c.days ?? 0)}</div>` : ""}`;
+      },
+    });
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-hour-profile-editor"); }
+  static getStubConfig(hass, entities) {
+    const guess = (entities ?? []).find((e) =>
+      Array.isArray(hass.states[e]?.attributes?.hourly_profile));
+    return { entity: guess ?? "" };
+  }
+}
+
+const HP_CSS = `
+  .fc-wrap svg { width: 100%; height: auto; display: block; }
+`;
+
 const WEATHERS = ["clear", "partly_cloudy", "overcast", "rain"];
 const DAYPARTS = ["morning", "midday", "afternoon"];
 
@@ -3846,6 +4061,19 @@ async function buildViews(hass, config) {
         rows: strings.map((s) => ({ name: s.name, sky: s.byKey.string_sky_map }))
           .filter((r) => r.sky) },
     ] });
+    // Where in the day the day-ahead error sits (PV Strings >= 1.23):
+    // right after the maturity bars, because both answer "how far can I
+    // trust this yet" — one over the training, one over the clock. The
+    // attribute rides on the 30 d day-ahead sensor and is published before
+    // that sensor has a state, so the gate is the attribute, never the state.
+    const da30 = plant.byKey.wmape_day_ahead_30d;
+    if (da30 && Array.isArray(hass.states[da30]?.attributes?.hourly_profile)) {
+      nerdSections.push({ type: "grid", column_span: 2, cards: [
+        heading(t(lang, "hp_title")),
+        { type: "custom:pvstrings-hour-profile", entity: da30,
+          grid_options: { columns: "full" } },
+      ] });
+    }
     if (mo) {
       nerdSections.push({ type: "grid", cards: [
         heading(t(lang, "nerd_learning")),
@@ -4011,6 +4239,8 @@ const EDITORS = {
     { name: "title", selector: { text: {} } }],
   "pvstrings-daily-editor": [ENTITY_SCHEMA,
     { name: "days", selector: { number: { min: 3, max: 60, mode: "box" } } }],
+  "pvstrings-hour-profile-editor": [ENTITY_SCHEMA,
+    { name: "title", selector: { text: {} } }],
 };
 for (const [tag, schema] of Object.entries(EDITORS)) {
   if (!customElements.get(tag)) customElements.define(tag, makeEditor(schema));
@@ -4031,6 +4261,8 @@ const CARDS = [
     "What each model layer did to the raw physics for one hour, beside the measurement."],
   ["pvstrings-daily", PvsDailyCard, "PV Strings Daily",
     "Day-ahead forecast vs actual production, day by day."],
+  ["pvstrings-hour-profile", PvsHourProfileCard, "PV Strings Hourly Profile",
+    "Where in the day the day-ahead error sits: announced vs arrived per hour, with the deviation a window plan can use."],
   ["pvstrings-kv-table", PvsKvTableCard, "PV Strings KV Table",
     "Diagnostic attribute tables (learning buckets, source bias, collection, savings provenance)."],
   ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",

@@ -49,9 +49,10 @@ builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield),
 **Accuracy** (short-term vs day-ahead, with the day-by-day comparison), and
-**Diagnostics** (training maturity, learning buckets, source-bias table,
-collection health, skip reasons, and — where a price sensor or a battery
-makes it meaningful — what the savings figure rests on). Views follow `hass.language` (German and
+**Diagnostics** (training maturity, the day-ahead error by hour, learning
+buckets, source-bias table, collection health, skip reasons, and — where a
+price sensor or a battery makes it meaningful — what the savings figure rests
+on). Views follow `hass.language` (German and
 English). The generated YAML is a normal dashboard config — take it over and
 edit it if you want to.
 
@@ -262,6 +263,42 @@ days: 14
 
 ![Daily card](docs/img/daily-dark.png)
 
+### `pvstrings-hour-profile`
+
+Where in the day the day-ahead error sits — the same scored pairs the 30-day
+figure is built from, folded by local hour of day. A daily score cannot tell a
+morning that runs hot from an afternoon that runs cold, and for anyone sizing a
+battery reserve for their own window, that is the whole question.
+
+```yaml
+type: custom:pvstrings-hour-profile
+entity: sensor.<plant>_day_ahead_accuracy_30_days   # German: ..._genauigkeit_tag_voraus_30_tage
+title: Day-ahead error by hour    # optional
+```
+
+![Hourly day-ahead profile](docs/img/hour-profile-dark.png)
+
+Two scales, because one would hide the other. The bars carry the energy behind
+an hour — announced in blue, arrived in orange. The strip below carries the
+deviation as a share of the announcement, `(announced − arrived) / announced`,
+which is the number that transfers: it applies as a discount on tomorrow's
+window sum, and the integration README shows the same arithmetic as a template.
+Above the line means announced too high, so the strip is blue there and orange
+below, in the palette every card reads by.
+
+Two things it deliberately gets right:
+
+- **An hour with nothing announced carries no percentage.** Dawn hours where
+  the forecast said zero and a trace of yield arrived would divide by zero; they
+  keep their bars and skip the strip, because there is no share to be wrong by.
+- **A thin hour is dimmed, never dropped**, and when every hour is thin — a
+  plant two days old — a chip says so in words. Dimming only reads as dimming
+  next to something bright.
+
+The card draws from the first complete day. The accuracy sensor itself stays
+`unknown` until three days are in, so the state and the profile disagree by
+design; the card follows the profile.
+
 ### `pvstrings-kv-table`
 
 Small diagnostic table renderer the nerd view is built from (learning
@@ -326,6 +363,7 @@ card it meant to include.
 | nowcast card (`nowcast_active`) | ≥ 1.21.0 |
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 | savings provenance (`price.by_basis_kwh`, `export_dropped_kwh`) | ≥ 1.22.0 |
+| hourly day-ahead profile (`hourly_profile`) | ≥ 1.23.0 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not

@@ -35,6 +35,8 @@
 <h4>censoring (820px ≈ double-width section)</h4><div style="width:820px" id="cen"></div>
 <h4>savings provenance — time-of-use tariff (820px)</h4><div style="width:820px" id="prov1"></div>
 <h4>savings provenance — fixed tariff, battery export only (820px)</h4><div style="width:820px" id="prov2"></div>
+<h4>hourly day-ahead profile (820px)</h4><div style="width:820px" id="hp1"></div>
+<h4>hourly profile — two days in, accuracy state still unknown (460px)</h4><div class="narrow" id="hp2"></div>
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
 <script type="module">
   import "/pvstrings-dash.js";
@@ -182,6 +184,44 @@
     "sensor.plant_sav_total_fix": { entity_id: "sensor.plant_sav_total_fix", state: "1190.20",
       attributes: { kwh_total: 6120.4, eur_per_kwh: 0.1944, export_dropped_kwh: 61.3,
         friendly_name: "PV Anlage Ersparnis gesamt" } },
+    // hourly day-ahead profile, shaped like the live one: aged 0/0 night
+    // rows, dawn hours announced at zero with a trace of yield, thin edge
+    // hours, morning too high and afternoon too low
+    "sensor.plant_da30": { entity_id: "sensor.plant_da30", state: "19.52",
+      attributes: { days_scored: 28, friendly_name: "PV Anlage Genauigkeit Tag voraus 30 Tage",
+        hourly_profile: [
+          { hour: 0, forecast_kwh: 0, actual_kwh: 0, days: 10 },
+          { hour: 4, forecast_kwh: 0, actual_kwh: 0, days: 10 },
+          { hour: 5, forecast_kwh: 0, actual_kwh: 0.002, days: 9 },
+          { hour: 6, forecast_kwh: 0.934, actual_kwh: 0.552, days: 16 },
+          { hour: 7, forecast_kwh: 6.371, actual_kwh: 4.316, days: 27 },
+          { hour: 8, forecast_kwh: 13.545, actual_kwh: 11.282, days: 27 },
+          { hour: 9, forecast_kwh: 23.612, actual_kwh: 21.062, days: 27 },
+          { hour: 10, forecast_kwh: 32.4, actual_kwh: 28.558, days: 27 },
+          { hour: 11, forecast_kwh: 40.075, actual_kwh: 33.427, days: 27 },
+          { hour: 12, forecast_kwh: 44.379, actual_kwh: 41.354, days: 27 },
+          { hour: 13, forecast_kwh: 45.165, actual_kwh: 42.587, days: 27 },
+          { hour: 14, forecast_kwh: 44.606, actual_kwh: 49.884, days: 27 },
+          { hour: 15, forecast_kwh: 46.064, actual_kwh: 50.12, days: 28 },
+          { hour: 16, forecast_kwh: 38.345, actual_kwh: 37.055, days: 28 },
+          { hour: 17, forecast_kwh: 26.831, actual_kwh: 26.451, days: 28 },
+          { hour: 18, forecast_kwh: 15.011, actual_kwh: 15.153, days: 28 },
+          { hour: 19, forecast_kwh: 5.511, actual_kwh: 5.118, days: 28 },
+          { hour: 20, forecast_kwh: 0.548, actual_kwh: 0.521, days: 16 },
+          { hour: 21, forecast_kwh: 0, actual_kwh: 0.004, days: 9 },
+          { hour: 23, forecast_kwh: 0, actual_kwh: 0, days: 10 },
+        ] } },
+    // fresh installation: two days in, the accuracy state is still unknown
+    // while the profile already has rows — the case that must not read "nothing"
+    "sensor.plant_da30_fresh": { entity_id: "sensor.plant_da30_fresh", state: "unknown",
+      attributes: { friendly_name: "PV Anlage Genauigkeit Tag voraus 30 Tage",
+        hourly_profile: [
+          { hour: 8, forecast_kwh: 1.02, actual_kwh: 0.71, days: 2 },
+          { hour: 9, forecast_kwh: 1.84, actual_kwh: 1.55, days: 2 },
+          { hour: 10, forecast_kwh: 2.41, actual_kwh: 2.62, days: 2 },
+          { hour: 11, forecast_kwh: 2.88, actual_kwh: 3.30, days: 1 },
+          { hour: 12, forecast_kwh: 3.02, actual_kwh: 2.95, days: 1 },
+        ] } },
     "sensor.g1_dc": { entity_id: "sensor.g1_dc", state: "2.1",
       attributes: { forecast: dcG1, today_kwh: +g1Dc.toFixed(2), tomorrow_kwh: 4.4,
         strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
@@ -314,6 +354,8 @@
         mode: "price", title: "Ersparnis — Herkunft",
         rows: [{ name: "heute", entity: "sensor.plant_sav_today" },
                { name: "gesamt", entity: "sensor.plant_sav_total" }] }],
+      ["#hp1", "pvstrings-hour-profile", { entity: "sensor.plant_da30" }],
+      ["#hp2", "pvstrings-hour-profile", { entity: "sensor.plant_da30_fresh" }],
       ["#prov2", "pvstrings-kv-table", { entity: "sensor.plant_sav_total_fix",
         mode: "price", title: "Ersparnis — Herkunft",
         rows: [{ name: "heute", entity: "sensor.plant_sav_today_fix" },
