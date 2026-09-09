@@ -18,6 +18,7 @@ const specs = [
   ["#bias",   480, "bias-dark.png"],
   ["#learn",  480, "factors-dark.png"],
   ["#thermal", 560, "thermal-dark.png"],
+  ["#acc",    940, "accuracy-dark.png"],
 ];
 
 const b = await chromium.launch();

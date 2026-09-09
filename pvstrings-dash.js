@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.13.0";
+const PVS_VERSION = "0.14.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -332,10 +332,7 @@ const STR = {
     "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
     "conv_ev_silent": "collecting nothing",
     "conv_ev_note": "Usable = pairs cleared by the censoring check; it always trails the total by up to an hour, which is the gate working. A 0 / 0 row is configured but collecting nothing. A few hundred usable pairs per stage and sunny day is the realistic order of magnitude; there is no progress bar because no threshold defines \"enough\".",
-    "s_nowcast": "Short-term accuracy (continuously updated)",
-    "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
-    "acc_note": "The **short-term** figure may correct itself during the day (and since the nowcast it also carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
     "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by, shown as a percentage — +5 % means \"reality delivered 5 % more than computed\" (factor 1.05, on hover). n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer has no such threshold: since integration 1.20.1 every bucket is published from its first observation and pulled towards 1.00 by how little evidence stands behind it — half strength at around ten observations, near-neutral below that. A factor close to 1.00 with a small n is thin, not switched off.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case, and then the reason is the interesting figure. Not to be confused with *nowcast* in the source-bias table, which says where the bias is learned from.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
@@ -387,6 +384,18 @@ const STR = {
     "hp_too_high": "announced too high", "hp_too_low": "announced too low",
     // ---- nerd dashboard 0.13: status strip, factors as ±%, heatmap, help ----
     "s_status": "Status",
+    // accuracy card (0.14): seven tiles and two paragraphs become one card
+    "acc_title": "Accuracy",
+    "acc_short": "Short-term",
+    "acc_short_note": "continuously updated",
+    "acc_dayahead": "Day-ahead",
+    "acc_dayahead_note": "frozen the evening before",
+    "acc_7d": "WMAPE 7 days", "acc_30d": "WMAPE 30 days",
+    "acc_bias7": "bias 7 days", "acc_bias30": "bias 30 days",
+    "acc_yesterday": "yesterday",
+    "acc_window": "{d} of {n} days",
+    "help_accuracy": "**Short-term** may correct itself during the day (and, since the nowcast, carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts under each figure say how far along it is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours. **Bias** is the signed mean: positive, the forecast ran high.",
+    "help_daily": "**Day by day**: what was announced the evening before against what arrived. Blue is the day-ahead figure as issued at the issue hour, orange the metered yield; a hatched stub means no forecast was issued that evening, a hatched top means the day is still running. The chips switch between the plant and its strings — the same chart, one at a time.",
     "health_title": "Collection & learn cycle",
     "health_coverage": "coverage",
     "health_write_errors": "write errors",
@@ -638,10 +647,7 @@ const STR = {
     "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
     "conv_ev_silent": "sammelt nichts",
     "conv_ev_note": "Verwertbar = von der Zensurprüfung freigegebene Messpaare; hinkt der Gesamtzahl stets bis zu einer Stunde hinterher — so arbeitet die Leitplanke. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag; einen Fortschrittsbalken gibt es nicht, weil kein Schwellwert „genug“ definiert.",
-    "s_nowcast": "Kurzfrist-Treffsicherheit (laufend aktualisiert)",
-    "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
-    "acc_note": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
     "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird, als Prozent gezeigt — +5 % heißt „real kam 5 % mehr als gerechnet\" (Faktor 1,05, beim Überfahren). n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer kennt keine solche Schwelle: Seit Integration 1.20.1 wird jeder Bucket ab der ersten Beobachtung veröffentlicht und um so stärker gegen 1,00 gezogen, je dünner die Evidenz ist — halbe Stärke bei etwa zehn Beobachtungen, darunter fast neutral. Ein Faktor nahe 1,00 mit kleinem n ist dünn, nicht abgeschaltet.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall, und dann ist der Grund die interessantere Zahl. Nicht zu verwechseln mit *nowcast* in der Source-Bias-Tabelle, das sagt, woher der Bias gelernt wird.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
@@ -688,6 +694,17 @@ const STR = {
     "hp_thin_hours_one": "1 Stunde auf dünner Basis", "hp_thin_hours_many": "{n} Stunden auf dünner Basis",
     "hp_too_high": "zu hoch angesagt", "hp_too_low": "zu niedrig angesagt",
     "s_status": "Status",
+    "acc_title": "Genauigkeit",
+    "acc_short": "Kurzfrist",
+    "acc_short_note": "laufend aktualisiert",
+    "acc_dayahead": "Day-Ahead",
+    "acc_dayahead_note": "am Vorabend eingefroren",
+    "acc_7d": "WMAPE 7 Tage", "acc_30d": "WMAPE 30 Tage",
+    "acc_bias7": "Bias 7 Tage", "acc_bias30": "Bias 30 Tage",
+    "acc_yesterday": "gestern",
+    "acc_window": "{d} von {n} Tagen",
+    "help_accuracy": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unter den Zahlen zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden. **Bias** ist der vorzeichenbehaftete Mittelwert: positiv heißt, die Prognose lag zu hoch.",
+    "help_daily": "**Tag für Tag**: was am Vorabend angesagt war gegen das, was kam. Blau ist der Day-Ahead-Wert, wie er zur Ausgabestunde stand, Orange der gemessene Ertrag; ein schraffierter Stummel heißt, an dem Abend wurde keine Prognose ausgegeben, eine schraffierte Spitze, der Tag läuft noch. Die Chips schalten zwischen Anlage und Strängen um — dasselbe Diagramm, eines nach dem anderen.",
     "health_title": "Erfassung & Lernzyklus",
     "health_coverage": "Abdeckung",
     "health_write_errors": "Schreibfehler",
@@ -3294,14 +3311,27 @@ class PvsDailyCard extends PvsBaseCard {
   setConfig(config) {
     this._data = null;
     this._problem = null;
+    this._sel = 0;
+    this._cache = new Map();
     super.setConfig(config ?? {});
   }
   getCardSize() { return 4; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
   _shouldUpdate(prev) { return !prev; } // recorder data; no per-state refresh
 
+  // `series` (plant first, then the strings) makes one card of six: the
+  // chips in the head switch, loaded data is kept per entity. Without it the
+  // card is what it was — one entity, `days`.
+  _current() {
+    const cfg = this._config ?? {};
+    const s = Array.isArray(cfg.series) && cfg.series.length ? cfg.series : null;
+    if (!s) return { entity: cfg.entity, days: cfg.days ?? 14, title: cfg.title };
+    const cur = s[Math.max(0, Math.min(s.length - 1, this._sel))];
+    return { entity: cur.entity, days: cur.days ?? cfg.days ?? 14, title: cur.title ?? cur.name };
+  }
+
   async _load() {
-    const hass = this._hass, cfg = this._config;
+    const hass = this._hass, cfg = { ...this._config, ...this._current() };
     if (this._loading) return;
     this._loading = true;
     const token = ++this._renderToken;
@@ -3382,27 +3412,33 @@ class PvsDailyCard extends PvsBaseCard {
       this._problem = { reason: String(e) };
     } finally {
       this._loading = false;
+      this._cache.set(cfg.entity, { data: this._data, problem: this._problem });
       if (token === this._renderToken) this._render();
     }
   }
 
   _render() {
-    const hass = this._hass, cfg = this._config;
-    if (!hass || !cfg) return;
+    const hass = this._hass, cfg = { ...this._config, ...this._current() };
+    if (!hass || !this._config) return;
     const card = (inner) => {
       this.shadowRoot.innerHTML = `<style>${BASE_CSS}${DAILY_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
       this._wire();
     };
     if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
     if (!hass.states[cfg.entity]) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
-    const title = cfg.title ?? `${hass.states[cfg.entity].attributes.friendly_name?.split(" Prognose")[0]?.split(" Forecast")[0] ?? ""} — ${t(hass, "daily_title")}`;
+    const series = Array.isArray(this._config.series) && this._config.series.length ? this._config.series : null;
+    const title = series
+      ? (this._config.title ?? t(hass, "daily_title"))
+      : cfg.title ?? `${hass.states[cfg.entity].attributes.friendly_name?.split(" Prognose")[0]?.split(" Forecast")[0] ?? ""} — ${t(hass, "daily_title")}`;
+    const selector = series ? `<div class="d-sel">${series.map((s, i) =>
+      `<span class="pvs-chip${i === this._sel ? " on" : ""}" data-sel="${i}">${esc(s.name ?? s.entity)}</span>`).join("")}</div>` : "";
+    const headHTML = (chips = "") => `<div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${chips}${helpChip("daily")}</div>${selector}`;
 
     if (!this._data && !this._problem) {
       this._load();
-      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span></div>
-        <div class="pvs-sub">…</div>`);
+      return card(`${headHTML()}<div class="pvs-sub">…</div>`);
     }
-    if (this._problem) return card(problemHTML(hass, this._problem));
+    if (this._problem) return card(headHTML() + problemHTML(hass, this._problem));
 
     const { rows, issueHour, tomorrowId, producedId } = this._data;
     let maxV = 0;
@@ -3460,11 +3496,8 @@ class PvsDailyCard extends PvsBaseCard {
     </div>`;
 
     card(`
-      <div class="pvs-head">
-        <span class="pvs-title">${esc(title)}</span>
-        <span class="pvs-chip clickable" data-more-info="${tomorrowId}" title="${esc(t(hass, "more_info"))}: ${tomorrowId}">${t(hass, "daily_soll").split(" ")[0]} ↗</span>
-        <span class="pvs-chip clickable" data-more-info="${producedId}" title="${esc(t(hass, "more_info"))}: ${producedId}">${t(hass, "daily_ist")} ↗</span>
-      </div>
+      ${headHTML(`<span class="pvs-chip clickable" data-more-info="${tomorrowId}" title="${esc(t(hass, "more_info"))}: ${tomorrowId}">${t(hass, "daily_soll").split(" ")[0]} ↗</span>
+        <span class="pvs-chip clickable" data-more-info="${producedId}" title="${esc(t(hass, "more_info"))}: ${producedId}">${t(hass, "daily_ist")} ↗</span>`)}
       <div class="d-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         <defs>${hatchPattern("pvs-hatch-d")}${hatchPattern("pvs-hatch-dl")}</defs>
         ${yaxis}${bars}${hits}
@@ -3476,6 +3509,14 @@ class PvsDailyCard extends PvsBaseCard {
     this._wireMoreInfo();
     if (this._wired) return;
     this._wired = true;
+    this.shadowRoot.addEventListener("click", (ev) => {
+      const c = ev.target.closest?.("[data-sel]");
+      if (!c) return;
+      this._sel = parseInt(c.getAttribute("data-sel"), 10);
+      const hit = this._cache.get(this._current().entity);
+      this._data = hit?.data ?? null; this._problem = hit?.problem ?? null;
+      this._render();
+    });
     wireTooltip(this, {
       selector: ".hit",
       content: (el) => {
@@ -3503,6 +3544,98 @@ class PvsDailyCard extends PvsBaseCard {
 const DAILY_CSS = `
   .d-wrap svg { width: 100%; height: auto; display: block; }
   .hit { cursor: crosshair; }
+  .d-sel { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+  .d-sel .pvs-chip { cursor: pointer; border-color: var(--pvs-hairline); }
+  .d-sel .pvs-chip.on { color: var(--primary-text-color); border-color: var(--pvs-model);
+    background: color-mix(in srgb, var(--pvs-model) 14%, transparent); }
+`;
+
+/* ========================= SECTION: CARD:ACCURACY ======================== */
+
+// The seven accuracy figures as one card: short-term on one line, day-ahead
+// on the other, each with how full its window is — that fill decides whether
+// the two may be compared at all, so it stands beside the numbers instead of
+// in a paragraph above them. The paragraphs live behind the "?".
+const ACC_KEYS = {
+  short: ["wmape_7d", "wmape_30d", "bias_7d"],
+  dayahead: ["wmape_day_ahead_7d", "wmape_day_ahead_30d", "bias_day_ahead_30d", "deviation_yesterday"],
+};
+const ACC_LABEL = {
+  wmape_7d: "acc_7d", wmape_30d: "acc_30d", bias_7d: "acc_bias7",
+  wmape_day_ahead_7d: "acc_7d", wmape_day_ahead_30d: "acc_30d",
+  bias_day_ahead_30d: "acc_bias30", deviation_yesterday: "acc_yesterday",
+};
+
+class PvsAccuracyCard extends PvsBaseCard {
+  getCardSize() { return 3; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  watchedEntities() { return Object.values(this._config?.entities ?? {}).filter(Boolean); }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const ents = cfg.entities ?? {};
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${ACC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wireMoreInfo();
+      if (!this._wired) { this._wired = true; wireTooltip(this); }
+    };
+    if (!Object.values(ents).some(Boolean)) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+
+    const stat = (key) => {
+      const id = ents[key];
+      if (!id) return "";
+      const st = hass.states[id];
+      const label = t(hass, ACC_LABEL[key]);
+      if (!st) return `<div class="acc-stat"><div class="l">${label}</div><div class="v"><span class="pvs-sub">⚠︎ ${esc(id)}</span></div></div>`;
+      const v = parseFloat(st.state);
+      const unit = st.attributes.unit_of_measurement ?? "";
+      const known = Number.isFinite(v);
+      // a withheld figure says how far off it is (rule 1): days scored
+      // against the window the key names
+      const win = key.includes("30d") ? 30 : key.includes("7d") ? 7 : null;
+      // the sensor counts partial days at both ends, so "8 of 7" happens;
+      // a full window is full
+      const days = st.attributes.days_scored == null ? null
+        : win ? Math.min(win, st.attributes.days_scored) : st.attributes.days_scored;
+      const sub = win && days != null ? `<span class="n">${t(hass, "acc_window", { d: days, n: win })}</span>` : "";
+      const digits = unit === "%" ? 1 : 2;
+      return `<div class="acc-stat clickable" data-more-info="${id}">
+        <div class="l">${label}</div>
+        <div class="v">${known
+          ? `<span class="pvs-num">${unit === "%" && !key.startsWith("wmape") ? fmtSigned(hass, v, digits) : fmtNum(hass, v, digits)}</span><span class="u">${esc(unit)}</span>`
+          : withheldHTML(days != null && win ? t(hass, "acc_window", { d: days, n: win }) : t(hass, "not_available"))}</div>
+        ${known ? sub : ""}
+      </div>`;
+    };
+    const row = (label, keys, note) => {
+      const cells = keys.map(stat).join("");
+      if (!cells) return "";
+      return `<div class="acc-row"><div class="acc-lab"><div>${label}</div><div class="pvs-sub">${note}</div></div>${cells}</div>`;
+    };
+    card(`<div class="pvs-head">
+        <span class="pvs-title">${esc(cfg.title ?? t(hass, "acc_title"))}</span>
+        ${helpChip("accuracy")}
+      </div>
+      ${row(t(hass, "acc_short"), ACC_KEYS.short, t(hass, "acc_short_note"))}
+      ${row(t(hass, "acc_dayahead"), ACC_KEYS.dayahead, t(hass, "acc_dayahead_note"))}`);
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entities: {} }; }
+}
+
+const ACC_CSS = `
+  .acc-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) repeat(auto-fit, minmax(96px, 1fr));
+    gap: 10px 14px; align-items: end; padding: 10px 0; border-top: 1px solid var(--pvs-hairline); }
+  .acc-row:first-of-type { border-top: none; }
+  .acc-lab { font-size: 13px; font-weight: 600; align-self: center; }
+  .acc-lab .pvs-sub { font-weight: 400; margin-top: 2px; }
+  .acc-stat .l { font-size: 11px; color: var(--secondary-text-color); margin-bottom: 2px; white-space: nowrap; }
+  .acc-stat .v .pvs-num { font-size: 20px; font-weight: 600; }
+  .acc-stat .v .u { font-size: 11px; color: var(--secondary-text-color); margin-left: 3px; }
+  .acc-stat .n { font-size: 10.5px; color: var(--secondary-text-color); display: block; margin-top: 1px; }
+  .acc-stat.clickable { cursor: pointer; }
 `;
 
 /* ======================== SECTION: CARD:KVTABLE ========================== */
@@ -4748,28 +4881,39 @@ async function buildViews(hass, config) {
     });
 
     // ---- Genauigkeit ----
+    // One card of figures, one chart with a selector: two paragraphs, seven
+    // tiles and six charts took four screens to say what fits on one. The
+    // paragraphs sit behind the card's "?"; `diagnostics: full` lays the
+    // six charts out side by side again.
+    const fullAcc = config?.diagnostics === "full";
+    const accKeys = [...ACC_KEYS.short, ...ACC_KEYS.dayahead];
+    const accEntities = Object.fromEntries(accKeys.filter((k) => plant.byKey[k]).map((k) => [k, plant.byKey[k]]));
+    const dailySeries = [
+      ...(plant.byKey.forecast_today ? [{ name: plant.name, entity: plant.byKey.forecast_today, days: 14 }] : []),
+      ...strings.filter((s) => s.byKey.string_forecast_today)
+        .map((s) => ({ name: s.name, entity: s.byKey.string_forecast_today, days: 7 })),
+    ];
     const accSections = [
-      // Two paragraphs (nowcast-vs-day-ahead, WMAPE) as two columns — one
-      // markdown card would fill only half the spanned section's grid.
-      { type: "grid", column_span: 2, cards: t(lang, "acc_note").split("\n\n").map(mdCard) },
-      { type: "grid", cards: [
-        heading(t(lang, "s_nowcast"), "subtitle"),
-        P("wmape_7d"), P("wmape_30d"), P("bias_7d"),
-      ] },
-      { type: "grid", cards: [
-        heading(t(lang, "s_dayahead"), "subtitle"),
-        P("wmape_day_ahead_7d"), P("wmape_day_ahead_30d"),
-        P("bias_day_ahead_30d"), P("deviation_yesterday"),
-      ] },
       { type: "grid", column_span: 2, cards: [
-        heading(t(lang, "s_daily"), "subtitle"),
-        plant.byKey.forecast_today
-          ? { type: "custom:pvstrings-daily", entity: plant.byKey.forecast_today, days: 14 }
-          : mdCard(t(lang, "missing_card", { key: "forecast_today" })),
-        ...strings.map((s) => s.byKey.string_forecast_today
-          ? { type: "custom:pvstrings-daily", entity: s.byKey.string_forecast_today, days: 7, title: s.name }
-          : mdCard(t(lang, "missing_card", { key: "string_forecast_today" }))),
+        Object.keys(accEntities).length
+          ? { type: "custom:pvstrings-accuracy", entities: accEntities, grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "wmape_30d" })),
       ] },
+      fullAcc
+        ? { type: "grid", column_span: 2, cards: [
+            heading(t(lang, "s_daily"), "subtitle"),
+            plant.byKey.forecast_today
+              ? { type: "custom:pvstrings-daily", entity: plant.byKey.forecast_today, days: 14 }
+              : mdCard(t(lang, "missing_card", { key: "forecast_today" })),
+            ...strings.map((s) => s.byKey.string_forecast_today
+              ? { type: "custom:pvstrings-daily", entity: s.byKey.string_forecast_today, days: 7, title: s.name }
+              : mdCard(t(lang, "missing_card", { key: "string_forecast_today" }))),
+          ] }
+        : { type: "grid", column_span: 2, cards: [
+            dailySeries.length
+              ? { type: "custom:pvstrings-daily", series: dailySeries, grid_options: { columns: "full" } }
+              : mdCard(t(lang, "missing_card", { key: "forecast_today" })),
+          ] },
     ];
     views.push({
       title: prefix + t(lang, "v_accuracy"), path: `${slug}accuracy`,
@@ -5022,6 +5166,8 @@ const CARDS = [
     "Diagnostic tables (correction factors as ±%, source-bias heatmap, sky overview, conversion, savings provenance)."],
   ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",
     "How far the training has come: weather-bucket evidence and sun-path coverage."],
+  ["pvstrings-accuracy", PvsAccuracyCard, "PV Strings Accuracy",
+    "Short-term and day-ahead accuracy on two lines, each with how full its window is."],
   ["pvstrings-health", PvsHealthCard, "PV Strings Health",
     "Collection and learn cycle as one row of chips; tables open only where a figure deviates."],
   ["pvstrings-thermal", PvsThermalCard, "PV Strings Cell Temperature",
@@ -5033,7 +5179,7 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
       type: tag, name, description,
-      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal"].includes(tag),
+      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }

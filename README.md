@@ -50,8 +50,9 @@ That is the entire configuration. The strategy reads the entity registry and
 builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
-temperature), **Accuracy** (short-term vs day-ahead, with the day-by-day
-comparison), and the **Nerd Dashboard** (status first, numbers on demand:
+temperature), **Accuracy** (one card of figures — short-term and day-ahead,
+each with how full its window is — and one day-by-day chart that switches
+between the plant and its strings), and the **Nerd Dashboard** (status first, numbers on demand:
 training maturity and a one-line collection health strip, the day-ahead error
 by hour, the correction factors as percentages, the source bias as a heatmap,
 the sky-map overview, the modelled cell temperature, the conversion layer, and
@@ -72,7 +73,8 @@ strategy:
 ```
 
 restores every raw table, the evidence count on every cell and the explainer
-footer.
+footer — and on the Accuracy view lays the six day-by-day charts out side by
+side again instead of behind a selector.
 
 ---
 
@@ -283,7 +285,47 @@ entity: sensor.<plant>_forecast_today    # any sensor of the target device
 days: 14
 ```
 
+One card for the plant and every string, switched by chips in the head —
+the same chart, one at a time, each entity's data kept once loaded. This is
+what the strategy generates; six charts side by side was honest but four
+screens tall.
+
+```yaml
+type: custom:pvstrings-daily
+series:
+  - name: Plant
+    entity: sensor.<plant>_forecast_today
+    days: 14
+  - name: East
+    entity: sensor.<string>_forecast_today
+    days: 7
+```
+
 ![Daily card](docs/img/daily-dark.png)
+
+### `pvstrings-accuracy`
+
+The seven accuracy figures as one card: short-term on one line, day-ahead on
+the other, each figure with how full its window is — that fill decides
+whether the two lines may be compared at all, so it stands under the number
+rather than in a paragraph above it. A figure the integration still withholds
+shows its day count instead (rule 1); every figure links to its sensor. The
+paragraphs that used to open the view — short-term vs day-ahead, what WMAPE
+means — sit behind the card's **?**.
+
+![Accuracy card](docs/img/accuracy-dark.png)
+
+```yaml
+type: custom:pvstrings-accuracy
+entities:
+  wmape_7d: sensor.<plant>_wmape_7d
+  wmape_30d: sensor.<plant>_wmape_30d
+  bias_7d: sensor.<plant>_bias_7d
+  wmape_day_ahead_7d: sensor.<plant>_day_ahead_accuracy_7d
+  wmape_day_ahead_30d: sensor.<plant>_day_ahead_accuracy_30d
+  bias_day_ahead_30d: sensor.<plant>_day_ahead_bias_30d
+  deviation_yesterday: sensor.<plant>_deviation_yesterday
+```
 
 ### `pvstrings-hour-profile`
 

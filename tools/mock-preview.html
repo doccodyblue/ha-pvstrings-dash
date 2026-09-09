@@ -43,6 +43,7 @@
 <h4>source-bias heatmap (460px)</h4><div class="narrow" id="bias"></div>
 <h4>correction factors — strings (460px)</h4><div class="narrow" id="learn"></div>
 <h4>cell temperature (560px)</h4><div style="width:560px" id="thermal"></div>
+<h4>accuracy — one card, day-ahead window still filling (940px)</h4><div class="wideb" id="acc"></div>
 <script type="module">
   import "/pvstrings-dash.js";
   if (new URLSearchParams(location.search).get("dark") === "1") document.body.classList.add("dark");
@@ -306,6 +307,14 @@
     "sensor.s2_cell": { entity_id: "sensor.s2_cell", state: "36.8",
       attributes: { unit_of_measurement: "°C", device_class: "temperature", thermal_factor: 0.9528,
         air_temp_c: 19.6, wind_ms: 3.9, heat_loss_today_kwh: 0.187, friendly_name: "Strang West Zelltemperatur" } },
+    // accuracy figures: short-term windows full, day-ahead still filling
+    "sensor.acc_w7": { entity_id: "sensor.acc_w7", state: "13.3", attributes: { unit_of_measurement: "%", days_scored: 8, friendly_name: "WMAPE 7 Tage" } },
+    "sensor.acc_w30": { entity_id: "sensor.acc_w30", state: "14.1", attributes: { unit_of_measurement: "%", days_scored: 31, friendly_name: "WMAPE 30 Tage" } },
+    "sensor.acc_b7": { entity_id: "sensor.acc_b7", state: "-0.005", attributes: { unit_of_measurement: "kWh", friendly_name: "Bias 7 Tage" } },
+    "sensor.acc_da7": { entity_id: "sensor.acc_da7", state: "19.7", attributes: { unit_of_measurement: "%", days_scored: 7, friendly_name: "Fehler Tag voraus 7 Tage" } },
+    "sensor.acc_da30": { entity_id: "sensor.acc_da30", state: "unknown", attributes: { unit_of_measurement: "%", days_scored: 12, friendly_name: "Fehler Tag voraus 30 Tage" } },
+    "sensor.acc_dab30": { entity_id: "sensor.acc_dab30", state: "0.649", attributes: { unit_of_measurement: "kWh", days_scored: 12, friendly_name: "Bias Tag voraus 30 Tage" } },
+    "sensor.acc_dev": { entity_id: "sensor.acc_dev", state: "-5.18", attributes: { unit_of_measurement: "%", friendly_name: "Abweichung gestern" } },
     "sensor.g1_dc": { entity_id: "sensor.g1_dc", state: "2.1",
       attributes: { forecast: dcG1, today_kwh: +g1Dc.toFixed(2), tomorrow_kwh: 4.4,
         strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
@@ -457,6 +466,9 @@
       ["#thermal", "pvstrings-thermal", { rows: [
         { name: "Strang Ost", forecast: "sensor.s1_fc", cell: "sensor.s1_cell" },
         { name: "Strang West", forecast: "sensor.s2_fc", cell: "sensor.s2_cell" }] }],
+      ["#acc", "pvstrings-accuracy", { entities: { wmape_7d: "sensor.acc_w7", wmape_30d: "sensor.acc_w30",
+        bias_7d: "sensor.acc_b7", wmape_day_ahead_7d: "sensor.acc_da7", wmape_day_ahead_30d: "sensor.acc_da30",
+        bias_day_ahead_30d: "sensor.acc_dab30", deviation_yesterday: "sensor.acc_dev" } }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
