@@ -38,6 +38,11 @@
 <h4>hourly day-ahead profile (820px)</h4><div style="width:820px" id="hp1"></div>
 <h4>hourly profile — two days in, accuracy state still unknown (460px)</h4><div class="narrow" id="hp2"></div>
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
+<h4>health — healthy plant, one line (940px)</h4><div class="wideb" id="health"></div>
+<h4>health — deviating: skips, censoring, write errors (940px)</h4><div class="wideb" id="health2"></div>
+<h4>source-bias heatmap (460px)</h4><div class="narrow" id="bias"></div>
+<h4>correction factors — strings (460px)</h4><div class="narrow" id="learn"></div>
+<h4>cell temperature (560px)</h4><div style="width:560px" id="thermal"></div>
 <script type="module">
   import "/pvstrings-dash.js";
   if (new URLSearchParams(location.search).get("dark") === "1") document.body.classList.add("dark");
@@ -110,6 +115,38 @@
         season: az === 90 && el === 10 ? "ascending" : null });
     }
   }
+  // source bias (local hour x horizon), shaped like a real plant: the source
+  // runs hot in the morning and cold in the afternoon, worse the further out;
+  // the edge hours rest on a fraction of an observation
+  const mkBias = () => {
+    const out = {};
+    for (let h = 6; h <= 20; h++) {
+      const day = Math.sin((h - 6) / 14 * Math.PI);
+      const shape = h < 13 ? -0.14 * day : h < 19 ? 0.45 * day : 0;
+      const n = Math.max(0.2, 15 * day);
+      [["0-6h", 0.15], ["6-24h", 0.7], ["24-48h", 1.0], ["48h+", 1.05]].forEach(([hz, k]) => {
+        out[`${String(h).padStart(2, "0")}|${hz}`] = { factor: +(1 + shape * k).toFixed(4), n_eff: +n.toFixed(1) };
+      });
+    }
+    return out;
+  };
+  // thermal (v1.24): hourly chain rows with the heat share, two mount types —
+  // the flat insulated string runs hotter at the same air
+  const mkThermal = (hot) => {
+    const rows = [];
+    for (let h = 0; h < 24; h++) {
+      const dt = new Date(d0 + h * 3600e3).toISOString();
+      const p = +(bell(h) * (hot ? 0.45 : 0.55)).toFixed(3);
+      const air = +(14 + 6 * Math.max(0, Math.sin((h - 6) / 15 * Math.PI))).toFixed(1);
+      const wind = +(2.5 + 2 * Math.sin(h / 24 * Math.PI)).toFixed(1);
+      const lit = bell(h) > 0.02;
+      const cell = lit ? +(air + bell(h) * (hot ? 9.5 : 6) - wind * 0.4).toFixed(1) : null;
+      const thermal = lit ? +(1 - (cell - 25) * 0.004).toFixed(4) : 1.0;
+      rows.push({ datetime: dt, potential_kwh: p, unshaded_kwh: p, source_bias: 0.98,
+        shading: 1.0, model: 1.0, physics_kwh: p, thermal, cell_temp_c: cell, air_temp_c: air, wind_ms: wind });
+    }
+    return rows;
+  };
   const states = {
     "sensor.s1_sky": { entity_id: "sensor.s1_sky", state: String(cells.length),
       attributes: { cells, level: 1.04, fit_method: "differential", friendly_name: "Strang Ost Himmelskarte" } },
@@ -140,7 +177,24 @@
         // thin bucket: published from the first learn cycle, shrunk near 1
         "s1|midday": { factor: 1.002, n_eff: 1.4 },
         // s1|afternoon absent: never a usable observation there, and it says so
-      } } } },
+        "s2|morning": { factor: 1.062, n_eff: 17.9 },
+        "s2|midday": { factor: 1.031, n_eff: 16.4 },
+        "s2|afternoon": { factor: 0.912, n_eff: 12.1 },
+      }, string: {
+        s1: { factor: 0.984, n_eff: 21.9 },
+        s2: { factor: 1.118, n_eff: 21.3 },
+      } },
+      ghi_bias: mkBias(),
+      // a healthy cycle: five hours in, nothing skipped
+      last_learn_cycle: { hours_materialised: 5, observations_used: 5, observations_skipped: 0,
+        bias_observations: 147, shading_observations: 60, ghi_hours_rejected: 0,
+        censored_hours: 0, reconstructed_intervals: 0, skipped_because: {} } } },
+    // a learn cycle with something to say: skips with their reasons, one
+    // censored hour — the case the health strip opens its tables for
+    "sensor.plant_mo3": { entity_id: "sensor.plant_mo3", state: "61.2",
+      attributes: { friendly_name: "PV Anlage Modell-Beobachtungen", log_ratio: { plant: {} },
+        last_learn_cycle: { hours_materialised: 6, observations_used: 3, observations_skipped: 3,
+          censored_hours: 1, skipped_because: { no_weather_row: 2, ghi_hour_rejected: 1 } } } },
     // a mature learning state: all buckets near the ceiling (green zone)
     "sensor.plant_mo2": { entity_id: "sensor.plant_mo2", state: "241.8",
       attributes: { friendly_name: "PV Anlage Modell-Beobachtungen (reif)", log_ratio: { plant:
@@ -222,6 +276,36 @@
           { hour: 11, forecast_kwh: 2.88, actual_kwh: 3.30, days: 1 },
           { hour: 12, forecast_kwh: 3.02, actual_kwh: 2.95, days: 1 },
         ] } },
+    // collector health: the healthy plant, and one with a story to tell
+    "sensor.plant_coll": { entity_id: "sensor.plant_coll", state: "99",
+      attributes: { unit_of_measurement: "%", intervals_written: 2175, events_seen: 179185,
+        write_errors: 0, watchdog_ticks: 4357, last_flush_duration_ms: 7.25, last_error: null,
+        coverage_last: { s1: 0.998, s2: 1.0 }, weather_ok: true, weather_error: null,
+        friendly_name: "PV Anlage Erfassungsabdeckung" } },
+    "sensor.plant_coll_bad": { entity_id: "sensor.plant_coll_bad", state: "71",
+      attributes: { unit_of_measurement: "%", intervals_written: 1402, events_seen: 98211,
+        write_errors: 3, watchdog_ticks: 4357, last_flush_duration_ms: 212.4,
+        last_error: "OSError: [Errno 28] No space left on device",
+        coverage_last: { s1: 0.62, s2: 0.98 }, weather_ok: false, weather_error: "timeout after 30 s",
+        friendly_name: "PV Anlage Erfassungsabdeckung" } },
+    // strings detail with nothing to report: every interval measured
+    "sensor.plant_sd_ok": { entity_id: "sensor.plant_sd_ok", state: "2",
+      attributes: { friendly_name: "PV Anlage Strang-Detail", strings: {
+        "Strang Ost": { today: { intervals: 91, value_kinds: { measured: 91 }, coverage_mean: 0.99, curtailed_fraction: 0 } },
+        "Strang West": { today: { intervals: 91, value_kinds: { measured: 91 }, coverage_mean: 0.99, curtailed_fraction: 0 } },
+      } } },
+    // thermal (v1.24): string forecasts with the heat share, and the cell
+    // temperature sensors that carry the running hour and today's sum
+    "sensor.s1_fc": { entity_id: "sensor.s1_fc", state: "6.1",
+      attributes: { forecast: mkThermal(false), friendly_name: "Strang Ost Prognose heute" } },
+    "sensor.s2_fc": { entity_id: "sensor.s2_fc", state: "4.9",
+      attributes: { forecast: mkThermal(true), friendly_name: "Strang West Prognose heute" } },
+    "sensor.s1_cell": { entity_id: "sensor.s1_cell", state: "31.4",
+      attributes: { unit_of_measurement: "°C", device_class: "temperature", thermal_factor: 0.9744,
+        air_temp_c: 19.6, wind_ms: 3.9, heat_loss_today_kwh: 0.112, friendly_name: "Strang Ost Zelltemperatur" } },
+    "sensor.s2_cell": { entity_id: "sensor.s2_cell", state: "36.8",
+      attributes: { unit_of_measurement: "°C", device_class: "temperature", thermal_factor: 0.9528,
+        air_temp_c: 19.6, wind_ms: 3.9, heat_loss_today_kwh: 0.187, friendly_name: "Strang West Zelltemperatur" } },
     "sensor.g1_dc": { entity_id: "sensor.g1_dc", state: "2.1",
       attributes: { forecast: dcG1, today_kwh: +g1Dc.toFixed(2), tomorrow_kwh: 4.4,
         strings: ["Strang Ost", "Strang West"], friendly_name: "Netz Restprognose heute" } },
@@ -247,12 +331,14 @@
         forecast_error_wm2: -141.5, nowcast_active: true, nowcast_reason: null,
         nowcast_kt: 0.82, nowcast_weight_now: 0.64, nowcast_halflife_min: 31,
         nowcast_sky: "broken", nowcast_spread: 0.061, nowcast_intervals: 3,
-        nowcast_trust: 0.8, friendly_name: "PV Anlage Einstrahlung Prognose" } },
+        nowcast_trust: 0.8, station_air_share_today: { temperature: 1.0, wind: 0.97 },
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
     // the live state on Andy's plant right after a restart
     "sensor.ghi_off": { entity_id: "sensor.ghi_off", state: "49",
       attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
         forecast_error_wm2: -141.5, nowcast_active: false,
-        nowcast_reason: "thin_window", friendly_name: "PV Anlage Einstrahlung Prognose" } },
+        nowcast_reason: "thin_window", station_air_share_today: null,
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
     "sensor.g3_ac": { entity_id: "sensor.g3_ac", state: "0.9",
       attributes: { forecast: acG1, today_kwh: 4.2, tomorrow_kwh: 3.6,
         output_path: "direct", curve_source: "datasheet", curve_prior: "datasheet",
@@ -360,6 +446,17 @@
         mode: "price", title: "Ersparnis — Herkunft",
         rows: [{ name: "heute", entity: "sensor.plant_sav_today_fix" },
                { name: "gesamt", entity: "sensor.plant_sav_total_fix" }] }],
+      ["#health", "pvstrings-health", { entity: "sensor.plant_coll", model_entity: "sensor.plant_mo",
+        detail_entity: "sensor.plant_sd_ok", ghi_entity: "sensor.ghi_on" }],
+      ["#health2", "pvstrings-health", { entity: "sensor.plant_coll_bad", model_entity: "sensor.plant_mo3",
+        detail_entity: "sensor.plant_sd", ghi_entity: "sensor.ghi_off" }],
+      ["#bias", "pvstrings-kv-table", { entity: "sensor.plant_mo", mode: "ghi_bias",
+        title: "Source-Bias nach Stunde × Horizont", truth_entity: "sensor.ghi_on" }],
+      ["#learn", "pvstrings-kv-table", { entity: "sensor.plant_mo", mode: "log_ratio_string_all",
+        title: "Stränge: Offset und Tagesabschnitt" }],
+      ["#thermal", "pvstrings-thermal", { rows: [
+        { name: "Strang Ost", forecast: "sensor.s1_fc", cell: "sensor.s1_cell" },
+        { name: "Strang West", forecast: "sensor.s2_fc", cell: "sensor.s2_cell" }] }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",

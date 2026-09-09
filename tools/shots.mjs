@@ -13,6 +13,11 @@ const specs = [
   ["#nc1",    480, "nowcast-dark.png"],
   ["#matn",   480, "maturity-dark.png"],
   ["#hp1",    840, "hour-profile-dark.png"],
+  ["#health", 940, "health-dark.png"],
+  ["#health2", 940, "health-deviating-dark.png"],
+  ["#bias",   480, "bias-dark.png"],
+  ["#learn",  480, "factors-dark.png"],
+  ["#thermal", 560, "thermal-dark.png"],
 ];
 
 const b = await chromium.launch();

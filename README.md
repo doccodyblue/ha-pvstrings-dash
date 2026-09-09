@@ -1,5 +1,7 @@
 # PV Strings — Dashboard
 
+![PV Strings Dashboard](docs/img/banner.jpeg)
+
 Cards and a zero-configuration dashboard strategy for the
 [PV Strings](https://github.com/doccodyblue/ha-pvstrings) integration.
 
@@ -47,14 +49,30 @@ strategy:
 That is the entire configuration. The strategy reads the entity registry and
 builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
-section per string: forecast line chart, sky map, shading, yield),
-**Accuracy** (short-term vs day-ahead, with the day-by-day comparison), and
-**Diagnostics** (training maturity, the day-ahead error by hour, learning
-buckets, source-bias table, collection health, skip reasons, and — where a
-price sensor or a battery makes it meaningful — what the savings figure rests
-on). Views follow `hass.language` (German and
-English). The generated YAML is a normal dashboard config — take it over and
-edit it if you want to.
+section per string: forecast line chart, sky map, shading, yield, cell
+temperature), **Accuracy** (short-term vs day-ahead, with the day-by-day
+comparison), and the **Nerd Dashboard** (status first, numbers on demand:
+training maturity and a one-line collection health strip, the day-ahead error
+by hour, the correction factors as percentages, the source bias as a heatmap,
+the sky-map overview, the modelled cell temperature, the conversion layer, and
+— where a price sensor or a battery makes it meaningful — what the savings
+figure rests on). Every card on it carries a **?** with the paragraph that
+explains its numbers. Views follow `hass.language` (German and English). The
+generated YAML is a normal dashboard config — take it over and edit it if you
+want to.
+
+The Nerd Dashboard folds tables away where they would only say "healthy": the
+skip reasons, the censoring split and the per-string coverage appear when a
+figure deviates, and not before. For debugging, the raw view is one line away:
+
+```yaml
+strategy:
+  type: custom:pvstrings
+  diagnostics: full
+```
+
+restores every raw table, the evidence count on every cell and the explainer
+footer.
 
 ---
 
@@ -225,8 +243,12 @@ crossed.
 What each layer did to the raw physics for one hour: physics → × sky map →
 × per-string model → published, with the measurement beside it. The source
 bias is shown as context, not as a link — it was applied upstream and is
-already inside the physics figure. The card also verifies the multiplication
-it displays and complains loudly if the invariant does not hold.
+already inside the physics figure. So is the heat share (PV Strings ≥ 1.24):
+a second italic line names the hour's thermal factor with the modelled cell
+temperature, air and wind behind it, and says that it is already inside the
+physics figure — multiplying it in again would be exactly the mistake the
+integration has a test against. The card also verifies the multiplication it
+displays and complains loudly if the invariant does not hold.
 
 ```yaml
 type: custom:pvstrings-chain
@@ -301,10 +323,27 @@ design; the card follows the profile.
 
 ### `pvstrings-kv-table`
 
-Small diagnostic table renderer the nerd view is built from (learning
-buckets, source-bias matrix, censoring split, skip reasons, savings
-provenance). Every table header links to its source entity. Usable standalone
-via `mode:` — see the strategy-generated YAML for examples.
+Small diagnostic table renderer the Nerd Dashboard is built from. Every
+table header links to its source entity. Usable standalone via `mode:` — see
+the strategy-generated YAML for examples.
+
+The learning modes (`log_ratio_plant`, `log_ratio_string_all`) print each
+learned factor as the percentage it means — **+7 %** reads, 1.068 has to be
+converted first — and put the raw factor with its evidence into the hover.
+The evidence count stays printed in the cell only while it is thin, or with
+`detail: true`; on a mature plant ninety copies of "n 21.8" said nothing the
+maturity bar had not already said.
+
+![Correction factors per string](docs/img/factors-dark.png)
+
+`ghi_bias` draws the source bias by local hour and forecast horizon as a
+heatmap in the palette the whole dashboard reads by: blue where the weather
+source announced more than arrived (the forecast is scaled down), orange where
+it announced too little. Cells resting on thin evidence are hatched and faded.
+Sixty numbers hid the one thing the table exists to show — *where* in the day
+and at *which* horizon the source runs hot or cold; colour shows it at a glance.
+
+![Source bias heatmap](docs/img/bias-dark.png)
 
 The `price` mode is the one that appears on its own evidence: it shows, per
 window, how much of the energy behind the savings figure was valued at a
@@ -335,6 +374,110 @@ rows:
 ```
 
 ![Maturity card](docs/img/maturity-dark.png)
+
+### `pvstrings-health`
+
+Collection and learn cycle as one row of chips. Four tables used to say
+"healthy" in thirty numbers; here every figure is a chip that links to its
+source entity, and a table opens only where a figure deviates — per-string
+coverage when a string falls under 95 %, the skip reasons when the last learn
+cycle skipped anything, the censoring split when an hour was a lower bound,
+reconstructed or curtailed. On a healthy plant the card is one line.
+
+![Health strip, healthy plant](docs/img/health-dark.png)
+
+![Health strip with something to say](docs/img/health-deviating-dark.png)
+
+The chips state numbers, never verdicts: "0 skipped" and "no learn cycle
+recorded yet" are different chips (grey, not green), and so is a cycle that
+found no new hour to learn from. With PV Strings ≥ 1.24 a *station air* chip
+shows the share of today's daylight intervals for which the configured
+temperature and wind sensors delivered a value — the check that measured air
+actually reaches the physics.
+
+```yaml
+type: custom:pvstrings-health
+entity: sensor.<plant>_collection_coverage
+model_entity: sensor.<plant>_model_observations   # learn cycle, skip reasons
+detail_entity: sensor.<plant>_strings             # censoring split
+ghi_entity: sensor.<plant>_irradiance_forecast    # station air share
+detail: false                                     # true: every table, always
+```
+
+### `pvstrings-thermal`
+
+The modelled cell temperature over the day, one line per string, the air as a
+thin dashed line — the distance between the two is irradiance and wind. A
+dotted line marks the 25 °C the factor is measured against. Below the chart,
+what the heat costs: the running hour's effect and today's sum, from the cell
+temperature sensor PV Strings ≥ 1.24 publishes per string. The chip in the
+head is the plant's share today, energy-weighted over the strings (Σ physics /
+Σ physics ÷ thermal — never a mean of factors).
+
+![Cell temperature card](docs/img/thermal-dark.png)
+
+Modelled, not measured, and the card says so: the Sandia cell-temperature
+model for each mount type, fed with the forecast's air temperature, wind and
+plane irradiance. A flat, insulated mount runs visibly hotter than an open
+rack at the same air. The share is already inside the physics figure of the
+forecast chain — the chain card shows it as context, in the same italic line
+as the source bias, never as a fourth factor.
+
+```yaml
+type: custom:pvstrings-thermal
+rows:
+  - name: East
+    forecast: sensor.<string>_forecast_today      # chain rows carry thermal
+    cell: sensor.<string>_cell_temperature        # optional: table row
+```
+
+---
+
+## Reading the Nerd Dashboard
+
+Every card carries a **?** with this in short. The longer version:
+
+- **Correction factors**: the physics forecast is multiplied by them — +7 %
+  means reality delivered 7 % more than computed. The plant learns separately
+  per weather class and time of day; *never seen* means this weather has not
+  occurred at that time yet, which is itself a finding. Per string, an offset
+  and a daypart layer sit on top; since integration 1.20.1 every bucket is
+  published from its first observation and pulled towards 0 % by how little
+  evidence stands behind it — half strength at about ten observations. A
+  factor near 0 % with a small n is thin, not switched off.
+- **Source bias**: the weather source's systematic error per local hour and
+  forecast horizon, as a correction on irradiance. *Measured* means learned
+  against a real sensor; *nowcast* only against the source's own short-horizon
+  run — a much weaker claim.
+- **Sky maps**: *level* is the string's clear-view yield relative to physics.
+  Where strings share enough epochs the map is fitted against the sibling
+  strings (*differential*); a single string fits *absolutely* and has no
+  level. On a differential map each cell's loss is the clear-day loss; at
+  runtime the integration scales it by the direct-light share, so an overcast
+  day loses almost nothing.
+- **Nowcast**: the forecast reacting to your own irradiance sensor — the
+  measured clearness of the last quarter hour blended into the coming
+  intervals, fading back to the provider's forecast with a half-life that
+  depends on how broken the sky is. Inactive at night and without a sensor is
+  the normal case; then the reason is the interesting figure. Not the same
+  word as *nowcast* in the source-bias table.
+- **Collection**: coverage is the share of 5-minute intervals actually
+  captured, counted over daylight hours only. *Lower bound* marks hours where
+  the inverter was curtailed — real yield would have been higher. **Skip
+  reasons** are what the learn cycle deliberately did not learn from; on a
+  plant learning nothing, that list is the entire diagnosis.
+- **Training maturity**: the weather bar is the evidence held across all
+  weather × daypart buckets, relative to the most a bucket can hold — 100 %
+  means "as learned as it gets", not "finished". The shading bar is the share
+  of the year's sun path each string has observed; it grows no faster than
+  the calendar.
+- **Cell temperature**: modelled per string from the forecast's air, wind and
+  plane irradiance. Cells above 25 °C lose output, below they gain; the effect
+  is already inside the physics figure.
+- **Conversion**: AC is energy behind the inverter, capped at its AC rating
+  when clipping applies but never at regulatory limits; battery charge is DC
+  into the storage — the two are never added. *Unconverted* means no curve
+  configured, not a measured 0 % loss.
 
 ---
 

@@ -14,7 +14,8 @@
  *   UI        problem panel, withheld chip, tooltip, base card class
  *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST / CARD:CURVE
  *   CARD:CHAIN
- *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE
+ *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE / CARD:MATURITY
+ *   CARD:HEALTH / CARD:THERMAL
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
  *
@@ -26,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.12.0";
+const PVS_VERSION = "0.13.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -51,6 +52,8 @@ const STRING_KEYS = [
   "string_sky_map", "string_shading_now", "string_forecast_today",
   "string_forecast_remaining", "string_forecast_tomorrow",
   "string_potential_now", "string_produced_today",
+  // modelled cell temperature (>= 1.24): diagnostic, unknown at night
+  "string_cell_temperature",
 ];
 const GROUP_KEYS = ["group_forecast_remaining",
   // conversion layer (>= 1.20): direct groups publish _ac, storage groups
@@ -100,6 +103,18 @@ const FEATURES = {
   hourly_profile: {
     test: (a) => Array.isArray(a?.hourly_profile),
     attr: "hourly_profile", since: "1.23.0",
+  },
+  // the string chain rows gained the heat share (>= 1.24): thermal is NOT
+  // a fourth factor — it is already inside physics_kwh and only says how
+  // much of it is heat. Tested on any row, because night rows carry 1.0.
+  thermal: {
+    test: (a) => a?.forecast?.[0]?.thermal !== undefined,
+    attr: "forecast[].thermal", since: "1.24.0",
+  },
+  // the collector sensor's counters — the health strip reads them all
+  collector: {
+    test: (a) => a != null && "intervals_written" in a && "write_errors" in a,
+    attr: "intervals_written & write_errors", since: "1.8.0",
   },
   sky_cells: {
     test: (a) => Array.isArray(a?.cells),
@@ -292,7 +307,7 @@ const STR = {
     "v_overview": "Overview",
     "v_strings": "Strings",
     "v_accuracy": "Accuracy",
-    "v_nerd": "Diagnostics",
+    "v_nerd": "Nerd Dashboard",
     "s_today": "Today",
     "s_tomorrow": "Tomorrow & weather",
     "s_savings": "Savings",
@@ -309,7 +324,6 @@ const STR = {
     "conv_today_col": "conversion today",
     "nerd_conv_evidence": "Learning — conversion evidence",
     "conv_ev_stage": "stage",
-    "conv_ev_pairs": "usable / rows",
     "conv_stage_inverter": "inverter",
     "conv_stage_mppt": "MPPT",
     "conv_ev_loading": "loading collection evidence…",
@@ -317,24 +331,21 @@ const STR = {
     "conv_ev_unavailable": "The entry diagnostics could not be loaded — from here, whether collection runs cannot be checked.",
     "conv_ev_none": "The integration collects no conversion evidence yet — nothing is configured to learn from.",
     "conv_ev_silent": "collecting nothing",
-    "conv_ev_note": "usable = pairs cleared by the censoring check; it always trails rows by up to an hour, which is the gate working. A 0 / 0 row is configured but collecting nothing. A few hundred usable pairs per stage and sunny day is the realistic order of magnitude; there is no progress bar because no threshold defines \"enough\".",
+    "conv_ev_note": "Usable = pairs cleared by the censoring check; it always trails the total by up to an hour, which is the gate working. A 0 / 0 row is configured but collecting nothing. A few hundred usable pairs per stage and sunny day is the realistic order of magnitude; there is no progress bar because no threshold defines \"enough\".",
     "s_nowcast": "Short-term accuracy (continuously updated)",
     "s_dayahead": "Day-ahead (issued the evening before)",
     "s_daily": "Day by day",
     "acc_note": "The **short-term** figure may correct itself during the day (and since the nowcast it also carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts below say how far along each one is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours.",
     "nerd_explain_title": "What these numbers mean",
-    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by — 1.05 means \"reality delivered 5 % more than computed\". n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer has no such threshold: since integration 1.20.1 every bucket is published from its first observation and pulled towards 1.00 by how little evidence stands behind it — half strength at around ten observations, near-neutral below that. A factor close to 1.00 with a small n is thin, not switched off.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case, and then the reason is the interesting figure. Not to be confused with *nowcast* in the source-bias table, which says where the bias is learned from.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
+    "nerd_explain": "- **factor / n_eff** (learning buckets): the factor is the learned correction the physics forecast gets multiplied by, shown as a percentage — +5 % means \"reality delivered 5 % more than computed\" (factor 1.05, on hover). n_eff is the effective weight of evidence behind it (recent hours count more); small values mean the factor is still tentative.\n- **weather × daypart**: the plant learns separately per weather class and time of day. \"never seen\" means exactly that — this weather has not occurred at this time of day yet, which is itself a finding. The string × daypart layer has no such threshold: since integration 1.20.1 every bucket is published from its first observation and pulled towards 1.00 by how little evidence stands behind it — half strength at around ten observations, near-neutral below that. A factor close to 1.00 with a small n is thin, not switched off.\n- **Source bias (hour × horizon)**: the weather source's systematic error per local hour and forecast horizon, as a factor on irradiance. *measured* = learned against a real sensor; *nowcast* = only against the source's own short-horizon run — a much weaker claim.\n- **Sky map**: *level* is the string's clear-view level relative to physics — 1.05 means it delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. On a differential map each cell's loss is the clear-day loss — what the shadow costs on a clear day; at runtime the integration scales it by the direct-light share, so an overcast day loses almost nothing. n is the beam-weighted observation count — smaller than before 1.18, which does not mean less data.\n- **Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case, and then the reason is the interesting figure. Not to be confused with *nowcast* in the source-bias table, which says where the bias is learned from.\n- **Collection / censoring**: coverage is the share of 5-minute intervals actually captured — counted over daylight hours only (PV Strings ≥ 1.16), so a source that sleeps at night is not penalised. *lower bound* marks hours where the inverter was curtailed — real yield would have been higher, so the value only counts as a minimum.\n- **Skip reasons**: what the learn cycle deliberately did NOT learn from, and why. On a plant that learns nothing, this list is the entire diagnosis.\n- **Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can ever hold (learning forgets slowly, so the count saturates — 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins — the point that in practice counts as fully learned). The shading bar is the share of the year's sun path each string has observed; it can only grow as fast as the calendar.\n- **Conversion (AC / battery charge)**: optional — appears once a group has an output path. AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage, whose discharge time is a control decision — the two are never added. The direct path runs on a load-dependent curve, from the datasheet or self-entered; where measured DC/AC pairs exist and the owner switches it on, the plant corrects that curve with its own measurement. The storage path runs on fixed factors. *Unconverted* means no curve is configured, not a measured 0 % loss.",
     "strategy_no_integration": "## PV Strings\nNo PV Strings entities found. Install and configure the [PV Strings integration](https://github.com/doccodyblue/ha-pvstrings) first — this dashboard builds itself from its sensors.",
     "missing_card": "**{key}** expected here, but no such entity exists on this device — it was not silently omitted. Check whether the integration version publishes it, or whether the entity is disabled.",
     // nerd
-    "nerd_learning": "Learning — log-ratio buckets",
+    "nerd_learning": "Learning — correction factors",
     "nerd_plant_buckets": "Plant: weather × daypart",
-    "nerd_string_offsets": "Per-string offsets",
-    "nerd_string_daypart": "String × daypart",
     "nerd_bucket_missing": "never seen",
     "cens_coverage": "coverage",
     "cens_curtailed": "curtailed",
-    "nerd_source_bias": "Source bias (local hour × horizon)",
     "nerd_truth_measured": "learned against a measured sensor",
     "nerd_truth_nowcast": "learned only against the source's own short-horizon run — a much weaker claim",
     "nerd_collection": "Collection",
@@ -374,6 +385,83 @@ const STR = {
     "hp_thin_one": "thin basis — 1 day", "hp_thin_many": "thin basis — {n} days",
     "hp_thin_hours_one": "1 hour on a thin basis", "hp_thin_hours_many": "{n} hours on a thin basis",
     "hp_too_high": "announced too high", "hp_too_low": "announced too low",
+    // ---- nerd dashboard 0.13: status strip, factors as ±%, heatmap, help ----
+    "s_status": "Status",
+    "health_title": "Collection & learn cycle",
+    "health_coverage": "coverage",
+    "health_write_errors": "write errors",
+    "health_weather": "weather source",
+    "health_ok": "ok",
+    "health_learn": "learn cycle",
+    "health_learn_v": "{used} of {hours} hours learned",
+    "health_skipped": "skipped",
+    "health_censored": "censored hours",
+    "health_station": "station air",
+    "health_station_v": "temperature {t} % · wind {w} %",
+    "health_station_none": "no station sensor, or before sunrise",
+    "health_station_tip": "Share of today's daylight intervals for which the configured station sensor delivered a value — the check that measured air actually reaches the physics (PV Strings ≥ 1.24). Forward forecasts still run on the weather source's air; station readings only enter the reconstruction of past hours.",
+    "health_all_good_one": "All {n} strings fully measured today: {iv} intervals, {cov} % coverage, nothing curtailed.",
+    "health_all_good_many": "All {n} strings fully measured today: {iv} intervals, {cov} % coverage, nothing curtailed.",
+    "health_no_cycle": "no learn cycle recorded yet",
+    "health_per_string": "coverage per string",
+    "health_counters": "collector counters",
+    "lbl_intervals_written": "intervals written",
+    "lbl_events_seen": "events seen",
+    "lbl_write_errors": "write errors",
+    "lbl_watchdog_ticks": "watchdog ticks",
+    "lbl_last_flush_duration_ms": "last flush (ms)",
+    "lbl_hours_materialised": "hours materialised",
+    "lbl_observations_used": "observations used",
+    "lbl_observations_skipped": "observations skipped",
+    "lbl_censored_hours": "censored hours",
+    "lbl_bias_observations": "bias observations",
+    "lbl_shading_observations": "shading observations",
+    "lbl_ghi_hours_rejected": "irradiance hours rejected",
+    "lbl_reconstructed_intervals": "reconstructed intervals",
+    "lbl_skipped_because": "skipped because",
+    "nerd_strings_table": "Strings: offset and daypart",
+    "col_offset": "offset",
+    "factor_tip_factor": "factor",
+    "factor_tip_n": "evidence n_eff",
+    "factor_thin": "thin evidence — pulled towards 0 %",
+    "factor_legend": "correction the physics forecast is multiplied by; +7 % means reality delivered 7 % more than computed",
+    "nerd_weather_source": "Weather source",
+    "bias_title": "Source bias by hour × horizon",
+    "bias_legend_high": "source too high",
+    "bias_legend_low": "source too low",
+    "bias_thin": "thin",
+    "bias_horizon": "horizon",
+    "sky_cells_col": "cells",
+    "sky_worst_col": "strongest shadow",
+    "conv_stage_charge": "charging",
+    "nerd_conv_paths": "Conversion — paths",
+    "conv_ev_pairs_col": "usable / total",
+    // thermal (PV Strings >= 1.24)
+    "th_title": "Cell temperature",
+    "th_air": "air",
+    "th_wind": "wind",
+    "th_cells": "cells",
+    "th_effect": "effect now",
+    "th_today": "today",
+    "th_plant_today": "plant today",
+    "th_by_heat": "by heat",
+    "th_ref": "25 °C reference",
+    "th_now": "now",
+    "th_no_rows": "no hour with sun today yet — cell temperatures exist only while the modules see light",
+    "th_note": "Modelled, not measured: the Sandia cell-temperature model for each mount type, fed with the forecast's air temperature, wind and plane irradiance. Below 25 °C cells the modules gain, above they lose — the share is already inside the physics figure, never a fourth factor.",
+    "th_gain": "gain from cold",
+    "th_loss": "loss to heat",
+    "chain_thermal": "thermal ×{v} — {cell} °C cells at {air} °C air, {wind} m/s wind. Already inside the physics figure — shown as context, not a link.",
+    // per-card help (replaces the explainer footer)
+    "help_factors": "**Correction factors**: the physics forecast is multiplied by them — +7 % means reality delivered 7 % more than computed. The plant learns separately per weather class and time of day; *never seen* means this weather has not occurred at that time yet, which is itself a finding. Per string, an offset and a daypart layer sit on top; thin buckets are pulled towards 0 % by how little evidence stands behind them (half strength at about ten observations). Hover a cell for the raw factor and its evidence.",
+    "help_bias": "**Source bias**: the weather source's systematic error per local hour and forecast horizon, as a correction on irradiance. Blue: the source announced more than arrived, the forecast is scaled down; orange: it announced too little. Faded cells rest on thin evidence. *Measured* means learned against a real sensor; *nowcast* only against the source's own short-horizon run — a much weaker claim.",
+    "help_sky": "**Sky maps**: *level* is the string's clear-view yield relative to physics — 1.05 delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. The strongest shadow names the sky sector (azimuth · elevation) with the largest clear-day loss.",
+    "help_health": "**Collection**: coverage is the share of 5-minute intervals actually captured, counted over daylight hours only. **Learn cycle**: what the last cycle used and what it deliberately skipped, with the reason — on a plant learning nothing, that list is the whole diagnosis. **Censored** hours are lower bounds (the inverter was curtailed, real yield would have been higher). Tables open only where a figure deviates.",
+    "help_maturity": "**Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can hold — learning forgets slowly, so 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins. The shading bar is the share of the year's sun path each string has observed; it grows no faster than the calendar.",
+    "help_thermal": "**Cell temperature**: modelled per string from the forecast's air temperature, wind and plane irradiance — not measured. Cells above 25 °C lose output, below they gain; the effect is already inside the physics figure of the forecast chain, this card only makes it visible. A flat, insulated mount runs hotter than an open rack at the same air.",
+    "help_conversion": "**Conversion**: AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage — the two are never added. Curves are configured (datasheet or self-entered); where measured DC/AC pairs exist and learning is on, the plant corrects that curve with its own measurement. *Unconverted* means no curve configured, not a measured 0 % loss.",
+    "help_hp": "**Day-ahead error by hour**: the same scored pairs the 30-day figure is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — usable as a discount on tomorrow's window sum. Dimmed hours rest on fewer than three days.",
+    "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
     "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
     "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
     /* i18n-en-end */
@@ -525,7 +613,7 @@ const STR = {
     "v_overview": "Übersicht",
     "v_strings": "Stränge",
     "v_accuracy": "Genauigkeit",
-    "v_nerd": "Diagnose",
+    "v_nerd": "Nerd Dashboard",
     "s_today": "Heute",
     "s_tomorrow": "Morgen & Wetter",
     "s_savings": "Ersparnis",
@@ -542,7 +630,6 @@ const STR = {
     "conv_today_col": "Wandlung heute",
     "nerd_conv_evidence": "Lernen — Wandlungs-Evidenz",
     "conv_ev_stage": "Stufe",
-    "conv_ev_pairs": "usable / rows",
     "conv_stage_inverter": "Wechselrichter",
     "conv_stage_mppt": "MPPT",
     "conv_ev_loading": "Sammel-Evidenz wird geladen…",
@@ -550,23 +637,20 @@ const STR = {
     "conv_ev_unavailable": "Die Entry-Diagnosen ließen sich nicht laden — ob die Sammlung läuft, lässt sich von hier nicht prüfen.",
     "conv_ev_none": "Die Integration sammelt noch keine Wandlungs-Evidenz — nichts zum Lernen konfiguriert.",
     "conv_ev_silent": "sammelt nichts",
-    "conv_ev_note": "usable = von der Zensurprüfung freigegebene Messpaare; hinkt rows stets bis zu einer Stunde hinterher — so arbeitet die Leitplanke. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag; einen Fortschrittsbalken gibt es nicht, weil kein Schwellwert „genug“ definiert.",
+    "conv_ev_note": "Verwertbar = von der Zensurprüfung freigegebene Messpaare; hinkt der Gesamtzahl stets bis zu einer Stunde hinterher — so arbeitet die Leitplanke. Eine 0 / 0-Zeile ist eingerichtet und sammelt trotzdem nichts. Realistisch sind ein paar hundert verwertbare Paare pro Stufe und Sonnentag; einen Fortschrittsbalken gibt es nicht, weil kein Schwellwert „genug“ definiert.",
     "s_nowcast": "Kurzfrist-Treffsicherheit (laufend aktualisiert)",
     "s_dayahead": "Day-Ahead (am Vorabend eingefroren)",
     "s_daily": "Tag für Tag",
     "acc_note": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unten zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden.",
     "nerd_explain_title": "Was diese Zahlen bedeuten",
-    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird — 1,05 heißt „real kam 5 % mehr als gerechnet\". n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer kennt keine solche Schwelle: Seit Integration 1.20.1 wird jeder Bucket ab der ersten Beobachtung veröffentlicht und um so stärker gegen 1,00 gezogen, je dünner die Evidenz ist — halbe Stärke bei etwa zehn Beobachtungen, darunter fast neutral. Ein Faktor nahe 1,00 mit kleinem n ist dünn, nicht abgeschaltet.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall, und dann ist der Grund die interessantere Zahl. Nicht zu verwechseln mit *nowcast* in der Source-Bias-Tabelle, das sagt, woher der Bias gelernt wird.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
+    "nerd_explain": "- **Faktor / n_eff** (Lern-Buckets): Der Faktor ist die gelernte Korrektur, mit der die Physik-Prognose multipliziert wird, als Prozent gezeigt — +5 % heißt „real kam 5 % mehr als gerechnet\" (Faktor 1,05, beim Überfahren). n_eff ist das wirksame Beweisgewicht dahinter (jüngere Stunden zählen mehr); kleine Werte heißen: noch vorläufig.\n- **Wetter × Tagesabschnitt**: Die Anlage lernt getrennt pro Wetterklasse und Tageszeit. „nie gesehen\" heißt genau das — dieses Wetter gab es zu dieser Tageszeit noch nicht, und auch das ist ein Befund. Der String × Tagesabschnitt-Layer kennt keine solche Schwelle: Seit Integration 1.20.1 wird jeder Bucket ab der ersten Beobachtung veröffentlicht und um so stärker gegen 1,00 gezogen, je dünner die Evidenz ist — halbe Stärke bei etwa zehn Beobachtungen, darunter fast neutral. Ein Faktor nahe 1,00 mit kleinem n ist dünn, nicht abgeschaltet.\n- **Source-Bias (Stunde × Horizont)**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Faktor auf die Einstrahlung. *measured* = gegen einen echten Sensor gelernt; *nowcast* = nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.\n- **Himmelskarte**: Das *Niveau* ist das Freisicht-Niveau des Strangs relativ zur Physik — 1,05 heißt: liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Auf einer differenziellen Karte ist der Verlust jeder Zelle der Klartag-Verlust — was der Schatten an einem klaren Tag kostet; zur Laufzeit skaliert die Integration ihn mit dem Direktlicht-Anteil, ein trüber Tag verliert also fast nichts. n ist die beam-gewichtete Beobachtungszahl — kleiner als vor 1.18, was nicht „weniger Daten“ heißt.\n- **Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall, und dann ist der Grund die interessantere Zahl. Nicht zu verwechseln mit *nowcast* in der Source-Bias-Tabelle, das sagt, woher der Bias gelernt wird.\n- **Erfassung / Zensur**: coverage ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle — gezählt nur über Tageslichtstunden (PV Strings ≥ 1.16), eine nachts schlafende Quelle wird also nicht bestraft. *Untergrenze* markiert Stunden mit Abregelung — der echte Ertrag wäre höher gewesen, der Wert zählt nur als Minimum.\n- **Skip-Gründe**: wovon der Lernzyklus bewusst NICHT gelernt hat, und warum. Auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose.\n- **Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket je halten kann (das Lernen vergisst langsam, der Zähler sättigt — 100 % heißt „so gelernt wie es wird\", nicht „fertig\"; die Marke zeigt, wo Grün beginnt — der Punkt, der praktisch als fertig gelernt gilt). Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.\n- **Wandlung (AC / Akkuladung)**: optional — erscheint, sobald eine Gruppe einen Ausgabepfad hat. AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher, deren Ausspeisezeitpunkt eine Regelentscheidung ist — die beiden werden nie addiert. Der Direktpfad rechnet mit einer lastabhängigen Kennlinie aus dem Datenblatt oder selbst eingetragen; wo gemessene DC/AC-Paare vorliegen und der Besitzer es einschaltet, korrigiert die Anlage diese Kennlinie mit der eigenen Messung. Der Speicherpfad rechnet mit festen Faktoren. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "strategy_no_integration": "## PV Strings\nKeine PV-Strings-Entities gefunden. Zuerst die [PV-Strings-Integration](https://github.com/doccodyblue/ha-pvstrings) installieren und einrichten — dieses Dashboard baut sich aus ihren Sensoren.",
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
-    "nerd_learning": "Lernen — Log-Ratio-Buckets",
+    "nerd_learning": "Lernen — Korrekturfaktoren",
     "nerd_plant_buckets": "Anlage: Wetter × Tagesabschnitt",
-    "nerd_string_offsets": "Strang-Offsets",
-    "nerd_string_daypart": "Strang × Tagesabschnitt",
     "nerd_bucket_missing": "nie gesehen",
     "cens_coverage": "Erfassung",
     "cens_curtailed": "Abregelung",
-    "nerd_source_bias": "Source-Bias (lokale Stunde × Horizont)",
     "nerd_truth_measured": "gegen einen Messsensor gelernt",
     "nerd_truth_nowcast": "nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt — eine deutlich schwächere Aussage",
     "nerd_collection": "Erfassung",
@@ -603,6 +687,80 @@ const STR = {
     "hp_thin_one": "dünne Basis — 1 Tag", "hp_thin_many": "dünne Basis — {n} Tage",
     "hp_thin_hours_one": "1 Stunde auf dünner Basis", "hp_thin_hours_many": "{n} Stunden auf dünner Basis",
     "hp_too_high": "zu hoch angesagt", "hp_too_low": "zu niedrig angesagt",
+    "s_status": "Status",
+    "health_title": "Erfassung & Lernzyklus",
+    "health_coverage": "Abdeckung",
+    "health_write_errors": "Schreibfehler",
+    "health_weather": "Wetterquelle",
+    "health_ok": "ok",
+    "health_learn": "Lernzyklus",
+    "health_learn_v": "{used} von {hours} Stunden gelernt",
+    "health_skipped": "übersprungen",
+    "health_censored": "zensierte Stunden",
+    "health_station": "Stationsluft",
+    "health_station_v": "Temperatur {t} % · Wind {w} %",
+    "health_station_none": "kein Stationssensor, oder vor Sonnenaufgang",
+    "health_station_tip": "Anteil der heutigen Tageslicht-Intervalle, für die der konfigurierte Stationssensor einen Wert geliefert hat — die Kontrolle, dass gemessene Luft die Physik tatsächlich erreicht (PV Strings ≥ 1.24). Die Vorwärtsprognose rechnet weiter mit der Luft der Wetterquelle; Stationswerte fließen nur in die Rekonstruktion vergangener Stunden.",
+    "health_all_good_one": "Alle {n} Stränge heute vollständig gemessen: {iv} Intervalle, {cov} % Abdeckung, nichts abgeregelt.",
+    "health_all_good_many": "Alle {n} Stränge heute vollständig gemessen: {iv} Intervalle, {cov} % Abdeckung, nichts abgeregelt.",
+    "health_no_cycle": "noch kein Lernzyklus aufgezeichnet",
+    "health_per_string": "Abdeckung je Strang",
+    "health_counters": "Kollektor-Zähler",
+    "lbl_intervals_written": "Intervalle geschrieben",
+    "lbl_events_seen": "Ereignisse gesehen",
+    "lbl_write_errors": "Schreibfehler",
+    "lbl_watchdog_ticks": "Watchdog-Ticks",
+    "lbl_last_flush_duration_ms": "letzter Flush (ms)",
+    "lbl_hours_materialised": "Stunden materialisiert",
+    "lbl_observations_used": "Beobachtungen verwendet",
+    "lbl_observations_skipped": "Beobachtungen übersprungen",
+    "lbl_censored_hours": "zensierte Stunden",
+    "lbl_bias_observations": "Bias-Beobachtungen",
+    "lbl_shading_observations": "Verschattungs-Beobachtungen",
+    "lbl_ghi_hours_rejected": "Einstrahlungs-Stunden verworfen",
+    "lbl_reconstructed_intervals": "rekonstruierte Intervalle",
+    "lbl_skipped_because": "übersprungen wegen",
+    "nerd_strings_table": "Stränge: Offset und Tagesabschnitt",
+    "col_offset": "Offset",
+    "factor_tip_factor": "Faktor",
+    "factor_tip_n": "Evidenz n_eff",
+    "factor_thin": "dünne Evidenz — gegen 0 % gezogen",
+    "factor_legend": "Korrektur, mit der die Physik-Prognose multipliziert wird; +7 % heißt: real kam 7 % mehr als gerechnet",
+    "nerd_weather_source": "Wetterquelle",
+    "bias_title": "Source-Bias nach Stunde × Horizont",
+    "bias_legend_high": "Quelle zu hoch",
+    "bias_legend_low": "Quelle zu niedrig",
+    "bias_thin": "dünn",
+    "bias_horizon": "Horizont",
+    "sky_cells_col": "Zellen",
+    "sky_worst_col": "stärkster Schatten",
+    "conv_stage_charge": "Laden",
+    "nerd_conv_paths": "Wandlung — Pfade",
+    "conv_ev_pairs_col": "verwertbar / gesamt",
+    "th_title": "Zelltemperatur",
+    "th_air": "Luft",
+    "th_wind": "Wind",
+    "th_cells": "Zellen",
+    "th_effect": "Wirkung jetzt",
+    "th_today": "heute",
+    "th_plant_today": "Anlage heute",
+    "th_by_heat": "durch Wärme",
+    "th_ref": "25-°C-Referenz",
+    "th_now": "jetzt",
+    "th_no_rows": "heute noch keine Stunde mit Sonne — Zelltemperaturen gibt es nur, solange die Module Licht sehen",
+    "th_note": "Modelliert, nicht gemessen: das Sandia-Zelltemperaturmodell je Montageart, gespeist mit Lufttemperatur, Wind und Einstrahlung in Modulebene aus der Prognose. Unter 25 °C Zellen gewinnen die Module, darüber verlieren sie — der Anteil steckt bereits in der Physik-Zahl, nie ein vierter Faktor.",
+    "th_gain": "Gewinn durch Kälte",
+    "th_loss": "Verlust durch Hitze",
+    "chain_thermal": "Thermik ×{v} — {cell} °C Zellen bei {air} °C Luft, {wind} m/s Wind. Steckt bereits in der Physik-Zahl — Kontext, kein Kettenglied.",
+    "help_factors": "**Korrekturfaktoren**: Mit ihnen wird die Physik-Prognose multipliziert — +7 % heißt, real kam 7 % mehr als gerechnet. Die Anlage lernt getrennt pro Wetterklasse und Tageszeit; *nie gesehen* heißt, dieses Wetter gab es zu dieser Tageszeit noch nicht — auch das ist ein Befund. Je Strang liegen ein Offset und eine Tagesabschnitt-Schicht darüber; dünne Buckets werden um so stärker gegen 0 % gezogen, je weniger Evidenz dahintersteht (halbe Stärke bei etwa zehn Beobachtungen). Eine Zelle zeigt beim Überfahren den rohen Faktor und seine Evidenz.",
+    "help_bias": "**Source-Bias**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Korrektur auf die Einstrahlung. Blau: die Quelle hat mehr angesagt als kam, die Prognose wird heruntergezogen; Orange: sie hat zu wenig angesagt. Blasse Zellen stehen auf dünner Evidenz. *Gemessen* heißt gegen einen echten Sensor gelernt; *nowcast* nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.",
+    "help_sky": "**Himmelskarten**: Das *Niveau* ist der Freisicht-Ertrag des Strangs relativ zur Physik — 1,05 liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Der stärkste Schatten nennt den Himmelssektor (Azimut · Höhe) mit dem größten Klartag-Verlust.",
+    "help_health": "**Erfassung**: Abdeckung ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle, gezählt nur über Tageslichtstunden. **Lernzyklus**: was der letzte Zyklus verwendet und was er bewusst übersprungen hat, samt Grund — auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose. **Zensierte** Stunden sind Untergrenzen (der Wechselrichter war abgeregelt, der echte Ertrag wäre höher gewesen). Tabellen öffnen sich nur, wo ein Wert abweicht.",
+    "help_maturity": "**Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket halten kann — das Lernen vergisst langsam, 100 % heißt also „so gelernt wie es wird“, nicht „fertig“; die Marke zeigt, wo Grün beginnt. Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
+    "help_thermal": "**Zelltemperatur**: je Strang modelliert aus Lufttemperatur, Wind und Einstrahlung in Modulebene der Prognose — nicht gemessen. Zellen über 25 °C verlieren Leistung, darunter gewinnen sie; die Wirkung steckt bereits in der Physik-Zahl der Prognosekette, diese Karte macht sie nur sichtbar. Eine flache, hinterlüftungslose Montage läuft bei gleicher Luft heißer als ein freies Gestell.",
+    "help_conversion": "**Wandlung**: AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher — die beiden werden nie addiert. Kennlinien sind konfiguriert (Datenblatt oder selbst eingetragen); wo gemessene DC/AC-Paare vorliegen und das Lernen an ist, korrigiert die Anlage die Kennlinie mit der eigenen Messung. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
+    "help_hp": "**Day-Ahead-Fehler nach Stunde**: dieselben gescorten Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Gedimmte Stunden stehen auf weniger als drei Tagen.",
+    "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
     "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
     "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
     /* i18n-de-end */
@@ -661,6 +819,11 @@ const BASE_CSS = `
     --pvs-cell-stroke: color-mix(in srgb, var(--primary-text-color, #212121) 16%, transparent);
     --pvs-chip-bg: color-mix(in srgb, var(--primary-text-color, #212121) 5%, transparent);
     --pvs-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    /* categorical series (one line per string): model blue and measure
+       orange first, then hues that stay clear of both and of the violet
+       shadow ramp */
+    --pvs-cat-0: #2a78d6; --pvs-cat-1: #eb6834; --pvs-cat-2: #7d55cd;
+    --pvs-cat-3: #1f9e8c; --pvs-cat-4: #c49a1a; --pvs-cat-5: #c2185b;
     ${LOSS_RAMP_LIGHT.map((c, i) => `--pvs-loss-${i}: ${c};`).join("\n    ")}
   }
   :host([dark]) {
@@ -668,6 +831,8 @@ const BASE_CSS = `
     --pvs-model-ghost: #21548f;
     --pvs-measure: #d95926;
     --pvs-sun: #eda100;
+    --pvs-cat-0: #3987e5; --pvs-cat-1: #e0692f; --pvs-cat-2: #9a77e0;
+    --pvs-cat-3: #2db8a3; --pvs-cat-4: #d9b03a; --pvs-cat-5: #e04d8b;
     ${LOSS_RAMP_DARK.map((c, i) => `--pvs-loss-${i}: ${c};`).join("\n    ")}
   }
   * { box-sizing: border-box; }
@@ -711,11 +876,27 @@ const BASE_CSS = `
     border: 1px solid var(--pvs-hairline);
     box-shadow: 0 4px 16px rgba(0,0,0,0.18);
     border-radius: 8px; padding: 9px 11px; font-size: 11.5px; line-height: 1.55;
-    color: var(--primary-text-color); max-width: 260px;
+    color: var(--primary-text-color); width: max-content; max-width: 260px;
     opacity: 0; transform: translateY(3px); transition: opacity 120ms, transform 120ms;
   }
   .pvs-tip.on { opacity: 1; transform: translateY(0); }
   .pvs-tip .h { font-weight: 600; margin-bottom: 3px; }
+  /* the "?" that replaces the explainer footer: one per card head, the
+     text opens inline under it so it stays next to the numbers it explains */
+  .pvs-helpbox {
+    font-size: 12px; line-height: 1.55; color: var(--primary-text-color);
+    background: var(--pvs-chip-bg); border-left: 3px solid var(--pvs-model);
+    border-radius: 6px; padding: 9px 12px; margin: 0 0 12px;
+  }
+  .pvs-helpbox b { font-weight: 600; }
+  .pvs-help {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%; flex: none;
+    font-size: 11px; font-weight: 600; line-height: 1; cursor: help;
+    color: var(--secondary-text-color); border: 1px solid var(--pvs-hairline);
+    transition: color 150ms, border-color 150ms; user-select: none;
+  }
+  .pvs-help:hover, .pvs-help.on { color: var(--primary-text-color); border-color: var(--secondary-text-color); }
   .pvs-tip .r { display: flex; justify-content: space-between; gap: 14px; }
   .pvs-tip .r .k { color: var(--secondary-text-color); }
   .pvs-tip .r .v { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; }
@@ -932,6 +1113,24 @@ async function plantSibling(hass, entityId, key) {
   return plant?.byKey?.[key] ?? null;
 }
 
+// string/group scope id (subentry ULID) -> display name, via the device
+// identifiers. The learning and collector blocks key their rows by scope id.
+function stringNamesById(hass) {
+  return cachedWS("string-names", 5 * 60000, async () => {
+    const names = new Map();
+    const devices = await hass.callWS({ type: "config/device_registry/list" });
+    for (const d of devices) {
+      if (d.model !== "PV string" && d.model !== "Curtailment group") continue;
+      for (const ident of d.identifiers ?? []) {
+        if (ident[0] !== "pvstrings") continue;
+        const parts = String(ident[1]).split("_");
+        if (parts.length >= 2) names.set(parts.slice(1).join("_"), d.name_by_user || d.name);
+      }
+    }
+    return names;
+  });
+}
+
 // ---- diagnostics ----------------------------------------------------------
 
 // Entry-level diagnostics download. Since HA 2024-ish this is an HTTP
@@ -1134,6 +1333,23 @@ function withheldHTML(text) {
   return `<span class="pvs-withheld">◌ ${text}</span>`;
 }
 
+// The "?" in a card head. `key` names a help_<key> string; the tooltip
+// controller renders it (bold/italic only — help is prose, not a document).
+function helpChip(key) {
+  return `<span class="pvs-help" data-help="${key}" role="button" tabindex="0">?</span>`;
+}
+function miniMd(s) {
+  return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>");
+}
+
+// Translated label for a raw attribute key (collector counters, learn-cycle
+// tallies). Falls back to the key with underscores spaced — a new key on a
+// newer integration must still render, only less prettily.
+function keyLabel(hass, key) {
+  const s = STR[langOf(hass)]?.["lbl_" + key] ?? STR.en["lbl_" + key];
+  return s ?? String(key).replaceAll("_", " ");
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -1191,14 +1407,23 @@ class PvsBaseCard extends HTMLElement {
 
 // ---- tooltip controller (one per card) ------------------------------------
 
-function wireTooltip(card, { selector, content }) {
+// Every card gets [data-help] handling for free: the "?" chip toggles an
+// inline panel under the card head with its help_<key> text. Inline, not a
+// floating tip: prose is read, not glanced at, it must work on touch, and a
+// floating box would be clipped by the card on exactly the short cards
+// (status strip, maturity) that need it most.
+function wireTooltip(card, { selector, content } = {}) {
   const root = card.shadowRoot;
+  const hide = () => root.querySelector(".pvs-tip")?.classList.remove("on");
   const show = (target, ev) => {
     const tip = root.querySelector(".pvs-tip");
     if (!tip) return;
     const html = content(target, ev);
-    if (!html) { tip.classList.remove("on"); return; }
+    if (!html) { hide(); return; }
     tip.innerHTML = html;
+    // measure at the left edge, so the width is the content's own and not
+    // whatever the previous position left as room
+    tip.style.left = "0px"; tip.style.top = "0px";
     tip.classList.add("on");
     const cardEl = root.querySelector("ha-card");
     const cr = cardEl.getBoundingClientRect();
@@ -1210,13 +1435,34 @@ function wireTooltip(card, { selector, content }) {
     tip.style.left = `${Math.max(4, x)}px`;
     tip.style.top = `${Math.max(4, y)}px`;
   };
-  root.addEventListener("pointermove", (ev) => {
-    const el = ev.target.closest?.(selector);
-    if (el) show(el, ev);
-    else root.querySelector(".pvs-tip")?.classList.remove("on");
+  if (selector) {
+    root.addEventListener("pointermove", (ev) => {
+      const el = ev.target.closest?.(selector);
+      if (el) show(el, ev);
+      else hide();
+    });
+    root.addEventListener("pointerleave", () => hide());
+  }
+  const toggleHelp = (h) => {
+    const key = h.getAttribute("data-help");
+    const open = root.querySelector(".pvs-helpbox");
+    root.querySelectorAll(".pvs-help.on").forEach((e) => e.classList.remove("on"));
+    if (open) { open.remove(); if (open.dataset.key === key) return; }
+    const box = document.createElement("div");
+    box.className = "pvs-helpbox"; box.dataset.key = key;
+    box.innerHTML = miniMd(t(card._hass, "help_" + key));
+    (h.closest(".pvs-head") ?? h.parentElement).insertAdjacentElement("afterend", box);
+    h.classList.add("on");
+  };
+  root.addEventListener("click", (ev) => {
+    const h = ev.target.closest?.("[data-help]");
+    if (!h) return;
+    ev.stopPropagation();
+    toggleHelp(h);
   });
-  root.addEventListener("pointerleave", () => {
-    root.querySelector(".pvs-tip")?.classList.remove("on");
+  root.addEventListener("keydown", (ev) => {
+    const h = ev.target.closest?.("[data-help]");
+    if (h && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); toggleHelp(h); }
   });
 }
 
@@ -2391,6 +2637,7 @@ class PvsNowcastCard extends PvsBaseCard {
     const card = (inner) => {
       this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${NC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
       this._wireMoreInfo();
+      if (!this._wired) { this._wired = true; wireTooltip(this); }
     };
     if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
     const st = hass.states[cfg.entity];
@@ -2405,7 +2652,7 @@ class PvsNowcastCard extends PvsBaseCard {
       <span class="dot${on ? " live" : ""}"></span>${t(hass, on ? "nc_active" : "nc_inactive")}</span>`;
     const head = (extra = "") => `<div class="pvs-head">
       <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
-      ${stateChip}${extra}</div>`;
+      ${stateChip}${extra}${helpChip("nowcast")}</div>`;
 
     // ---- inactive: the reason is the whole content ------------------------
     if (!on) {
@@ -2630,7 +2877,7 @@ class PvsCurveCard extends PvsBaseCard {
       chips.push(`<span class="pvs-chip" title="${esc(t(hass, "curve_maxload_tip"))}">
         ${t(hass, "curve_maxload")} <span class="v">${fmtNum(hass, maxLoad * 100, 0)} %</span></span>`);
     }
-    if (learning?.stage) chips.push(`<span class="pvs-chip dim">${esc(learning.stage)}</span>`);
+    if (learning?.stage) chips.push(`<span class="pvs-chip dim">${esc(stageLabel(hass, learning.stage))}</span>`);
 
     // ---- geometry: log-x (load decades), plus a delta strip ----------------
     // The curve spans tens of percentage points while learning moves points by
@@ -2930,6 +3177,14 @@ class PvsChainCard extends PvsBaseCard {
         </span>
       </div>
       <div class="ch-bias">${t(hass, "chain_source_bias", { v: fmtNum(hass, row.source_bias, 3) })}</div>
+      ${row.thermal !== undefined && row.cell_temp_c != null
+        // heat share (>= 1.24): context like the source bias, never a link —
+        // physics_kwh already carries it, multiplying it in again would be
+        // exactly the mistake the integration has a test against
+        ? `<div class="ch-bias ch-thermal ${row.thermal < 0.97 ? "warm" : ""}">${t(hass, "chain_thermal", {
+            v: fmtNum(hass, row.thermal, 3), cell: fmtNum(hass, row.cell_temp_c, 1),
+            air: fmtNum(hass, row.air_temp_c, 1), wind: fmtNum(hass, row.wind_ms, 1) })}</div>`
+        : ""}
       <div class="ch-grid">
         <div class="lab" data-more-info="${cfg.entity}">${t(hass, "chain_physics")}</div>
         <div></div><div></div>
@@ -2999,6 +3254,8 @@ const CHAIN_CSS = `
     padding: 6px 9px; margin-bottom: 12px; border-radius: 6px;
     background: var(--pvs-chip-bg); font-style: italic;
   }
+  .ch-bias + .ch-thermal { margin-top: -7px; }
+  .ch-thermal.warm { background: color-mix(in srgb, var(--pvs-measure) 10%, transparent); }
   .ch-grid {
     display: grid; grid-template-columns: minmax(90px, 1fr) auto auto auto;
     gap: 7px 14px; align-items: center; font-size: 12.5px;
@@ -3291,7 +3548,7 @@ class PvsHourProfileCard extends PvsBaseCard {
     const head = (extraChip = "") => `<div class="pvs-head">
       <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
       ${a.days_scored != null ? `<span class="pvs-chip clickable" data-more-info="${cfg.entity}">${tn(hass, "hp_days_scored", a.days_scored)}</span>` : ""}
-      ${extraChip}
+      ${extraChip}${helpChip("hp")}
     </div>`;
 
     // Rows worth drawing. Two kinds get dropped, for two different reasons:
@@ -3446,12 +3703,46 @@ class PvsKvTableCard extends PvsBaseCard {
     return ids.filter(Boolean);
   }
 
+  // A learned factor as the percentage it means (+7 % reads, 1.068 must be
+  // converted). The raw factor and its evidence sit in the tooltip; n is
+  // printed in the cell only while it is thin — on a mature plant 92 copies
+  // of "n 21.8" said nothing the maturity bar had not already said.
   _factorCell(hass, cell) {
     if (!cell) return `<td class="miss">${t(hass, "nerd_bucket_missing")}</td>`;
-    const dev = Math.abs(cell.factor - 1);
-    const tone = dev > 0.15 ? "hot" : dev > 0.05 ? "warm" : "";
-    return `<td class="${tone}"><span class="pvs-num">${fmtNum(hass, cell.factor, 3)}</span>
-      <span class="n">n ${fmtNum(hass, cell.n_eff, 1)}</span></td>`;
+    const pct = (cell.factor - 1) * 100;
+    const dev = Math.abs(pct);
+    const tone = dev > 15 ? "hot" : dev > 5 ? "warm" : "";
+    const thin = (cell.n_eff ?? 0) < MATURITY_MAX_N_EFF * 0.5;
+    const showN = thin || this._config?.detail;
+    return `<td class="fac ${tone}${thin ? " thin" : ""}" data-fac='${esc(JSON.stringify({ f: cell.factor, n: cell.n_eff ?? null, thin }))}'>
+      <span class="pvs-num">${fmtSigned(hass, pct, 1)} %</span>
+      ${showN ? `<span class="n">n ${fmtNum(hass, cell.n_eff, 1)}</span>` : ""}</td>`;
+  }
+
+  // help_<key> per mode — the "?" in the head replaces the explainer footer
+  static helpKeyFor(mode) {
+    if (mode.startsWith("log_ratio")) return "factors";
+    if (mode === "ghi_bias") return "bias";
+    if (mode === "sky_overview") return "sky";
+    if (mode === "conversion" || mode === "conversion_evidence") return "conversion";
+    if (mode === "collector" || mode === "skip_reasons" || mode === "censoring") return "health";
+    return null;
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-fac]",
+      content: (el) => {
+        const hass = this._hass;
+        const c = JSON.parse(el.getAttribute("data-fac"));
+        return `<div class="r"><span class="k">${t(hass, "factor_tip_factor")}</span><span class="v">${fmtNum(hass, c.f, 4)}</span></div>
+          ${c.n != null ? `<div class="r"><span class="k">${t(hass, "factor_tip_n")}</span><span class="v">${fmtNum(hass, c.n, 1)}</span></div>` : ""}
+          ${c.thin ? `<div class="pvs-sub">${t(hass, "factor_thin")}</div>` : ""}`;
+      },
+    });
   }
 
   async _stringNames() {
@@ -3504,8 +3795,8 @@ class PvsKvTableCard extends PvsBaseCard {
     const hass = this._hass, cfg = this._config;
     if (!hass || !cfg) return;
     const card = (inner) => {
-      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${KV_CSS}</style><ha-card>${inner}</ha-card>`;
-      this._wireMoreInfo();
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${KV_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
     };
     if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
     const st = hass.states[cfg.entity];
@@ -3513,8 +3804,10 @@ class PvsKvTableCard extends PvsBaseCard {
     const a = st.attributes;
     const mode = cfg.mode ?? "generic";
     const title = cfg.title ?? a.friendly_name ?? cfg.entity;
+    const helpKey = cfg.help ?? PvsKvTableCard.helpKeyFor(mode);
     const head = `<div class="pvs-head">
       <span class="pvs-title kv-t clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
+      ${helpKey ? helpChip(helpKey) : ""}
     </div>`;
     const empty = (path) => card(head + withheldHTML(t(hass, "kv_empty", { path, entity: cfg.entity })));
 
@@ -3525,6 +3818,17 @@ class PvsKvTableCard extends PvsBaseCard {
       body = `<table><tr><th></th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
         ${WEATHERS.map((w) => `<tr><th>${t(hass, "weather_" + w)}</th>
           ${DAYPARTS.map((d) => this._factorCell(hass, buckets[`${w}|${d}`])).join("")}</tr>`).join("")}</table>`;
+    } else if (mode === "log_ratio_string_all") {
+      // one row per string: its offset beside its three daypart buckets —
+      // two tables said the same names twice
+      const off = a.log_ratio?.string ?? {}, dp = a.log_ratio?.string_daypart ?? {};
+      const ids = [...new Set([...Object.keys(off), ...Object.keys(dp).map((k) => k.split("|")[0])])];
+      if (!ids.length) return empty("log_ratio.string");
+      const names = this._names ?? (this._stringNames(), new Map());
+      body = `<table><tr><th></th><th>${t(hass, "col_offset")}</th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
+        ${ids.map((id) => `<tr><th>${esc(names.get(id) ?? id.slice(0, 8))}</th>${this._factorCell(hass, off[id])}
+          ${DAYPARTS.map((d) => this._factorCell(hass, dp[`${id}|${d}`])).join("")}</tr>`).join("")}</table>
+        <div class="kv-foot">${t(hass, "factor_legend")}</div>`;
     } else if (mode === "log_ratio_strings" || mode === "log_ratio_string_daypart") {
       const src = mode === "log_ratio_strings" ? a.log_ratio?.string : a.log_ratio?.string_daypart;
       if (!src || !Object.keys(src).length) return empty(`log_ratio.${mode === "log_ratio_strings" ? "string" : "string_daypart"}`);
@@ -3539,16 +3843,41 @@ class PvsKvTableCard extends PvsBaseCard {
             ${DAYPARTS.map((d) => this._factorCell(hass, src[`${id}|${d}`])).join("")}</tr>`).join("")}</table>`;
       }
     } else if (mode === "ghi_bias") {
+      // Heatmap, not a number grid: sixty "0.912 n 4.0" cells hid the one
+      // thing the table exists to show — WHERE in the day and at WHICH
+      // horizon the source runs hot or cold. Colour carries the pattern in
+      // the palette the whole dashboard reads by (blue = announced too
+      // much, orange = too little, as on the hour-profile strip); the
+      // number stays in the cell, small; evidence sits in the tooltip and
+      // fades the cell while thin.
       const src = a.ghi_bias;
       if (!src || !Object.keys(src).length) return empty("ghi_bias");
       const horizons = ["0-6h", "6-24h", "24-48h", "48h+"];
       const hours = [...new Set(Object.keys(src).map((k) => k.split("|")[0]))].sort();
       const truth = a.truth_source
         ?? hass.states[cfg.truth_entity ?? ""]?.attributes?.truth_source;
+      const CLIP = 50;
+      const cellOf = (c) => {
+        if (!c) return `<td class="miss hm-miss"></td>`;
+        const pct = (c.factor - 1) * 100;
+        const mag = Math.min(1, Math.abs(pct) / CLIP);
+        const thin = (c.n_eff ?? 0) < 3;
+        const hue = pct < 0 ? "var(--pvs-model)" : "var(--pvs-measure)";
+        const mix = Math.round(8 + mag * 72);
+        return `<td class="hm${thin ? " thin" : ""}" style="background:color-mix(in srgb, ${hue} ${mix}%, transparent)"
+          data-fac='${esc(JSON.stringify({ f: c.factor, n: c.n_eff ?? null, thin }))}'>
+          <span class="pvs-num">${Math.abs(pct) < 0.5 ? "0" : fmtSigned(hass, pct, 0)}</span></td>`;
+      };
       body = `${truth ? `<div class="kv-note ${truth === "measured" ? "" : "warn"}">${truth === "measured" ? "✓ " + t(hass, "nerd_truth_measured") : "⚠︎ " + t(hass, "nerd_truth_nowcast")}</div>` : ""}
-        <table><tr><th></th>${horizons.map((h) => `<th>${h}</th>`).join("")}</tr>
+        <table class="hm-table"><tr><th></th>${horizons.map((h) => `<th>${h}</th>`).join("")}</tr>
         ${hours.map((h) => `<tr><th class="pvs-num">${h}:00</th>
-          ${horizons.map((hz) => this._factorCell(hass, src[`${h}|${hz}`])).join("")}</tr>`).join("")}</table>`;
+          ${horizons.map((hz) => cellOf(src[`${h}|${hz}`])).join("")}</tr>`).join("")}</table>
+        <div class="hm-legend">
+          <span class="lbl">−${CLIP} % ${t(hass, "bias_legend_high")}</span>
+          <span class="ramp"></span>
+          <span class="lbl">${t(hass, "bias_legend_low")} +${CLIP} %</span>
+          <span class="thin-sw"><span class="sw"></span>${t(hass, "bias_thin")}</span>
+        </div>`;
     } else if (mode === "skip_reasons") {
       const lc = a.last_learn_cycle;
       if (!lc) return empty("last_learn_cycle");
@@ -3557,8 +3886,8 @@ class PvsKvTableCard extends PvsBaseCard {
       body = `<table>
         ${["hours_materialised", "observations_used", "observations_skipped", "censored_hours"]
           .filter((k) => lc[k] !== undefined)
-          .map((k) => `<tr><th>${k.replaceAll("_", " ")}</th><td><span class="pvs-num">${lc[k]}</span></td></tr>`).join("")}
-        ${rows.length ? `<tr><th colspan="2" class="kv-sect">skipped_because</th></tr>` : ""}
+          .map((k) => `<tr><th>${keyLabel(hass, k)}</th><td><span class="pvs-num">${lc[k]}</span></td></tr>`).join("")}
+        ${rows.length ? `<tr><th colspan="2" class="kv-sect">${keyLabel(hass, "skipped_because")}</th></tr>` : ""}
         ${rows.map(([k, v]) => `<tr><th class="dim">${esc(k)}</th><td><span class="pvs-num">${v}</span></td></tr>`).join("")}
       </table>`;
     } else if (mode === "censoring") {
@@ -3578,10 +3907,10 @@ class PvsKvTableCard extends PvsBaseCard {
       const keys = ["intervals_written", "events_seen", "write_errors", "watchdog_ticks", "last_flush_duration_ms"];
       body = `<table>
         ${keys.filter((k) => a[k] !== undefined).map((k) =>
-          `<tr><th>${k.replaceAll("_", " ")}</th><td class="${k === "write_errors" && a[k] > 0 ? "hot" : ""}"><span class="pvs-num">${a[k]}</span></td></tr>`).join("")}
+          `<tr><th>${keyLabel(hass, k)}</th><td class="${k === "write_errors" && a[k] > 0 ? "hot" : ""}"><span class="pvs-num">${a[k]}</span></td></tr>`).join("")}
         ${a.last_error ? `<tr><th class="dim">last error</th><td class="hot">${esc(a.last_error)}</td></tr>` : ""}
-        ${a.weather_ok === false ? `<tr><th class="dim">weather</th><td class="hot">${esc(a.weather_error ?? "error")}</td></tr>` : ""}
-        ${a.coverage_last ? `<tr><th colspan="2" class="kv-sect">coverage_last</th></tr>` : ""}
+        ${a.weather_ok === false ? `<tr><th class="dim">${t(hass, "health_weather")}</th><td class="hot">${esc(a.weather_error ?? "error")}</td></tr>` : ""}
+        ${a.coverage_last ? `<tr><th colspan="2" class="kv-sect">${t(hass, "health_per_string")}</th></tr>` : ""}
         ${Object.entries(a.coverage_last ?? {}).map(([id, v]) =>
           `<tr><th class="dim">${esc((this._names?.get(id)) ?? (this._stringNames(), id.slice(0, 8)))}</th>
            <td class="${v < 0.8 ? "warm" : ""}"><span class="pvs-num">${fmtNum(hass, v * 100, 0)} %</span></td></tr>`).join("")}
@@ -3602,7 +3931,7 @@ class PvsKvTableCard extends PvsBaseCard {
             : `<span class="n">${fit2 ?? "—"}</span>`}</td>
           <td>${worst ? `<span class="pvs-num" style="white-space:nowrap">${esc(sector)}°</span> <span class="n">${fmtNum(hass, worst.shading_pct, 0)}%</span>` : "—"}</td></tr>`;
       }).join("");
-      body = `<table><tr><th></th><th>cells</th><th>${t(hass, "sky_level")}</th><th>max</th></tr>${rows2}</table>`;
+      body = `<table><tr><th></th><th>${t(hass, "sky_cells_col")}</th><th>${t(hass, "sky_level")}</th><th>${t(hass, "sky_worst_col")}</th></tr>${rows2}</table>`;
     } else if (mode === "conversion") {
       // Curves are configured (datasheet/custom) or absent (neutral) — they
       // are not learned, so this table shows configuration + realized ratio,
@@ -3618,7 +3947,7 @@ class PvsKvTableCard extends PvsBaseCard {
         const stages = oa.stages;
         const stagesTxt = stages == null ? "—"
           : Array.isArray(stages)
-            ? esc(stages.map((s) => s?.name ?? s?.kind ?? (typeof s === "string" ? s : "")).filter(Boolean).join(" → ") || String(stages.length))
+            ? esc(stages.map((s) => stageLabel(hass, s?.name ?? s?.kind ?? (typeof s === "string" ? s : ""))).filter(Boolean).join(" → ") || String(stages.length))
             : `<span class="dim">${esc(JSON.stringify(stages).slice(0, 60))}</span>`;
         const ratio = !neutral && oa.today_kwh != null && d?.attributes?.today_kwh > 0
           ? oa.today_kwh / d.attributes.today_kwh : null;
@@ -3668,7 +3997,7 @@ class PvsKvTableCard extends PvsBaseCard {
           </tr>`;
         }).join("");
         body = `<table><tr><th></th><th>${t(hass, "conv_ev_stage")}</th>
-            <th>${t(hass, "conv_ev_pairs")}</th></tr>${rows4}</table>
+            <th>${t(hass, "conv_ev_pairs_col")}</th></tr>${rows4}</table>
           <div class="kv-note">${t(hass, "conv_ev_note")}</div>`;
       }
     } else if (mode === "price") {
@@ -3763,7 +4092,34 @@ const KV_CSS = `
   .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-bottom: 8px; }
   .kv-note.warn { background: color-mix(in srgb, var(--warning-color, #ffa600) 12%, transparent); color: var(--primary-text-color); }
   th.dim, .dim { color: var(--secondary-text-color); font-weight: 400; }
+  td.fac { white-space: nowrap; }
+  td.fac.thin .pvs-num { opacity: 0.6; }
+  .kv-foot { font-size: 10.5px; color: var(--secondary-text-color); margin-top: 8px; line-height: 1.5; }
+  /* heatmap: tight cells, number small and quiet, colour does the talking */
+  .hm-table td { padding: 3px 6px; text-align: center; border-bottom: 1px solid var(--card-background-color); }
+  .hm-table th { font-size: 10.5px; }
+  .hm-table td.hm { cursor: crosshair; border-radius: 3px; }
+  .hm-table td.hm .pvs-num { font-size: 10.5px; color: var(--primary-text-color); }
+  .hm-table td.hm.thin .pvs-num { opacity: 0.45; }
+  .hm-table td.hm.thin { background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--card-background-color) 60%, transparent) 4px 6px); }
+  .hm-miss { background: var(--pvs-unobserved); }
+  .hm-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10.5px; color: var(--secondary-text-color); flex-wrap: wrap; }
+  .hm-legend .ramp { flex: 1 1 80px; height: 8px; border-radius: 4px; min-width: 60px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--pvs-model) 80%, transparent), transparent 50%, color-mix(in srgb, var(--pvs-measure) 80%, transparent)); }
+  .hm-legend .thin-sw { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; }
+  .hm-legend .thin-sw .sw { width: 12px; height: 8px; border-radius: 2px; background: color-mix(in srgb, var(--pvs-measure) 40%, transparent);
+    background-image: repeating-linear-gradient(45deg, transparent 0 3px, color-mix(in srgb, var(--card-background-color) 60%, transparent) 3px 5px); }
 `;
+
+// Stage names arrive as the integration's identifiers (inverter_efficiency,
+// mppt_efficiency, charge_efficiency); readers get the device name.
+function stageLabel(hass, s) {
+  const k = String(s ?? "").replace(/_efficiency$/, "");
+  if (k === "inverter") return t(hass, "conv_stage_inverter");
+  if (k === "mppt") return t(hass, "conv_stage_mppt");
+  if (k === "charge") return t(hass, "conv_stage_charge");
+  return s;
+}
 
 /* ========================= SECTION: CARD:MATURITY ======================== */
 
@@ -3842,11 +4198,16 @@ class PvsMaturityCard extends PvsBaseCard {
         ).join("") || t(hass, "kv_empty", { path: "cells", entity: "sky_map" });
 
     this.shadowRoot.innerHTML = `<style>${BASE_CSS}${MATURITY_CSS}</style><ha-card>
+      <div class="pvs-head mat-head">
+        <span class="pvs-title${cfg.entity ? " clickable" : ""}"${cfg.entity ? ` data-more-info="${cfg.entity}"` : ""}>${esc(cfg.title ?? t(hass, "maturity_title"))}</span>
+        ${helpChip("maturity")}
+      </div>
       <div class="mat-wrap">
         ${bar(t(hass, "maturity_weather"), weather, wSub, cfg.entity, 85, true)}
         ${bar(t(hass, "maturity_shading"), shading, sSub, null, 95, false)}
-      </div></ha-card>`;
+      </div><div class="pvs-tip"></div></ha-card>`;
     this._wireMoreInfo();
+    if (!this._wired) { this._wired = true; wireTooltip(this); }
   }
 
   static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
@@ -3854,7 +4215,9 @@ class PvsMaturityCard extends PvsBaseCard {
 }
 
 const MATURITY_CSS = `
-  .mat-wrap { display: flex; gap: 28px; padding: 14px 16px; flex-wrap: wrap; }
+  ha-card { padding: 16px; }
+  .mat-head { margin-bottom: 2px; }
+  .mat-wrap { display: flex; gap: 28px; padding: 6px 0 2px; flex-wrap: wrap; }
   .mat-axis { flex: 1 1 240px; min-width: 0; }
   .mat-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
   .mat-label { font-size: 13px; font-weight: 500; }
@@ -3868,6 +4231,366 @@ const MATURITY_CSS = `
     background: color-mix(in srgb, var(--primary-text-color, #212121) 40%, transparent); }
   .mat-axis .pvs-sub { margin-top: 7px; line-height: 1.7; }
   .mat-chip { display: inline-block; margin-right: 10px; cursor: pointer; }
+`;
+
+/* ========================== SECTION: CARD:HEALTH ========================= */
+
+// Collection and learn cycle as one row of chips. Four tables used to say
+// "healthy" in thirty numbers; here every figure is a chip that links to its
+// source entity, and a table opens only where a figure deviates (or always,
+// in detail mode). Rule 1 holds because a chip states the number, never a
+// verdict: "0 skipped" and "no learn cycle yet" are different chips.
+class PvsHealthCard extends PvsBaseCard {
+  getCardSize() { return 2; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  watchedEntities() {
+    const c = this._config ?? {};
+    return [c.entity, c.model_entity, c.detail_entity, c.ghi_entity].filter(Boolean);
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${KV_CSS}${HEALTH_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wireMoreInfo();
+      if (!this._wired) { this._wired = true; wireTooltip(this); }
+    };
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const coll = hass.states[cfg.entity];
+    if (!coll) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: cfg.entity }) }));
+    const need = requireFeatures(coll, ["collector"]);
+    if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
+
+    const a = coll.attributes;
+    const detail = !!cfg.detail;
+    const lc = cfg.model_entity ? hass.states[cfg.model_entity]?.attributes?.last_learn_cycle ?? null : null;
+    const sd = cfg.detail_entity ? hass.states[cfg.detail_entity]?.attributes?.strings ?? null : null;
+    const ghi = cfg.ghi_entity ? hass.states[cfg.ghi_entity]?.attributes ?? null : null;
+    if (!this._names) {
+      stringNamesById(hass).then((m) => { this._names = m; this._render(); }).catch(() => { this._names = new Map(); });
+    }
+    const names = this._names ?? new Map();
+    const nameOf = (id) => names.get(id) ?? id.slice(0, 8);
+
+    const chip = (label, value, { tone = "", mi = null, title = null } = {}) =>
+      `<span class="pvs-chip hc ${tone}${mi ? " clickable" : ""}"${mi ? ` data-more-info="${mi}"` : ""}${title ? ` title="${esc(title)}"` : ""}>
+        <span class="k">${label}</span><span class="v">${value}</span></span>`;
+
+    // ---- chips --------------------------------------------------------------
+    const cov = Number.isFinite(parseFloat(coll.state)) ? parseFloat(coll.state) : null;
+    const chips = [];
+    chips.push(chip(t(hass, "health_coverage"), cov == null ? "—" : `${fmtNum(hass, cov, 0)} %`,
+      { tone: cov != null && cov < 80 ? "warn" : "", mi: cfg.entity }));
+    const werr = a.write_errors ?? 0;
+    chips.push(chip(t(hass, "health_write_errors"), String(werr), { tone: werr > 0 ? "hot" : "", mi: cfg.entity }));
+    chips.push(a.weather_ok === false
+      ? chip(t(hass, "health_weather"), esc(a.weather_error ?? "error"), { tone: "hot", mi: cfg.entity })
+      : chip(t(hass, "health_weather"), t(hass, "health_ok"), { mi: cfg.entity }));
+    if (cfg.model_entity) {
+      if (lc) {
+        const skipped = lc.observations_skipped ?? 0;
+        const hours = lc.hours_materialised ?? 0;
+        // a cycle that found no new hour is neither healthy nor a fault —
+        // grey, and the number says it
+        chips.push(chip(t(hass, "health_learn"),
+          t(hass, "health_learn_v", { used: lc.observations_used ?? 0, hours }),
+          { tone: skipped > 0 ? "warn" : hours === 0 ? "off" : "", mi: cfg.model_entity }));
+        if (skipped > 0) chips.push(chip(t(hass, "health_skipped"), String(skipped), { tone: "warn", mi: cfg.model_entity }));
+        const cens = lc.censored_hours ?? 0;
+        chips.push(chip(t(hass, "health_censored"), String(cens), { tone: cens > 0 ? "warn" : "", mi: cfg.model_entity }));
+      } else {
+        chips.push(chip(t(hass, "health_learn"), t(hass, "health_no_cycle"), { tone: "off", mi: cfg.model_entity }));
+      }
+    }
+    // censoring split from strings_detail: lower bounds and reconstructed
+    // intervals are the two kinds of "not quite measured"
+    let lower = 0, recon = 0, curtailed = false, intervals = [], covMeans = [];
+    for (const s of Object.values(sd ?? {})) {
+      const td = s?.today ?? {};
+      lower += td.value_kinds?.lower_bound ?? 0;
+      recon += td.value_kinds?.reconstructed ?? 0;
+      if ((td.curtailed_fraction ?? 0) > 0) curtailed = true;
+      if (td.intervals != null) intervals.push(td.intervals);
+      if (td.coverage_mean != null) covMeans.push(td.coverage_mean);
+    }
+    if (sd && (lower > 0 || recon > 0)) {
+      chips.push(chip(`${t(hass, "vk_lower_bound")} · ${t(hass, "vk_reconstructed")}`,
+        `${lower} · ${recon}`, { tone: "warn", mi: cfg.detail_entity }));
+    }
+    // station air (>= 1.24): the check that measured air reaches the physics
+    if (ghi && "station_air_share_today" in ghi) {
+      const s = ghi.station_air_share_today;
+      const has = s && (s.temperature != null || s.wind != null);
+      const pct = (v) => v == null ? "—" : fmtNum(hass, v * 100, 0);
+      chips.push(has
+        ? chip(t(hass, "health_station"), t(hass, "health_station_v", { t: pct(s.temperature), w: pct(s.wind) }),
+            { tone: (s.temperature ?? 1) < 0.8 || (s.wind ?? 1) < 0.8 ? "warn" : "", mi: cfg.ghi_entity, title: t(hass, "health_station_tip") })
+        : chip(t(hass, "health_station"), t(hass, "health_station_none"), { tone: "off", mi: cfg.ghi_entity, title: t(hass, "health_station_tip") }));
+    }
+
+    // ---- tables, each on its own evidence -----------------------------------
+    const covLast = a.coverage_last ?? {};
+    const covLow = Object.values(covLast).some((v) => v < 0.95);
+    const skips = Object.entries(lc?.skipped_because ?? {}).sort((x, y) => y[1] - x[1]);
+    const censDeviates = lower > 0 || recon > 0 || curtailed || covMeans.some((v) => v < 0.95);
+    const sect = (label) => `<div class="hc-sect">${label}</div>`;
+    let tables = "";
+    if (Object.keys(covLast).length && (detail || covLow)) {
+      tables += sect(t(hass, "health_per_string")) + `<table>${Object.entries(covLast).map(([id, v]) =>
+        `<tr><th class="dim">${esc(nameOf(id))}</th><td class="${v < 0.8 ? "warm" : ""}"><span class="pvs-num">${fmtNum(hass, v * 100, 0)} %</span></td></tr>`).join("")}</table>`;
+    }
+    if (lc && (detail || skips.length)) {
+      const counters = detail
+        ? ["hours_materialised", "observations_used", "observations_skipped", "censored_hours",
+           "bias_observations", "shading_observations", "ghi_hours_rejected", "reconstructed_intervals"]
+          .filter((k) => lc[k] !== undefined)
+          .map((k) => `<tr><th>${keyLabel(hass, k)}</th><td><span class="pvs-num">${lc[k]}</span></td></tr>`).join("")
+        : "";
+      tables += sect(t(hass, "nerd_skips")) + `<table>${counters}
+        ${skips.length ? `<tr><th colspan="2" class="kv-sect">${keyLabel(hass, "skipped_because")}</th></tr>` : ""}
+        ${skips.map(([k, v]) => `<tr><th class="dim">${esc(k)}</th><td class="warm"><span class="pvs-num">${v}</span></td></tr>`).join("")}
+      </table>`;
+    }
+    if (sd && (detail || censDeviates)) {
+      tables += sect(t(hass, "nerd_censoring")) + `<table><tr><th></th><th>${t(hass, "vk_measured")}</th><th>${t(hass, "vk_lower_bound")}</th><th>${t(hass, "vk_reconstructed")}</th><th>${t(hass, "cens_coverage")}</th><th>${t(hass, "cens_curtailed")}</th></tr>
+        ${Object.entries(sd).map(([name, s]) => {
+          const vk = s.today?.value_kinds ?? {};
+          return `<tr><th>${esc(name)}</th>
+            <td><span class="pvs-num">${vk.measured ?? 0}</span></td>
+            <td class="${(vk.lower_bound ?? 0) > 0 ? "warm" : ""}"><span class="pvs-num">${vk.lower_bound ?? 0}</span></td>
+            <td class="${(vk.reconstructed ?? 0) > 0 ? "warm" : ""}"><span class="pvs-num">${vk.reconstructed ?? 0}</span></td>
+            <td><span class="pvs-num">${s.today?.coverage_mean != null ? fmtNum(hass, s.today.coverage_mean * 100, 0) + "%" : "—"}</span></td>
+            <td class="${(s.today?.curtailed_fraction ?? 0) > 0 ? "warm" : ""}"><span class="pvs-num">${s.today?.curtailed_fraction != null ? fmtNum(hass, s.today.curtailed_fraction * 100, 0) + "%" : "—"}</span></td></tr>`;
+        }).join("")}</table>`;
+    }
+    if (detail) {
+      tables += sect(t(hass, "health_counters")) + `<table>${["intervals_written", "events_seen", "write_errors", "watchdog_ticks", "last_flush_duration_ms"]
+        .filter((k) => a[k] !== undefined)
+        .map((k) => `<tr><th>${keyLabel(hass, k)}</th><td><span class="pvs-num">${a[k]}</span></td></tr>`).join("")}
+        ${a.last_error ? `<tr><th class="dim">last error</th><td class="hot">${esc(a.last_error)}</td></tr>` : ""}</table>`;
+    }
+
+    // one sentence when nothing deviates — the number, not a verdict
+    const allGood = werr === 0 && a.weather_ok !== false && !covLow
+      && (!lc || ((lc.observations_skipped ?? 0) === 0 && (lc.censored_hours ?? 0) === 0))
+      && !censDeviates;
+    const nStr = Object.keys(sd ?? covLast).length;
+    const good = allGood && nStr && !detail
+      ? `<div class="hc-good">✓ ${tn(hass, "health_all_good", nStr, {
+          iv: intervals.length ? fmtNum(hass, intervals.reduce((s, x) => s + x, 0) / intervals.length, 0) : "–",
+          cov: covMeans.length ? fmtNum(hass, covMeans.reduce((s, x) => s + x, 0) / covMeans.length * 100, 0) : fmtNum(hass, cov ?? 0, 0) })}</div>`
+      : "";
+
+    card(`<div class="pvs-head">
+        <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(cfg.title ?? t(hass, "health_title"))}</span>
+        ${helpChip("health")}
+      </div>
+      <div class="hc-row">${chips.join("")}</div>
+      ${good}${tables ? `<div class="kv-scroll">${tables}</div>` : ""}`);
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-health-editor"); }
+  static getStubConfig(hass, entities) {
+    const guess = (entities ?? []).find((e) => hass.states[e]?.attributes?.intervals_written !== undefined);
+    return { entity: guess ?? "" };
+  }
+}
+
+const HEALTH_CSS = `
+  .hc-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pvs-chip.hc { padding: 7px 11px 7px 9px; gap: 8px; border-color: var(--pvs-hairline); }
+  .pvs-chip.hc::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: var(--success-color, #43a047); }
+  .pvs-chip.hc .k { color: var(--secondary-text-color); }
+  .pvs-chip.hc .v { font-size: 12.5px; }
+  .pvs-chip.hc.warn::before { background: var(--warning-color, #ffa600); }
+  .pvs-chip.hc.hot { background: color-mix(in srgb, var(--error-color, #db4437) 12%, transparent); color: var(--primary-text-color); }
+  .pvs-chip.hc.hot::before { background: var(--error-color, #db4437); }
+  .pvs-chip.hc.off::before { background: var(--secondary-text-color); opacity: 0.45; }
+  .pvs-chip.hc.off .v { color: var(--secondary-text-color); font-family: inherit; font-style: italic; }
+  .hc-good { margin-top: 12px; font-size: 12px; color: var(--secondary-text-color); line-height: 1.5; }
+  .hc-sect { margin-top: 14px; margin-bottom: 4px; font-size: 10px; letter-spacing: 0.6px; text-transform: uppercase; color: var(--secondary-text-color); }
+`;
+
+/* ========================= SECTION: CARD:THERMAL ========================= */
+
+// Cell temperature over the day, one line per string, the air as a thin
+// dashed line: the distance between the two is irradiance and wind. Below,
+// what the heat costs — the running hour's factor and today's sum from the
+// cell-temperature sensor (>= 1.24). Modelled, never measured, and the card
+// says so. The share is already inside the chain's physics figure; this
+// card only makes it visible.
+class PvsThermalCard extends PvsBaseCard {
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  watchedEntities() {
+    return (this._config?.rows ?? []).flatMap((r) => [r.forecast, r.cell]).filter(Boolean);
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${KV_CSS}${TH_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    const rows = (cfg.rows ?? []).filter((r) => r?.forecast);
+    if (!rows.length) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const known = rows.filter((r) => hass.states[r.forecast]);
+    if (!known.length) return card(problemHTML(hass, { reason: t(hass, "entity_missing", { entity: rows[0].forecast }) }));
+    const withThermal = known.filter((r) => FEATURES.thermal.test(hass.states[r.forecast].attributes));
+    if (!withThermal.length) {
+      return card(problemHTML(hass, { entity: known[0].forecast,
+        missing: requireFeatures(hass.states[known[0].forecast], ["thermal"]).missing }));
+    }
+
+    const nowMs = Date.now();
+    const todayKey = localParts(hass, nowMs).dayKey;
+    const series = withThermal.map((r, i) => {
+      const pts = (hass.states[r.forecast].attributes.forecast ?? [])
+        .map((row) => ({ ...row, ms: new Date(row.datetime).getTime() }))
+        .filter((row) => localParts(hass, row.ms).dayKey === todayKey)
+        .sort((x, y) => x.ms - y.ms)
+        .map((row) => { const lp = localParts(hass, row.ms); return { ...row, h: lp.hour + lp.minute / 60 }; });
+      return { name: r.name ?? r.forecast, id: r.forecast, cell: r.cell,
+        color: `var(--pvs-cat-${i % 6})`, pts, lit: pts.filter((p) => p.cell_temp_c != null) };
+    });
+    const title = cfg.title ?? t(hass, "th_title");
+
+    // plant share today, energy-weighted over the strings: Σ physics /
+    // Σ (physics / thermal) — the handover's formula, never a mean of factors
+    let sumP = 0, sumRef = 0;
+    for (const s of series) for (const p of s.lit) {
+      if ((p.physics_kwh ?? 0) > 0 && (p.thermal ?? 0) > 0) { sumP += p.physics_kwh; sumRef += p.physics_kwh / p.thermal; }
+    }
+    const plantPct = sumRef > 0 ? (sumP / sumRef - 1) * 100 : null;
+    const head = `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${series[0].id}">${esc(title)}</span>
+      ${plantPct != null ? `<span class="pvs-chip ${plantPct < -3 ? "warn" : ""}" title="${esc(t(hass, "th_note"))}">${t(hass, "th_plant_today")}
+        <span class="v">${fmtSigned(hass, plantPct, 1)} %</span> ${t(hass, "th_by_heat")}</span>` : ""}
+      ${helpChip("thermal")}
+    </div>`;
+
+    // ---- the per-string table (running hour, today's sum) --------------------
+    const tableRows = series.filter((s) => s.cell).map((s) => {
+      const st = hass.states[s.cell];
+      const ca = st?.attributes ?? {};
+      const temp = st && Number.isFinite(parseFloat(st.state)) ? parseFloat(st.state) : null;
+      const eff = ca.thermal_factor != null ? (ca.thermal_factor - 1) * 100 : null;
+      const tone = eff == null ? "" : eff < -8 ? "hot" : eff < -3 ? "warm" : "";
+      const loss = ca.heat_loss_today_kwh;
+      return `<tr><th class="clickable" data-more-info="${s.cell}"><span class="sw" style="background:${s.color}"></span>${esc(s.name)}</th>
+        <td>${temp == null ? withheldHTML(t(hass, "not_available")) : `<span class="pvs-num">${fmtNum(hass, temp, 1)}</span> <span class="n">°C</span>`}</td>
+        <td class="${tone}">${eff == null ? "—" : `<span class="pvs-num">${fmtSigned(hass, eff, 1)} %</span>`}</td>
+        <td>${loss == null ? "—" : `<span class="pvs-num">${fmtSigned(hass, -loss, 3)}</span> <span class="n">kWh</span>`}</td></tr>`;
+    }).join("");
+    const table = tableRows ? `<table class="th-table"><tr><th></th><th>${t(hass, "th_cells")}</th><th>${t(hass, "th_effect")}</th><th>${t(hass, "th_today")}</th></tr>${tableRows}</table>` : "";
+
+    const lit = series.flatMap((s) => s.lit);
+    if (!lit.length) {
+      return card(head + withheldHTML(t(hass, "th_no_rows")) + table
+        + `<div class="kv-note dim">${t(hass, "th_note")}</div>`);
+    }
+
+    // ---- chart ---------------------------------------------------------------
+    // Hourly means sit at the hour centre; straight segments between them —
+    // a spline would draw a resolution the forecast does not have.
+    const airPts = (series.find((s) => s.pts.length)?.pts ?? []).filter((p) => p.air_temp_c != null);
+    const hStart = Math.floor(Math.min(...lit.map((p) => p.h)));
+    const hEnd = Math.min(24, Math.ceil(Math.max(...lit.map((p) => p.h))) + 1);
+    const inWin = (p) => p.h >= hStart && p.h < hEnd;
+    const temps = [...lit.map((p) => p.cell_temp_c), ...airPts.filter(inWin).map((p) => p.air_temp_c)];
+    let tMin = Math.floor((Math.min(...temps) - 2) / 5) * 5;
+    let tMax = Math.ceil((Math.max(...temps) + 2) / 5) * 5;
+    if (tMax - tMin < 10) tMax = tMin + 10;
+    const PAD_L = 34, PAD_R = 10, PAD_T = 12, PAD_B = 22, PW = 560, PH = 130;
+    const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
+    const xOf = (h) => PAD_L + ((h + 0.5 - hStart) / (hEnd - hStart)) * PW;
+    const yOf = (v) => PAD_T + PH - ((v - tMin) / (tMax - tMin)) * PH;
+    const step = tMax - tMin > 30 ? 10 : 5;
+    let grid = "";
+    for (let v = tMin; v <= tMax; v += step) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v).toFixed(1)}" x2="${W - PAD_R}" y2="${yOf(v).toFixed(1)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${(yOf(v) + 3).toFixed(1)}" text-anchor="end">${fmtNum(hass, v, 0)}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 3}" text-anchor="end" style="font-size:8.5px">°C</text>`;
+    const hourStep = hEnd - hStart > 12 ? 3 : 2;
+    for (let h = hStart; h < hEnd; h += hourStep) {
+      grid += `<text class="axis" x="${(xOf(h)).toFixed(1)}" y="${H - 6}" text-anchor="middle">${String(h).padStart(2, "0")}</text>`;
+    }
+    // the 25 °C reference the factor is measured against
+    let ref = "";
+    if (25 > tMin && 25 < tMax) {
+      ref = `<line x1="${PAD_L}" y1="${yOf(25).toFixed(1)}" x2="${W - PAD_R}" y2="${yOf(25).toFixed(1)}"
+          stroke="var(--secondary-text-color)" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/>
+        <text class="axis" x="${W - PAD_R}" y="${(yOf(25) - 3).toFixed(1)}" text-anchor="end" style="font-size:8.5px">${t(hass, "th_ref")}</text>`;
+    }
+    const path = (pts, key) => pts.length < 2 ? "" : pts.map((p, i) =>
+      `${i ? "L" : "M"}${xOf(p.h).toFixed(1)} ${yOf(p[key]).toFixed(1)}`).join("");
+    const lines = series.map((s) => s.lit.length < 2
+      ? s.lit.map((p) => `<circle cx="${xOf(p.h).toFixed(1)}" cy="${yOf(p.cell_temp_c).toFixed(1)}" r="2.5" fill="${s.color}"/>`).join("")
+      : `<path d="${path(s.lit, "cell_temp_c")}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join("");
+    const airLine = airPts.filter(inWin).length >= 2
+      ? `<path d="${path(airPts.filter(inWin), "air_temp_c")}" fill="none" stroke="var(--secondary-text-color)" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.85"/>` : "";
+    // now marker, only while the window contains it
+    const lpNow = localParts(hass, nowMs);
+    const hNow = lpNow.hour + lpNow.minute / 60;
+    const nowMark = hNow >= hStart && hNow < hEnd
+      ? `<line x1="${(xOf(hNow - 0.5)).toFixed(1)}" y1="${PAD_T}" x2="${(xOf(hNow - 0.5)).toFixed(1)}" y2="${PAD_T + PH}" stroke="var(--pvs-sun)" stroke-width="1" opacity="0.8"/>
+         <text class="axis" x="${(xOf(hNow - 0.5) + 4).toFixed(1)}" y="${PAD_T + 9}" style="fill:var(--pvs-sun)">${t(hass, "th_now")}</text>` : "";
+    // hit slots per hour, tooltip lists every string
+    let hits = "";
+    const slotW = PW / (hEnd - hStart);
+    for (let h = hStart; h < hEnd; h++) {
+      const cells = series.map((s) => { const p = s.lit.find((q) => Math.floor(q.h) === h); return p ? { n: s.name, c: p.cell_temp_c, f: p.thermal ?? null } : null; }).filter(Boolean);
+      if (!cells.length) continue;
+      const air = airPts.find((p) => Math.floor(p.h) === h);
+      const tip = { h, air: air?.air_temp_c ?? null, wind: air?.wind_ms ?? null, cells };
+      hits += `<rect class="hit" x="${(PAD_L + (h - hStart) * slotW).toFixed(1)}" y="${PAD_T}" width="${slotW.toFixed(1)}" height="${PH}" fill="transparent" data-th='${esc(JSON.stringify(tip))}'/>`;
+    }
+    const legend = `<div class="pvs-legend">
+      ${series.map((s) => `<span class="it"><span class="ln" style="border-color:${s.color}"></span>${esc(s.name)}</span>`).join("")}
+      <span class="it"><span class="ln air"></span>${t(hass, "th_air")}</span>
+    </div>`;
+
+    card(`${head}
+      <div class="fc-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}${ref}${airLine}${lines}${nowMark}${hits}
+      </svg></div>
+      ${legend}${table}
+      <div class="kv-note dim">${t(hass, "th_note")}</div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-th]",
+      content: (el) => {
+        const hass = this._hass;
+        const c = JSON.parse(el.getAttribute("data-th"));
+        return `<div class="h">${String(c.h).padStart(2, "0")}:00–${String((c.h + 1) % 24).padStart(2, "0")}:00</div>
+          ${c.cells.map((x) => `<div class="r"><span class="k">${esc(x.n)}</span><span class="v">${fmtNum(hass, x.c, 1)} °C${x.f != null ? ` · ${fmtSigned(hass, (x.f - 1) * 100, 1)} %` : ""}</span></div>`).join("")}
+          ${c.air != null ? `<div class="r"><span class="k">${t(hass, "th_air")}</span><span class="v">${fmtNum(hass, c.air, 1)} °C</span></div>` : ""}
+          ${c.wind != null ? `<div class="r"><span class="k">${t(hass, "th_wind")}</span><span class="v">${fmtNum(hass, c.wind, 1)} m/s</span></div>` : ""}`;
+      },
+    });
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { rows: [] }; }
+}
+
+const TH_CSS = `
+  .hit { cursor: crosshair; }
+  .pvs-legend .ln { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--secondary-text-color); }
+  .pvs-legend .ln.air { border-top-style: dashed; border-top-width: 1.5px; }
+  .th-table { margin-top: 10px; }
+  .th-table th .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; vertical-align: middle; }
+  .th-table th.clickable { cursor: pointer; }
+  .kv-note { font-size: 11px; padding: 5px 8px; border-radius: 6px; background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 10px; line-height: 1.5; }
 `;
 
 /* ========================== SECTION: STRATEGY ============================ */
@@ -4018,6 +4741,8 @@ async function buildViews(hass, config) {
           tileOrMissing(hass, lang, s, "string_shading_now"),
           tileOrMissing(hass, lang, s, "string_produced_today", { color: "orange" }),
           tileOrMissing(hass, lang, s, "string_potential_now"),
+          // modelled cell temperature (>= 1.24): optional, unknown at night
+          ...[tileIf(hass, lang, s, "string_cell_temperature")].filter(Boolean),
         ],
       }))],
     });
@@ -4051,25 +4776,40 @@ async function buildViews(hass, config) {
       icon: "mdi:target", type: "sections", max_columns: 2, sections: accSections,
     });
 
-    // ---- Nerd ----
+    // ---- Nerd Dashboard ----
+    // Status first, numbers on demand. Chips and charts carry the reading;
+    // a table opens where a figure deviates. Ten tables over four screens
+    // used to say "healthy" in developer vocabulary — nobody read them.
+    // `diagnostics: full` on the strategy config restores every raw table,
+    // n on every cell and the explainer footer: the debugging view, on
+    // request, never by default.
+    const full = config?.diagnostics === "full";
+    const det = full ? { detail: true } : {};
     const mo = plant.byKey.model_observations;
     const ghi = plant.byKey.ghi_forecast;
+    const coll = plant.byKey.collector_health;
+    const sd = plant.byKey.strings_detail;
     const nerdSections = [];
+    // status: how far the training is, and whether collection runs at all —
+    // the two questions every other card on this view rests on
     nerdSections.push({ type: "grid", column_span: 3, cards: [
-      heading(t(lang, "maturity_title")),
+      heading(t(lang, "s_status")),
       { type: "custom:pvstrings-maturity", ...(mo ? { entity: mo } : {}),
         rows: strings.map((s) => ({ name: s.name, sky: s.byKey.string_sky_map }))
           .filter((r) => r.sky) },
+      coll
+        ? { type: "custom:pvstrings-health", entity: coll,
+            ...(mo ? { model_entity: mo } : {}), ...(sd ? { detail_entity: sd } : {}),
+            ...(ghi ? { ghi_entity: ghi } : {}), ...det }
+        : mdCard(t(lang, "missing_card", { key: "collector_health" })),
     ] });
-    // Where in the day the day-ahead error sits (PV Strings >= 1.23):
-    // right after the maturity bars, because both answer "how far can I
-    // trust this yet" — one over the training, one over the clock. The
+    // Where in the day the day-ahead error sits (PV Strings >= 1.23). The
     // attribute rides on the 30 d day-ahead sensor and is published before
     // that sensor has a state, so the gate is the attribute, never the state.
+    // The card titles itself — no heading, or the title would read twice.
     const da30 = plant.byKey.wmape_day_ahead_30d;
     if (da30 && Array.isArray(hass.states[da30]?.attributes?.hourly_profile)) {
       nerdSections.push({ type: "grid", column_span: 2, cards: [
-        heading(t(lang, "hp_title")),
         { type: "custom:pvstrings-hour-profile", entity: da30,
           grid_options: { columns: "full" } },
       ] });
@@ -4077,17 +4817,17 @@ async function buildViews(hass, config) {
     if (mo) {
       nerdSections.push({ type: "grid", cards: [
         heading(t(lang, "nerd_learning")),
-        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_plant", title: t(lang, "nerd_plant_buckets") },
-        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_strings", title: t(lang, "nerd_string_offsets") },
-        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_string_daypart", title: t(lang, "nerd_string_daypart") },
+        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_plant",
+          title: t(lang, "nerd_plant_buckets"), ...det },
+        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_string_all",
+          title: t(lang, "nerd_strings_table"), ...det },
       ] });
       nerdSections.push({ type: "grid", cards: [
-        heading(t(lang, "nerd_source_bias")),
+        heading(t(lang, "nerd_weather_source")),
         { type: "custom:pvstrings-kv-table", entity: mo, mode: "ghi_bias",
-          title: t(lang, "nerd_source_bias"), ...(ghi ? { truth_entity: ghi } : {}) },
-        ...(ghi ? [{ type: "tile", entity: ghi }] : []),
+          title: t(lang, "bias_title"), ...(ghi ? { truth_entity: ghi } : {}), ...det },
         // the nowcast lives on the same sensor and is the other half of the
-        // story: the bias table says what the source gets wrong on average,
+        // story: the bias map says what the source gets wrong on average,
         // the nowcast what the sensor says about the next two hours
         ...(ghi ? [{ type: "custom:pvstrings-nowcast", entity: ghi }] : []),
       ] });
@@ -4095,23 +4835,26 @@ async function buildViews(hass, config) {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
     }
     nerdSections.push({ type: "grid", cards: [
-      heading(t(lang, "nerd_sky")),
       { type: "custom:pvstrings-kv-table",
-        entity: strings[0]?.byKey?.string_sky_map ?? plant.byKey.strings_detail ?? mo,
+        entity: strings[0]?.byKey?.string_sky_map ?? sd ?? mo,
         mode: "sky_overview", title: t(lang, "nerd_sky"),
         rows: strings.map((s) => ({
           name: s.name, sky: s.byKey.string_sky_map, shading: s.byKey.string_shading_now,
         })) },
     ] });
-    const coll = plant.byKey.collector_health;
-    const sd = plant.byKey.strings_detail;
-    nerdSections.push({ type: "grid", cards: [
-      heading(t(lang, "nerd_collection")),
-      coll ? { type: "custom:pvstrings-kv-table", entity: coll, mode: "collector", title: t(lang, "nerd_collection") }
-        : mdCard(t(lang, "missing_card", { key: "collector_health" })),
-      mo ? { type: "custom:pvstrings-kv-table", entity: mo, mode: "skip_reasons", title: t(lang, "nerd_skips") }
-        : mdCard(t(lang, "missing_card", { key: "model_observations" })),
-    ] });
+    // Thermal (PV Strings >= 1.24): only where a string chain carries the
+    // heat share — absence is an older integration, not an error, so the
+    // section simply does not exist there.
+    const thermalRows = strings
+      .filter((s) => s.byKey.string_forecast_today
+        && FEATURES.thermal.test(hass.states[s.byKey.string_forecast_today]?.attributes))
+      .map((s) => ({ name: s.name, forecast: s.byKey.string_forecast_today,
+        ...(s.byKey.string_cell_temperature ? { cell: s.byKey.string_cell_temperature } : {}) }));
+    if (thermalRows.length) {
+      nerdSections.push({ type: "grid", cards: [
+        { type: "custom:pvstrings-thermal", rows: thermalRows, grid_options: { columns: "full" } },
+      ] });
+    }
     // conversion layer (optional): configuration + realized ratio per group
     const convNerd = groups.filter((g) =>
       (g.byKey.group_forecast_ac || g.byKey.group_forecast_battery_charge) && g.byKey.group_forecast_remaining);
@@ -4124,7 +4867,7 @@ async function buildViews(hass, config) {
         heading(t(lang, "nerd_conversion")),
         { type: "custom:pvstrings-kv-table",
           entity: convEntity,
-          mode: "conversion", title: t(lang, "nerd_conversion"),
+          mode: "conversion", title: t(lang, "nerd_conv_paths"),
           grid_options: { columns: "full" },
           rows: convNerd.map((g) => ({
             name: g.name,
@@ -4152,17 +4895,23 @@ async function buildViews(hass, config) {
             grid_options: { columns: "full" } })),
       ] });
     }
-    // Six columns next to long string names: scrolls inside a single-column
-    // section, so censoring gets a double-width section of its own. A
-    // section's grid density scales with its span (12 units per view
-    // column) and a card defaults to 12 units — one column — so the card
-    // must opt into the section's full width or the span looks ignored.
-    nerdSections.push({ type: "grid", column_span: 2, cards: [
-      heading(t(lang, "nerd_censoring")),
-      sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring",
-        title: t(lang, "nerd_censoring"), grid_options: { columns: "full" } }
-        : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
-    ] });
+    // Full mode: the raw tables the health strip folded away, as they were.
+    // Six columns next to long string names scroll inside a single column,
+    // so the section is double width and each card opts into it.
+    if (full) {
+      nerdSections.push({ type: "grid", column_span: 2, cards: [
+        heading(t(lang, "nerd_collection")),
+        coll ? { type: "custom:pvstrings-kv-table", entity: coll, mode: "collector",
+            title: t(lang, "nerd_collection"), grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "collector_health" })),
+        mo ? { type: "custom:pvstrings-kv-table", entity: mo, mode: "skip_reasons",
+            title: t(lang, "nerd_skips"), grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "model_observations" })),
+        sd ? { type: "custom:pvstrings-kv-table", entity: sd, mode: "censoring",
+            title: t(lang, "nerd_censoring"), grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "strings_detail" })),
+      ] });
+    }
     // Savings provenance (PV Strings >= 1.22, optional): what the money
     // rests on — which share of the energy was valued at a recorded price
     // and which fell back to the fixed tariff, plus grid export the strings
@@ -4180,25 +4929,26 @@ async function buildViews(hass, config) {
     });
     if (hasProvenance) {
       nerdSections.push({ type: "grid", column_span: 2, cards: [
-        heading(t(lang, "nerd_price")),
         { type: "custom:pvstrings-kv-table",
           entity: plant.byKey.savings_total ?? plant.byKey.savings_today,
           mode: "price", title: t(lang, "nerd_price"),
           grid_options: { columns: "full" }, rows: savRows },
       ] });
     }
-    // Educational footer: nerds know this, normal users may want to learn
-    // it. Three balanced markdown columns under a full-width heading.
-    const explBullets = t(lang, "nerd_explain").split("\n- ").map((b, i) => (i ? "- " + b : b));
-    const explCols = [explBullets.slice(0, 3), explBullets.slice(3, 6), explBullets.slice(6)]
-      .filter((c) => c.length).map((c) => mdCard(c.join("\n")));
-    nerdSections.push({ type: "grid", column_span: 3, cards: [
-      heading(t(lang, "nerd_explain_title")), ...explCols,
-    ] });
+    // The explainer footer survives only in full mode: every card now
+    // carries its own "?" with the paragraph that belongs to it, next to
+    // the numbers it explains rather than three screens below them.
+    if (full) {
+      const explBullets = t(lang, "nerd_explain").split("\n- ").map((b, i) => (i ? "- " + b : b));
+      const explCols = [explBullets.slice(0, 3), explBullets.slice(3, 6), explBullets.slice(6)]
+        .filter((c) => c.length).map((c) => mdCard(c.join("\n")));
+      nerdSections.push({ type: "grid", column_span: 3, cards: [
+        heading(t(lang, "nerd_explain_title")), ...explCols,
+      ] });
+    }
     views.push({
-      // The path stays `nerd` although the title no longer is: it is the URL
-      // people bookmark, and renaming it would break links into a view that
-      // is otherwise unchanged.
+      // The path stays `nerd`: it is the URL people bookmark, and the title
+      // has come back to it anyway.
       title: prefix + t(lang, "v_nerd"), path: `${slug}nerd`,
       icon: "mdi:flask-outline", type: "sections", max_columns: 3,
       sections: nerdSections,
@@ -4241,6 +4991,11 @@ const EDITORS = {
     { name: "days", selector: { number: { min: 3, max: 60, mode: "box" } } }],
   "pvstrings-hour-profile-editor": [ENTITY_SCHEMA,
     { name: "title", selector: { text: {} } }],
+  "pvstrings-health-editor": [ENTITY_SCHEMA,
+    { name: "model_entity", selector: { entity: { filter: { integration: "pvstrings" } } } },
+    { name: "detail_entity", selector: { entity: { filter: { integration: "pvstrings" } } } },
+    { name: "ghi_entity", selector: { entity: { filter: { integration: "pvstrings" } } } },
+    { name: "detail", selector: { boolean: {} } }],
 };
 for (const [tag, schema] of Object.entries(EDITORS)) {
   if (!customElements.get(tag)) customElements.define(tag, makeEditor(schema));
@@ -4264,9 +5019,13 @@ const CARDS = [
   ["pvstrings-hour-profile", PvsHourProfileCard, "PV Strings Hourly Profile",
     "Where in the day the day-ahead error sits: announced vs arrived per hour, with the deviation a window plan can use."],
   ["pvstrings-kv-table", PvsKvTableCard, "PV Strings KV Table",
-    "Diagnostic attribute tables (learning buckets, source bias, collection, savings provenance)."],
+    "Diagnostic tables (correction factors as ±%, source-bias heatmap, sky overview, conversion, savings provenance)."],
   ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",
     "How far the training has come: weather-bucket evidence and sun-path coverage."],
+  ["pvstrings-health", PvsHealthCard, "PV Strings Health",
+    "Collection and learn cycle as one row of chips; tables open only where a figure deviates."],
+  ["pvstrings-thermal", PvsThermalCard, "PV Strings Cell Temperature",
+    "Modelled cell temperature per string over the day, the air beside it, and what the heat costs."],
 ];
 window.customCards = window.customCards ?? [];
 for (const [tag, cls, name, description] of CARDS) {
@@ -4274,7 +5033,7 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
       type: tag, name, description,
-      preview: !["pvstrings-kv-table", "pvstrings-maturity"].includes(tag),
+      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }
