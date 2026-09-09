@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.14.0";
+const PVS_VERSION = "0.14.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -4891,7 +4891,7 @@ async function buildViews(hass, config) {
     const dailySeries = [
       ...(plant.byKey.forecast_today ? [{ name: plant.name, entity: plant.byKey.forecast_today, days: 14 }] : []),
       ...strings.filter((s) => s.byKey.string_forecast_today)
-        .map((s) => ({ name: s.name, entity: s.byKey.string_forecast_today, days: 7 })),
+        .map((s) => ({ name: s.name, entity: s.byKey.string_forecast_today, days: 14 })),
     ];
     const accSections = [
       { type: "grid", column_span: 2, cards: [

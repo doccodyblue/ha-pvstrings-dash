@@ -298,7 +298,7 @@ series:
     days: 14
   - name: East
     entity: sensor.<string>_forecast_today
-    days: 7
+    days: 14
 ```
 
 ![Daily card](docs/img/daily-dark.png)
