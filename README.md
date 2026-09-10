@@ -12,6 +12,18 @@ use the cards on their own.
 **Optional.** The integration publishes everything through ordinary entities
 and attributes and works perfectly well without any of this.
 
+## What these cards are for
+
+Home Assistant draws a time series well, and for a plant total that is all you
+need. What it has no way to draw is the sky: a grid over sun position, one per
+string, saying where each of them loses what.
+
+That picture is why this repository exists. On the reference plant two strings
+of identical azimuth and tilt read 0.3 % and 67.7 % loss in one and the same
+sky cell — a neighbour's house stands in one of them in the morning. In a table
+of numbers that is noise. As two maps side by side it is obvious, and specific
+enough to walk outside and confirm.
+
 | | |
 |---|---|
 | ![Sky map](docs/img/sky-map-dark.png) | ![Forecast line](docs/img/forecast-line-dark.png) |
