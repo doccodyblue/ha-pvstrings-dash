@@ -60,7 +60,8 @@ strategy:
 
 That is the entire configuration. The strategy reads the entity registry and
 builds four views: **Overview** (today, remaining, tomorrow, power, forecast
-chart, savings — written for people, not for debugging), **Strings** (one
+chart, what arrives behind the inverter, savings — written for people, not for
+debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
 temperature), **Accuracy** (the learning progress where the integration
 keeps weeks, and one day-by-day chart that switches between the plant and its
@@ -68,7 +69,8 @@ strings), and the **Nerd Dashboard** (status first, numbers on demand:
 training maturity and a one-line collection health strip, the accuracy figures
 — short-term and day-ahead, each with how full its window is — the day-ahead
 error by hour, the correction factors as percentages, the source bias as a heatmap,
-the sky-map overview, the modelled cell temperature, the conversion layer, and
+the sky-map overview, the modelled cell temperature, the conversion layer with
+one chart per group, and
 — where a price sensor or a battery makes it meaningful — what the savings
 figure rests on). Every card on it carries a **?** with the paragraph that
 explains its numbers. The first three views show as icons in the tab bar; the

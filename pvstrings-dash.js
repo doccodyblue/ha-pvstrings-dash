@@ -5570,7 +5570,10 @@ async function buildViews(hass, config) {
     ];
     // ---- conversion layer (>= 1.20, optional): own section right after the
     // forecast chart, deliberately NOT inside the DC groups section — AC and
-    // battery charge must never read as summable with the DC tiles.
+    // battery charge must never read as summable with the DC tiles. Only the
+    // figures anyone needs live here — what arrives behind the inverter, and
+    // what is not in it; the per-group charts (ratio per hour, curve,
+    // clipping) are on the Nerd view.
     const directGroups = groups.filter((g) => g.byKey.group_forecast_ac);
     const storageGroups = groups.filter((g) => g.byKey.group_forecast_battery_charge);
     if (directGroups.length || storageGroups.length || plant.byKey.forecast_ac_today) {
@@ -5579,14 +5582,6 @@ async function buildViews(hass, config) {
         tileIf(hass, lang, plant, "forecast_ac_today"),
         tileIf(hass, lang, plant, "forecast_ac_tomorrow"),
       ].filter(Boolean));
-      for (const g of [...directGroups, ...storageGroups]) {
-        const outKey = g.byKey.group_forecast_ac ? "group_forecast_ac" : "group_forecast_battery_charge";
-        convCards.push(g.byKey.group_forecast_remaining
-          ? { type: "custom:pvstrings-conversion", entity: g.byKey[outKey],
-              dc_entity: g.byKey.group_forecast_remaining, title: g.name,
-              grid_options: { columns: "full" } }
-          : mdCard(t(lang, "missing_card", { key: "group_forecast_remaining" })));
-      }
       // partial hint: name the strings that are NOT in the AC number, each
       // list labelled by where the energy actually is
       const acSt = plant.byKey.forecast_ac_today ? hass.states[plant.byKey.forecast_ac_today] : null;
@@ -5600,7 +5595,7 @@ async function buildViews(hass, config) {
         lines.push("- " + t(lang, "conv_never_sum"));
         convCards.push(mdCard(lines.join("\n")));
       }
-      overviewSections.splice(2, 0, { type: "grid", column_span: 2, cards: convCards });
+      if (convCards.length > 1) overviewSections.splice(2, 0, { type: "grid", column_span: 2, cards: convCards });
     }
     if (groups.length) {
       overviewSections.push({ type: "grid", cards: [
@@ -5782,14 +5777,24 @@ async function buildViews(hass, config) {
     // conversion layer (optional): configuration + realized ratio per group
     const convNerd = groups.filter((g) =>
       (g.byKey.group_forecast_ac || g.byKey.group_forecast_battery_charge) && g.byKey.group_forecast_remaining);
-    if (convNerd.length) {
+    // one chart per group — direct paths first, storage after
+    const convCharts = [...directGroups, ...storageGroups].map((g) => {
+      const outKey = g.byKey.group_forecast_ac ? "group_forecast_ac" : "group_forecast_battery_charge";
+      return g.byKey.group_forecast_remaining
+        ? { type: "custom:pvstrings-conversion", entity: g.byKey[outKey],
+            dc_entity: g.byKey.group_forecast_remaining, title: g.name,
+            grid_options: { columns: "full" } }
+        : mdCard(t(lang, "missing_card", { key: "group_forecast_remaining" }));
+    });
+    if (convNerd.length || convCharts.length) {
       // six columns: needs a double-width section and a card that opts into
       // its full grid width — same lesson as the censoring table
-      const convEntity = convNerd[0].byKey.group_forecast_ac
-        ?? convNerd[0].byKey.group_forecast_battery_charge;
+      const convEntity = convNerd[0]?.byKey.group_forecast_ac
+        ?? convNerd[0]?.byKey.group_forecast_battery_charge;
       nerdSections.push({ type: "grid", column_span: 2, cards: [
         heading(t(lang, "nerd_conversion")),
-        { type: "custom:pvstrings-kv-table",
+        ...convCharts,
+        ...(convNerd.length ? [{ type: "custom:pvstrings-kv-table",
           entity: convEntity,
           mode: "conversion", title: t(lang, "nerd_conv_paths"),
           grid_options: { columns: "full" },
@@ -5803,7 +5808,7 @@ async function buildViews(hass, config) {
         { type: "custom:pvstrings-kv-table",
           entity: convEntity,
           mode: "conversion_evidence", title: t(lang, "nerd_conv_evidence"),
-          grid_options: { columns: "full" } },
+          grid_options: { columns: "full" } }] : []),
         // learned curve vs prior, per group that has a curve at all: the
         // storage path runs on fixed factors and never learns, a neutral
         // path has no curve to draw
