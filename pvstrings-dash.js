@@ -313,9 +313,6 @@ const STR = {
     "s_savings": "Savings",
     "s_groups": "Inverter groups",
     "s_conversion": "Conversion (AC / storage)",
-    "conv_partial_storage": "In the battery-charge forecast, not in AC: {list}",
-    "conv_partial_unconverted": "In no output forecast (no output path configured): {list}",
-    "conv_never_sum": "AC and battery charge are different kinds of energy — AC sits behind the inverter, charge is DC into the battery. Never add them.",
     "nerd_conversion": "Conversion",
     "conv_path": "path",
     "conv_curve": "curve",
@@ -668,9 +665,6 @@ const STR = {
     "s_savings": "Ersparnis",
     "s_groups": "Wechselrichter-Gruppen",
     "s_conversion": "Wandlung (AC / Speicher)",
-    "conv_partial_storage": "In der Akkuladungs-Prognose, nicht im AC: {list}",
-    "conv_partial_unconverted": "In keiner Ausgangs-Prognose (kein Ausgabepfad konfiguriert): {list}",
-    "conv_never_sum": "AC und Akkuladung sind verschiedene Energiearten — AC liegt hinter dem Wechselrichter, Ladung ist DC in den Speicher. Niemals addieren.",
     "nerd_conversion": "Wandlung",
     "conv_path": "Pfad",
     "conv_curve": "Kennlinie",
@@ -5571,9 +5565,8 @@ async function buildViews(hass, config) {
     // ---- conversion layer (>= 1.20, optional): own section right after the
     // forecast chart, deliberately NOT inside the DC groups section — AC and
     // battery charge must never read as summable with the DC tiles. Only the
-    // figures anyone needs live here — what arrives behind the inverter, and
-    // what is not in it; the per-group charts (ratio per hour, curve,
-    // clipping) are on the Nerd view.
+    // figures anyone needs live here — what arrives behind the inverter; the
+    // per-group charts (ratio per hour, curve, clipping) are on the Nerd view.
     const directGroups = groups.filter((g) => g.byKey.group_forecast_ac);
     const storageGroups = groups.filter((g) => g.byKey.group_forecast_battery_charge);
     if (directGroups.length || storageGroups.length || plant.byKey.forecast_ac_today) {
@@ -5582,19 +5575,6 @@ async function buildViews(hass, config) {
         tileIf(hass, lang, plant, "forecast_ac_today"),
         tileIf(hass, lang, plant, "forecast_ac_tomorrow"),
       ].filter(Boolean));
-      // partial hint: name the strings that are NOT in the AC number, each
-      // list labelled by where the energy actually is
-      const acSt = plant.byKey.forecast_ac_today ? hass.states[plant.byKey.forecast_ac_today] : null;
-      if (acSt?.attributes?.partial) {
-        const lines = [];
-        const sto = acSt.attributes.storage_strings ?? [];
-        const unc = acSt.attributes.unconverted_strings ?? [];
-        // names are user-configured — escape before they land in markdown
-        if (sto.length) lines.push("- " + t(lang, "conv_partial_storage", { list: esc(sto.join(", ")) }));
-        if (unc.length) lines.push("- " + t(lang, "conv_partial_unconverted", { list: esc(unc.join(", ")) }));
-        lines.push("- " + t(lang, "conv_never_sum"));
-        convCards.push(mdCard(lines.join("\n")));
-      }
       if (convCards.length > 1) overviewSections.splice(2, 0, { type: "grid", column_span: 2, cards: convCards });
     }
     if (groups.length) {
