@@ -412,6 +412,8 @@ const STR = {
     "health_all_good_one": "All {n} strings fully measured today: {iv} intervals, {cov} % coverage, nothing curtailed.",
     "health_all_good_many": "All {n} strings fully measured today: {iv} intervals, {cov} % coverage, nothing curtailed.",
     "health_no_cycle": "no learn cycle recorded yet",
+    "health_learn_night": "night hours only — nothing to learn",
+    "health_learn_night_tip": "The last cycle only had night hours to look at. That is the normal case outside daylight, not a fault.",
     "health_per_string": "coverage per string",
     "health_counters": "collector counters",
     "lbl_intervals_written": "intervals written",
@@ -465,7 +467,7 @@ const STR = {
     "help_factors": "**Correction factors**: the physics forecast is multiplied by them — +7 % means reality delivered 7 % more than computed. The plant learns separately per weather class and time of day; *never seen* means this weather has not occurred at that time yet, which is itself a finding. Per string, an offset and a daypart layer sit on top; thin buckets are pulled towards 0 % by how little evidence stands behind them (half strength at about ten observations). Hover a cell for the raw factor and its evidence.",
     "help_bias": "**Source bias**: the weather source's systematic error per local hour and forecast horizon, as a correction on irradiance. Blue: the source announced more than arrived, the forecast is scaled down; orange: it announced too little. Faded cells rest on thin evidence. *Measured* means learned against a real sensor; *nowcast* only against the source's own short-horizon run — a much weaker claim.",
     "help_sky": "**Sky maps**: *level* is the string's clear-view yield relative to physics — 1.05 delivers 5 % above physics where nothing is in the way. Where strings share enough epochs the map is fitted against the sibling strings (*differential*); a single string fits *absolutely* and has no level. The strongest shadow names the sky sector (azimuth · elevation) with the largest clear-day loss.",
-    "help_health": "**Collection**: coverage is the share of 5-minute intervals actually captured, counted over daylight hours only. **Learn cycle**: what the last cycle used and what it deliberately skipped, with the reason — on a plant learning nothing, that list is the whole diagnosis. **Censored** hours are lower bounds (the inverter was curtailed, real yield would have been higher). Tables open only where a figure deviates.",
+    "help_health": "**Collection**: coverage is the share of 5-minute intervals actually captured, counted over daylight hours only. **Learn cycle**: what the last cycle used and what it deliberately skipped, with the reason — on a plant learning nothing, that list is the whole diagnosis. Night hours do not count as skipped: there is nothing to learn from them. **Censored** hours are lower bounds (the inverter was curtailed, real yield would have been higher). Tables open only where a figure deviates.",
     "help_maturity": "**Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can hold — learning forgets slowly, so 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins. The shading bar is the share of the year's sun path each string has observed; it grows no faster than the calendar.",
     "help_thermal": "**Cell temperature**: modelled per string from the forecast's air temperature, wind and plane irradiance — not measured. Cells above 25 °C lose output, below they gain; the effect is already inside the physics figure of the forecast chain, this card only makes it visible. A flat, insulated mount runs hotter than an open rack at the same air.",
     "help_conversion": "**Conversion**: AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage — the two are never added. Curves are configured (datasheet or self-entered); where measured DC/AC pairs exist and learning is on, the plant corrects that curve with its own measurement. *Unconverted* means no curve configured, not a measured 0 % loss.",
@@ -721,6 +723,8 @@ const STR = {
     "health_all_good_one": "Alle {n} Stränge heute vollständig gemessen: {iv} Intervalle, {cov} % Abdeckung, nichts abgeregelt.",
     "health_all_good_many": "Alle {n} Stränge heute vollständig gemessen: {iv} Intervalle, {cov} % Abdeckung, nichts abgeregelt.",
     "health_no_cycle": "noch kein Lernzyklus aufgezeichnet",
+    "health_learn_night": "nur Nachtstunden — nichts zu lernen",
+    "health_learn_night_tip": "Der letzte Zyklus hatte nur Nachtstunden vor sich. Außerhalb des Tageslichts ist das der Normalfall, kein Fehler.",
     "health_per_string": "Abdeckung je Strang",
     "health_counters": "Kollektor-Zähler",
     "lbl_intervals_written": "Intervalle geschrieben",
@@ -772,7 +776,7 @@ const STR = {
     "help_factors": "**Korrekturfaktoren**: Mit ihnen wird die Physik-Prognose multipliziert — +7 % heißt, real kam 7 % mehr als gerechnet. Die Anlage lernt getrennt pro Wetterklasse und Tageszeit; *nie gesehen* heißt, dieses Wetter gab es zu dieser Tageszeit noch nicht — auch das ist ein Befund. Je Strang liegen ein Offset und eine Tagesabschnitt-Schicht darüber; dünne Buckets werden um so stärker gegen 0 % gezogen, je weniger Evidenz dahintersteht (halbe Stärke bei etwa zehn Beobachtungen). Eine Zelle zeigt beim Überfahren den rohen Faktor und seine Evidenz.",
     "help_bias": "**Source-Bias**: der systematische Fehler der Wetterquelle je lokaler Stunde und Vorhersage-Horizont, als Korrektur auf die Einstrahlung. Blau: die Quelle hat mehr angesagt als kam, die Prognose wird heruntergezogen; Orange: sie hat zu wenig angesagt. Blasse Zellen stehen auf dünner Evidenz. *Gemessen* heißt gegen einen echten Sensor gelernt; *nowcast* nur gegen den Kurzfrist-Lauf der Quelle selbst — eine deutlich schwächere Aussage.",
     "help_sky": "**Himmelskarten**: Das *Niveau* ist der Freisicht-Ertrag des Strangs relativ zur Physik — 1,05 liefert 5 % über Physik, wo nichts im Weg ist. Wo Stränge genug gemeinsame Epochen haben, wird die Karte gegen die Geschwister-Stränge gefittet (*differenziell*); ein einzelner Strang fittet *absolut* und hat kein Niveau. Der stärkste Schatten nennt den Himmelssektor (Azimut · Höhe) mit dem größten Klartag-Verlust.",
-    "help_health": "**Erfassung**: Abdeckung ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle, gezählt nur über Tageslichtstunden. **Lernzyklus**: was der letzte Zyklus verwendet und was er bewusst übersprungen hat, samt Grund — auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose. **Zensierte** Stunden sind Untergrenzen (der Wechselrichter war abgeregelt, der echte Ertrag wäre höher gewesen). Tabellen öffnen sich nur, wo ein Wert abweicht.",
+    "help_health": "**Erfassung**: Abdeckung ist der Anteil tatsächlich erfasster 5-Minuten-Intervalle, gezählt nur über Tageslichtstunden. **Lernzyklus**: was der letzte Zyklus verwendet und was er bewusst übersprungen hat, samt Grund — auf einer Anlage, die nichts lernt, ist diese Liste die ganze Diagnose. Nachtstunden zählen nicht als übersprungen: aus ihnen gibt es nichts zu lernen. **Zensierte** Stunden sind Untergrenzen (der Wechselrichter war abgeregelt, der echte Ertrag wäre höher gewesen). Tabellen öffnen sich nur, wo ein Wert abweicht.",
     "help_maturity": "**Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket halten kann — das Lernen vergisst langsam, 100 % heißt also „so gelernt wie es wird“, nicht „fertig“; die Marke zeigt, wo Grün beginnt. Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
     "help_thermal": "**Zelltemperatur**: je Strang modelliert aus Lufttemperatur, Wind und Einstrahlung in Modulebene der Prognose — nicht gemessen. Zellen über 25 °C verlieren Leistung, darunter gewinnen sie; die Wirkung steckt bereits in der Physik-Zahl der Prognosekette, diese Karte macht sie nur sichtbar. Eine flache, hinterlüftungslose Montage läuft bei gleicher Luft heißer als ein freies Gestell.",
     "help_conversion": "**Wandlung**: AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher — die beiden werden nie addiert. Kennlinien sind konfiguriert (Datenblatt oder selbst eingetragen); wo gemessene DC/AC-Paare vorliegen und das Lernen an ist, korrigiert die Anlage die Kennlinie mit der eigenen Messung. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
@@ -4414,6 +4418,9 @@ class PvsHealthCard extends PvsBaseCard {
     const a = coll.attributes;
     const detail = !!cfg.detail;
     const lc = cfg.model_entity ? hass.states[cfg.model_entity]?.attributes?.last_learn_cycle ?? null : null;
+    // skips minus night hours: the ones that say something about the plant
+    const night = lc?.skipped_because?.night ?? 0;
+    const skipped = Math.max(0, (lc?.observations_skipped ?? 0) - night);
     const sd = cfg.detail_entity ? hass.states[cfg.detail_entity]?.attributes?.strings ?? null : null;
     const ghi = cfg.ghi_entity ? hass.states[cfg.ghi_entity]?.attributes ?? null : null;
     if (!this._names) {
@@ -4438,13 +4445,19 @@ class PvsHealthCard extends PvsBaseCard {
       : chip(t(hass, "health_weather"), t(hass, "health_ok"), { mi: cfg.entity }));
     if (cfg.model_entity) {
       if (lc) {
-        const skipped = lc.observations_skipped ?? 0;
-        const hours = lc.hours_materialised ?? 0;
-        // a cycle that found no new hour is neither healthy nor a fault —
-        // grey, and the number says it
-        chips.push(chip(t(hass, "health_learn"),
-          t(hass, "health_learn_v", { used: lc.observations_used ?? 0, hours }),
-          { tone: skipped > 0 ? "warn" : hours === 0 ? "off" : "", mi: cfg.model_entity }));
+        // Night is not a skip worth reporting: there is nothing to learn from
+        // an hour without sun, and a cycle early in the morning sees nothing
+        // else. Counting it made every such cycle look broken ("0 of 5,
+        // skipped 5"). Only the daylight hours are measured against.
+        const hours = Math.max(0, (lc.hours_materialised ?? 0) - night);
+        chips.push(night > 0 && hours === 0
+          ? chip(t(hass, "health_learn"), t(hass, "health_learn_night"),
+              { tone: "off", mi: cfg.model_entity, title: t(hass, "health_learn_night_tip") })
+          // a cycle that found no new hour is neither healthy nor a fault —
+          // grey, and the number says it
+          : chip(t(hass, "health_learn"),
+              t(hass, "health_learn_v", { used: lc.observations_used ?? 0, hours }),
+              { tone: skipped > 0 ? "warn" : hours === 0 ? "off" : "", mi: cfg.model_entity }));
         if (skipped > 0) chips.push(chip(t(hass, "health_skipped"), String(skipped), { tone: "warn", mi: cfg.model_entity }));
         const cens = lc.censored_hours ?? 0;
         chips.push(chip(t(hass, "health_censored"), String(cens), { tone: cens > 0 ? "warn" : "", mi: cfg.model_entity }));
@@ -4481,7 +4494,9 @@ class PvsHealthCard extends PvsBaseCard {
     // ---- tables, each on its own evidence -----------------------------------
     const covLast = a.coverage_last ?? {};
     const covLow = Object.values(covLast).some((v) => v < 0.95);
-    const skips = Object.entries(lc?.skipped_because ?? {}).sort((x, y) => y[1] - x[1]);
+    // night stays in the detail view, dimmed — elsewhere it is not a finding
+    const skips = Object.entries(lc?.skipped_because ?? {})
+      .filter(([k]) => detail || k !== "night").sort((x, y) => y[1] - x[1]);
     const censDeviates = lower > 0 || recon > 0 || curtailed || covMeans.some((v) => v < 0.95);
     const sect = (label) => `<div class="hc-sect">${label}</div>`;
     let tables = "";
@@ -4498,7 +4513,7 @@ class PvsHealthCard extends PvsBaseCard {
         : "";
       tables += sect(t(hass, "nerd_skips")) + `<table>${counters}
         ${skips.length ? `<tr><th colspan="2" class="kv-sect">${keyLabel(hass, "skipped_because")}</th></tr>` : ""}
-        ${skips.map(([k, v]) => `<tr><th class="dim">${esc(k)}</th><td class="warm"><span class="pvs-num">${v}</span></td></tr>`).join("")}
+        ${skips.map(([k, v]) => `<tr><th class="dim">${esc(k)}</th><td class="${k === "night" ? "" : "warm"}"><span class="pvs-num">${v}</span></td></tr>`).join("")}
       </table>`;
     }
     if (sd && (detail || censDeviates)) {
@@ -4522,7 +4537,7 @@ class PvsHealthCard extends PvsBaseCard {
 
     // one sentence when nothing deviates — the number, not a verdict
     const allGood = werr === 0 && a.weather_ok !== false && !covLow
-      && (!lc || ((lc.observations_skipped ?? 0) === 0 && (lc.censored_hours ?? 0) === 0))
+      && (!lc || (skipped === 0 && (lc.censored_hours ?? 0) === 0))
       && !censDeviates;
     const nStr = Object.keys(sd ?? covLast).length;
     const good = allGood && nStr && !detail

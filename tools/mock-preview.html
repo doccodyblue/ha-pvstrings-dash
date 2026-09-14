@@ -40,6 +40,7 @@
 <h4>maturity (460px container)</h4><div class="narrow" id="matn"></div>
 <h4>health — healthy plant, one line (940px)</h4><div class="wideb" id="health"></div>
 <h4>health — deviating: skips, censoring, write errors (940px)</h4><div class="wideb" id="health2"></div>
+<h4>health — early-morning cycle: night hours only, and night mixed with a real skip (940px)</h4><div class="wideb" id="health3"></div><div class="wideb" id="health4"></div>
 <h4>source-bias heatmap (460px)</h4><div class="narrow" id="bias"></div>
 <h4>correction factors — strings (460px)</h4><div class="narrow" id="learn"></div>
 <h4>cell temperature (560px)</h4><div style="width:560px" id="thermal"></div>
@@ -196,6 +197,16 @@
       attributes: { friendly_name: "PV Anlage Modell-Beobachtungen", log_ratio: { plant: {} },
         last_learn_cycle: { hours_materialised: 6, observations_used: 3, observations_skipped: 3,
           censored_hours: 1, skipped_because: { no_weather_row: 2, ghi_hour_rejected: 1 } } } },
+    // the first cycle of the morning: only night hours — the normal case
+    "sensor.plant_mo_night": { entity_id: "sensor.plant_mo_night", state: "61.2",
+      attributes: { friendly_name: "PV Anlage Modell-Beobachtungen", log_ratio: { plant: {} },
+        last_learn_cycle: { hours_materialised: 5, observations_used: 0, observations_skipped: 5,
+          censored_hours: 0, skipped_because: { night: 5 } } } },
+    // dawn: night hours plus one real skip — only the real one may count
+    "sensor.plant_mo_dawn": { entity_id: "sensor.plant_mo_dawn", state: "61.2",
+      attributes: { friendly_name: "PV Anlage Modell-Beobachtungen", log_ratio: { plant: {} },
+        last_learn_cycle: { hours_materialised: 10, observations_used: 4, observations_skipped: 6,
+          censored_hours: 0, skipped_because: { night: 5, low_coverage: 1 } } } },
     // a mature learning state: all buckets near the ceiling (green zone)
     "sensor.plant_mo2": { entity_id: "sensor.plant_mo2", state: "241.8",
       attributes: { friendly_name: "PV Anlage Modell-Beobachtungen (reif)", log_ratio: { plant:
@@ -459,6 +470,10 @@
         detail_entity: "sensor.plant_sd_ok", ghi_entity: "sensor.ghi_on" }],
       ["#health2", "pvstrings-health", { entity: "sensor.plant_coll_bad", model_entity: "sensor.plant_mo3",
         detail_entity: "sensor.plant_sd", ghi_entity: "sensor.ghi_off" }],
+      ["#health3", "pvstrings-health", { entity: "sensor.plant_coll", model_entity: "sensor.plant_mo_night",
+        detail_entity: "sensor.plant_sd_ok", ghi_entity: "sensor.ghi_on" }],
+      ["#health4", "pvstrings-health", { entity: "sensor.plant_coll", model_entity: "sensor.plant_mo_dawn",
+        detail_entity: "sensor.plant_sd_ok", ghi_entity: "sensor.ghi_on" }],
       ["#bias", "pvstrings-kv-table", { entity: "sensor.plant_mo", mode: "ghi_bias",
         title: "Source-Bias nach Stunde × Horizont", truth_entity: "sensor.ghi_on" }],
       ["#learn", "pvstrings-kv-table", { entity: "sensor.plant_mo", mode: "log_ratio_string_all",

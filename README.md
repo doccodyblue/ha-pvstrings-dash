@@ -440,8 +440,8 @@ Collection and learn cycle as one row of chips. Four tables used to say
 "healthy" in thirty numbers; here every figure is a chip that links to its
 source entity, and a table opens only where a figure deviates — per-string
 coverage when a string falls under 95 %, the skip reasons when the last learn
-cycle skipped anything, the censoring split when an hour was a lower bound,
-reconstructed or curtailed. On a healthy plant the card is one line.
+cycle skipped anything other than night hours, the censoring split when an hour
+was a lower bound, reconstructed or curtailed. On a healthy plant the card is one line.
 
 ![Health strip, healthy plant](docs/img/health-dark.png)
 
