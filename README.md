@@ -63,8 +63,9 @@ builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
 temperature), **Accuracy** (one card of figures — short-term and day-ahead,
-each with how full its window is — and one day-by-day chart that switches
-between the plant and its strings), and the **Nerd Dashboard** (status first, numbers on demand:
+each with how full its window is, the learning progress where the integration
+keeps weeks, and one day-by-day chart that switches between the plant and its
+strings), and the **Nerd Dashboard** (status first, numbers on demand:
 training maturity and a one-line collection health strip, the day-ahead error
 by hour, the correction factors as percentages, the source bias as a heatmap,
 the sky-map overview, the modelled cell temperature, the conversion layer, and
@@ -174,6 +175,7 @@ days: 2             # 1–3
 style: bars         # or: line
 show_unshaded: true
 show_actual: true
+history: true       # optional — set false to hide the day stepper
 ```
 
 `style: line` (what the strategy uses for string sections) draws the actual
@@ -182,6 +184,18 @@ series from the string's configured power entity via the recorder's
 from smoothing. Forecast and unshaded stay hourly, drawn as straight
 segments. If no 5-minute statistics exist, the card falls back to hourly
 means and says so on the card.
+
+**Looking back.** Where the integration offers the `pvstrings.get_day`
+service, the card head carries a ‹ day › stepper. A past day is drawn exactly
+like today, from the integration's own record rather than from recorder
+statistics: the forecast as it stood before each hour, what arrived, and — in
+the tooltip — what the evening before had announced. Every forecast card of a
+plant follows the same day, so stepping the plant chart back takes the string
+charts with it. After a quiet quarter of an hour the cards return to today, so
+a wall tablet does not stay on last Tuesday. How far back each part reaches is
+the integration's retention, and the card says where a part has run out
+(five-minute values, the evening-before forecast) instead of drawing zero.
+Groups have no stepper.
 
 ### `pvstrings-conversion`
 
@@ -380,6 +394,43 @@ The card draws from the first complete day. The accuracy sensor itself stays
 `unknown` until three days are in, so the state and the profile disagree by
 design; the card follows the profile.
 
+Where the integration offers `pvstrings.get_weeks`, a stepper walks from the
+live 30 days back through single weeks — the same fold, one week at a time, so
+"did the morning get better" becomes something to step through. A week still
+running and a week rebuilt after the fact say so in a chip.
+
+### `pvstrings-learning`
+
+Whether the learning pays: the day-ahead forecast error it avoided, week by
+week and added up since the first week that can be compared. Needs the
+`pvstrings.get_weeks` service.
+
+```yaml
+type: custom:pvstrings-learning
+entity: sensor.<plant>_day_ahead_accuracy_30_days   # any sensor of the plant
+title: Learning progress    # optional
+```
+
+The comparison is the same integration with learning switched off — same
+weather run, same geometry, same hours — not bare physics, because the learned
+shading map and source correction are learning too. Errors are summed per day,
+like the WMAPE.
+
+Built so that a flattering picture cannot be made from it:
+
+- **A running total, from the start.** No window is chosen and no week is left
+  out. Mostly helpful weeks make the line rise on their own; a week where the
+  forecast without learning did better bends it down and stays visible; a
+  plant where learning achieves nothing draws a flat line.
+- **The axis always contains zero**, so "no gain" is always on the chart.
+- **"Seen" is not "better".** The thin line is the maturity — how much evidence
+  the model holds. It only grows, and it slows every autumn when the sun
+  reaches positions the model has not met. A ring marks a week in which a
+  weather situation was seen for the first time.
+- **Provenance on every week.** Weeks rebuilt after the fact are hatched, the
+  running week is faint, and a week without a comparison is a hatched stub,
+  never a zero bar.
+
 ### `pvstrings-kv-table`
 
 Small diagnostic table renderer the Nerd Dashboard is built from. Every
@@ -566,6 +617,7 @@ card it meant to include.
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 | savings provenance (`price.by_basis_kwh`, `export_dropped_kwh`) | ≥ 1.22.0 |
 | hourly day-ahead profile (`hourly_profile`) | ≥ 1.23.0 |
+| day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | not released yet |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not

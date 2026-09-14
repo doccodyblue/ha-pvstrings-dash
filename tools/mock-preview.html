@@ -45,6 +45,10 @@
 <h4>correction factors — strings (460px)</h4><div class="narrow" id="learn"></div>
 <h4>cell temperature (560px)</h4><div style="width:560px" id="thermal"></div>
 <h4>accuracy — one card, day-ahead window still filling (940px)</h4><div class="wideb" id="acc"></div>
+<h4>history — plant line (wide), string line and plant bars follow one shared day (940 / 460px)</h4>
+<div class="wideb" id="histw"></div><div class="narrow" id="hists1"></div><div class="wideb" id="histbars"></div>
+<h4>history — hourly profile with week stepper (820px)</h4><div style="width:820px" id="histhp"></div>
+<h4>learning progress (940px)</h4><div class="wideb" id="learn1"></div>
 <script type="module">
   import "/pvstrings-dash.js";
   if (new URLSearchParams(location.search).get("dark") === "1") document.body.classList.add("dark");
@@ -157,6 +161,9 @@
         observations: 5123, most_shaded: [], friendly_name: "Strang Ost Verschattung jetzt" } },
     "sensor.plant_fc": { entity_id: "sensor.plant_fc", state: "17.9",
       attributes: { forecast, friendly_name: "PV Anlage Prognose heute" } },
+    "sensor.s1_fc": { entity_id: "sensor.s1_fc", state: "9.8",
+      attributes: { forecast: forecast.map((r) => ({ ...r, potential_kwh: +(r.potential_kwh * 0.55).toFixed(3),
+        unshaded_kwh: +(r.unshaded_kwh * 0.55).toFixed(3) })), friendly_name: "Strang Ost Prognose heute" } },
     "sensor.plant_prod": { entity_id: "sensor.plant_prod", state: "12.4",
       attributes: { friendly_name: "PV Anlage Ertrag heute" } },
     "sensor.plant_power": { entity_id: "sensor.plant_power", state: "2100",
@@ -374,14 +381,16 @@
     { entity_id: "sensor.s1_sky", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_sky_map", translation_key: "sky_map" },
     { entity_id: "sensor.s1_shading", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_shading_now", translation_key: "shading_now" },
     { entity_id: "sensor.plant_fc", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_today", translation_key: "forecast_today" },
+    { entity_id: "sensor.s1_fc", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_forecast_today", translation_key: "forecast_today" },
+    { entity_id: "sensor.plant_da30", platform: "pvstrings", device_id: "dp", unique_id: "e_wmape_day_ahead_30d", translation_key: "wmape_day_ahead_30d" },
     { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
     { entity_id: "sensor.g1_ac", platform: "pvstrings", device_id: "dg", unique_id: "e_g1_forecast_ac", translation_key: "group_forecast_ac" },
     { entity_id: "sensor.g3_ac", platform: "pvstrings", device_id: "dg3", unique_id: "e_g3_forecast_ac", translation_key: "group_forecast_ac" },
   ];
   const devReg = [
-    { id: "dp", model: "PV plant", name: "PV Anlage", config_entry_id: "mock-entry",
-      identifiers: [["pvstrings", "mock-entry"]] },
+    { id: "dp", model: "PV plant", name: "PV Anlage", primary_config_entry: "mock-entry",
+      config_entries: ["mock-entry"], identifiers: [["pvstrings", "mock-entry"]] },
     { id: "ds", model: "PV string", name: "Strang Ost", via_device_id: "dp",
       identifiers: [["pvstrings", "mock-entry_s1"]] },
     { id: "ds2", model: "PV string", name: "Strang West", via_device_id: "dp",
@@ -417,8 +426,96 @@
   for (let h = 0; h < Math.floor(nowH); h++) {
     statsH.push({ start: d0 + h * 3600e3, end: d0 + (h + 1) * 3600e3, change: +bell(h).toFixed(3) });
   }
+  // ---- history services (contract: handover-historie.md) -------------------
+  // Deterministic, so screenshots are stable: a day's shape is seeded by its
+  // date. The recent past has everything; further back the fields thin out
+  // the way the integration's compaction thins them.
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const keyOf = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  const daysAgo = (n) => { const dt = new Date(d0); dt.setDate(dt.getDate() - n); return dt; };
+  const isoLocal = (ms) => { const dt = new Date(ms); const off = -dt.getTimezoneOffset();
+    return `${keyOf(dt)}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:00${off >= 0 ? "+" : "-"}${pad2(Math.floor(Math.abs(off) / 60))}:${pad2(Math.abs(off) % 60)}`; };
+  const seeded = (k) => { let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296); };
+  const HIST = { earliest: keyOf(daysAgo(60)), dayAheadSince: keyOf(daysAgo(34)), intervalsSince: keyOf(daysAgo(20)), migrated: keyOf(daysAgo(10)) };
+  function mockDay(date) {
+    const [y, m, d] = date.split("-").map(Number);
+    const start = new Date(y, m - 1, d).getTime(), end = new Date(y, m - 1, d + 1).getTime();
+    const rnd = seeded(date);
+    const cloud = 0.55 + rnd() * 0.5;
+    const series = (share) => {
+      const hours = [], power = [];
+      for (let ms = start, h = 0; ms < end; ms += 3600e3, h++) {
+        const f = bell(h) * share;
+        if (f <= 0) continue;
+        const a = +(f * cloud * (0.75 + rnd() * 0.5)).toFixed(3);
+        hours.push({ start: isoLocal(ms), forecast_kwh: +f.toFixed(3),
+          day_ahead_kwh: date >= HIST.dayAheadSince ? +(f * (0.9 + rnd() * 0.25)).toFixed(3) : null,
+          day_ahead_issued_at: date >= HIST.dayAheadSince ? isoLocal(start - 6 * 3600e3 + (h === 9 ? -3 * 3600e3 : 0)) : null,
+          baseline_kwh: date >= HIST.migrated ? +(f * 1.14).toFixed(3) : null,
+          unshaded_kwh: date >= HIST.migrated ? +(f * 1.12).toFixed(3) : null,
+          actual_kwh: a, censored: false, value_kind: "measured", curtailed_fraction: 0, coverage: 1 });
+      }
+      if (date >= HIST.intervalsSince) {
+        for (let i = 0; i < Math.round((end - start) / 300e3); i++) {
+          const h = i / 12, base = bell(h) * share * cloud * 1000;
+          power.push(base > 0 ? Math.round(base * (0.6 + 0.8 * rnd())) : (h > 4 && h < 21 ? 0 : null));
+        }
+      }
+      return { hours, intervals: { start: isoLocal(start), step_minutes: 5, power_w: power } };
+    };
+    const s1 = series(0.55), s2 = series(0.45);
+    const plantHours = s1.hours.map(({ value_kind, curtailed_fraction, coverage, ...r }, i) => {
+      const o = s2.hours[i] ?? {};
+      const add = (k) => (r[k] == null && o[k] == null ? null : +((r[k] ?? 0) + (o[k] ?? 0)).toFixed(3));
+      return { ...r, forecast_kwh: add("forecast_kwh"), day_ahead_kwh: add("day_ahead_kwh"), baseline_kwh: add("baseline_kwh"),
+        unshaded_kwh: add("unshaded_kwh"), actual_kwh: add("actual_kwh") };
+    });
+    const plantPower = s1.intervals.power_w.map((w, i) => (w == null && s2.intervals.power_w[i] == null ? null : (w ?? 0) + (s2.intervals.power_w[i] ?? 0)));
+    return { version: 1, date, earliest_date: HIST.earliest, day_ahead_since: HIST.dayAheadSince,
+      intervals_since: HIST.intervalsSince, issue_hour_local: 18,
+      plant: { hours: date < HIST.earliest ? [] : plantHours, intervals: { ...s1.intervals, power_w: plantPower } },
+      strings: { s1, s2 } };
+  }
+  function mockWeeks() {
+    const monday = new Date(d0); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weeks = [];
+    const nWeeks = 11;
+    let seen = 6, n = 8;
+    for (let i = nWeeks - 1; i >= 0; i--) {
+      const ws = new Date(monday); ws.setDate(ws.getDate() - 7 * i);
+      const key = keyOf(ws), rnd = seeded(key);
+      const idx = nWeeks - 1 - i;
+      const actual = 90 + rnd() * 60;
+      const err = actual * (0.28 - idx * 0.013 + rnd() * 0.05);
+      const baseErr = actual * (0.27 + rnd() * 0.04);
+      const hasBaseline = idx >= 3;
+      const backfilled = idx === 3 || idx === 4;
+      if (idx >= 5) { n += 2.2; if (idx === 6 || idx === 9) seen += 2; }
+      weeks.push({ week_start: key, complete: i > 0, backfilled, days_scored: i > 0 ? 7 : 3,
+        day_ahead: { forecast_kwh: +(actual * 1.05).toFixed(1), actual_kwh: +actual.toFixed(1), abs_error_kwh: +(idx === 7 ? baseErr * 1.12 : err).toFixed(1) },
+        baseline: hasBaseline ? { forecast_kwh: +(actual * 1.15).toFixed(1), actual_kwh: +actual.toFixed(1), abs_error_kwh: +baseErr.toFixed(1) } : null,
+        hourly_profile: Array.from({ length: 12 }, (_, k) => ({ hour: k + 6,
+          forecast_kwh: +(bell(k + 6) * 7 * (1 + (rnd() - 0.4) * 0.3)).toFixed(2),
+          actual_kwh: +(bell(k + 6) * 7 * (0.85 + rnd() * 0.3)).toFixed(2), days: i > 0 ? 7 : 3 })),
+        maturity: backfilled || idx < 3 ? null : { weather_n_eff: Object.fromEntries(
+          ["clear", "partly_cloudy", "overcast", "rain"].flatMap((w) => ["morning", "midday", "afternoon"].map((dp) => [`${w}|${dp}`, dp]))
+            .slice(0, seen).map(([k], j) => [k, Math.min(22, n + j)])), sky_cells: { s1: 120 + idx * 9, s2: 100 + idx * 8 } } });
+    }
+    return { version: 1, issue_hour_local: 18, weeks };
+  }
   const callWS = async (cmd) => {
     switch (cmd.type) {
+      case "call_service":
+        // the real services refuse an unknown entry, a malformed date and
+        // today or later (ServiceValidationError) — so does the mock
+        if (cmd.domain === "pvstrings" && cmd.service_data?.config_entry_id !== "mock-entry") throw new Error("unknown config entry");
+        if (cmd.domain === "pvstrings" && cmd.service === "get_day") {
+          const dt = cmd.service_data.date;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dt ?? "") || dt >= keyOf(new Date(d0))) throw new Error("invalid date");
+          return { response: mockDay(dt) };
+        }
+        if (cmd.domain === "pvstrings" && cmd.service === "get_weeks") return { response: mockWeeks() };
+        return {};
       case "config/entity_registry/list": return entReg;
       case "config/device_registry/list": return devReg;
       case "recorder/statistics_during_period":
@@ -427,6 +524,7 @@
     }
   };
   const hass = { states, callWS,
+    services: { pvstrings: { get_day: {}, get_weeks: {} } },
     fetchWithAuth: async (url) => url.includes("/api/diagnostics/")
       ? new Response(JSON.stringify(diagJson), { status: 200 })
       : new Response("{}", { status: 404 }),
@@ -486,6 +584,11 @@
         bias_day_ahead_30d: "sensor.acc_dab30", deviation_yesterday: "sensor.acc_dev" } }],
       ["#mat", "pvstrings-maturity", { entity: "sensor.plant_mo",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }],
+      ["#histw", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 1, style: "line", wide: true, show_unshaded: false, title: "PV Anlage" }],
+      ["#hists1", "pvstrings-forecast", { entity: "sensor.s1_fc", days: 1, style: "line", title: "Strang Ost" }],
+      ["#histbars", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 2, show_unshaded: false }],
+      ["#histhp", "pvstrings-hour-profile", { entity: "sensor.plant_da30" }],
+      ["#learn1", "pvstrings-learning", { entity: "sensor.plant_da30" }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }]]) {
     const el = document.createElement(tag);

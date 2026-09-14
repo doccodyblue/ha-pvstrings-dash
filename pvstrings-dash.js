@@ -15,7 +15,7 @@
  *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST / CARD:CURVE
  *   CARD:CHAIN
  *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE / CARD:MATURITY
- *   CARD:HEALTH / CARD:THERMAL
+ *   CARD:LEARNING / CARD:HEALTH / CARD:THERMAL
  *   STRATEGY  registry -> generated dashboard
  *   REGISTER  customElements.define + customCards/customStrategies
  *
@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.14.2";
+const PVS_VERSION = "0.15.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -474,6 +474,40 @@ const STR = {
     "help_hp": "**Day-ahead error by hour**: the same scored pairs the 30-day figure is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — usable as a discount on tomorrow's window sum. Dimmed hours rest on fewer than three days.",
     "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
     "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
+    // history (response services get_day / get_weeks)
+    "hist_prev": "earlier", "hist_next": "later",
+    "hist_failed": "Could not load the history: {error}",
+    "hist_needs_service": "Needs the {service} service — a newer PV Strings integration.",
+    "hist_no_data": "Nothing was recorded for this day.",
+    "hist_no_intervals": "Five-minute values reach back to {date} only — hourly values shown.",
+    "hist_day_ahead": "evening before",
+    "hist_day_ahead_gone": "The evening-before forecast is only kept for about five weeks; this day shows the last forecast before each hour.",
+    "hist_hero_actual": "actual that day", "hist_hero_forecast": "forecast that day",
+    "hist_issued_earlier": "from the run of {when} — the evening run was missing",
+    "week_short": "wk {n}", "week_running": "week still running",
+    "week_backfilled": "rebuilt",
+    "week_backfilled_tip": "Computed after the fact from the forecasts that were published then; no model snapshot from that week exists.",
+    "hp_sel_live": "30 days",
+    "hp_note_week": "The same day-ahead pairs, for this week only, folded by local hour. Positive means the hour was announced too high, as a share of the announcement.",
+    // learning progress
+    "learn_title": "Learning progress",
+    "learn_no_weeks": "no week recorded yet",
+    "learn_no_baseline": "no week with a comparison against the forecast without learning yet",
+    "learn_hero_less": "less forecast error than without learning · {n} weeks since {since}",
+    "learn_hero_more": "more forecast error than without learning · {n} weeks since {since}",
+    "learn_hero_equal": "no difference to the forecast without learning so far · {n} weeks since {since}",
+    "learn_hero_wmape": "day-ahead error in wk {week} · {base} % without learning",
+    "learn_leg_cum": "error avoided, running total",
+    "learn_leg_seen": "seen (maturity)",
+    "learn_leg_gain": "week: learning helped",
+    "learn_leg_loss": "week: better without",
+    "learn_leg_backfilled": "rebuilt / no comparison",
+    "learn_note": "Compared against the same integration with learning switched off — same weather run, geometry and hours. A ring on the thin line marks a week in which the model met a weather situation it had not seen before.",
+    "learn_tip_with": "error with learning", "learn_tip_without": "error without learning",
+    "learn_tip_gain": "error avoided", "learn_tip_cum": "running total",
+    "learn_tip_no_baseline": "no comparison value for this week",
+    "learn_tip_new": "new weather situation seen this week",
+    "help_learning": "**Error avoided** is the day-ahead forecast error of the integration with learning, against the same integration with learning switched off — same weather run, same geometry, same hours. Not against bare physics: the learned shading map and source correction count as learning too. Summed per day like the WMAPE, then **added up week by week** from the first week that has both numbers — nothing is left out and no window is picked. **Seen** is the maturity: how much evidence the model holds. It only grows and says nothing about being right. It slows down when the sun reaches positions the model has not met yet, as it does every autumn. *Rebuilt* weeks were computed afterwards from the forecasts published at the time; faint weeks are still running or rest on fewer than four days.",
     "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
     /* i18n-en-end */
   },
@@ -783,6 +817,40 @@ const STR = {
     "help_hp": "**Day-Ahead-Fehler nach Stunde**: dieselben gescorten Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Gedimmte Stunden stehen auf weniger als drei Tagen.",
     "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
     "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
+    // Historie (Services get_day / get_weeks)
+    "hist_prev": "früher", "hist_next": "später",
+    "hist_failed": "Historie ließ sich nicht laden: {error}",
+    "hist_needs_service": "Braucht den Service {service} — eine neuere PV-Strings-Integration.",
+    "hist_no_data": "Für diesen Tag ist nichts aufgezeichnet.",
+    "hist_no_intervals": "Fünf-Minuten-Werte reichen nur bis {date} zurück — Stundenwerte gezeigt.",
+    "hist_day_ahead": "Vorabend",
+    "hist_day_ahead_gone": "Die Vorabend-Prognose wird nur etwa fünf Wochen aufbewahrt; dieser Tag zeigt die letzte Prognose vor jeder Stunde.",
+    "hist_hero_actual": "Ist an dem Tag", "hist_hero_forecast": "Prognose an dem Tag",
+    "hist_issued_earlier": "aus dem Lauf von {when} — der Abendlauf fehlte",
+    "week_short": "KW {n}", "week_running": "Woche läuft noch",
+    "week_backfilled": "nachgerechnet",
+    "week_backfilled_tip": "Nachträglich aus den damals veröffentlichten Prognosen gerechnet; einen Modellstand aus dieser Woche gibt es nicht.",
+    "hp_sel_live": "30 Tage",
+    "hp_note_week": "Dieselben Day-Ahead-Paare, nur für diese Woche, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage.",
+    // Lernfortschritt
+    "learn_title": "Lernfortschritt",
+    "learn_no_weeks": "noch keine Woche aufgezeichnet",
+    "learn_no_baseline": "noch keine Woche mit Vergleich gegen die Prognose ohne Lernen",
+    "learn_hero_less": "weniger Prognosefehler als ohne Lernen · {n} Wochen seit {since}",
+    "learn_hero_more": "mehr Prognosefehler als ohne Lernen · {n} Wochen seit {since}",
+    "learn_hero_equal": "bisher kein Unterschied zur Prognose ohne Lernen · {n} Wochen seit {since}",
+    "learn_hero_wmape": "Day-Ahead-Fehler in KW {week} · ohne Lernen {base} %",
+    "learn_leg_cum": "vermiedener Fehler, aufsummiert",
+    "learn_leg_seen": "gesehen (Lernreife)",
+    "learn_leg_gain": "Woche: Lernen half",
+    "learn_leg_loss": "Woche: ohne besser",
+    "learn_leg_backfilled": "nachgerechnet / kein Vergleich",
+    "learn_note": "Verglichen mit derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Ein Ring auf der dünnen Linie markiert eine Woche, in der das Modell eine Wettersituation zum ersten Mal gesehen hat.",
+    "learn_tip_with": "Fehler mit Lernen", "learn_tip_without": "Fehler ohne Lernen",
+    "learn_tip_gain": "vermiedener Fehler", "learn_tip_cum": "aufsummiert",
+    "learn_tip_no_baseline": "für diese Woche kein Vergleichswert",
+    "learn_tip_new": "diese Woche eine neue Wettersituation gesehen",
+    "help_learning": "**Vermiedener Fehler** ist der Day-Ahead-Prognosefehler der Integration mit Lernen gegenüber derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Nicht gegenüber reiner Physik: die gelernte Verschattungskarte und die Quellen-Korrektur zählen auch als Lernen. Pro Tag gerechnet wie die WMAPE, dann **Woche für Woche aufsummiert**, ab der ersten Woche mit beiden Zahlen — nichts weggelassen, kein Zeitfenster ausgesucht. **Gesehen** ist die Lernreife: wie viel Evidenz das Modell hält. Sie wächst nur und sagt nichts darüber, ob es stimmt. Sie wird langsamer, wenn die Sonne Stände erreicht, die das Modell noch nicht kennt — jeden Herbst. *Nachgerechnete* Wochen sind im Nachhinein aus den damals veröffentlichten Prognosen entstanden; blasse Wochen laufen noch oder stehen auf weniger als vier Tagen.",
     "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
     /* i18n-de-end */
   },
@@ -922,6 +990,19 @@ const BASE_CSS = `
   .pvs-tip .r .k { color: var(--secondary-text-color); }
   .pvs-tip .r .v { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; }
   .pvs-click { cursor: pointer; }
+  /* history stepper: ‹ label › — a past day or week, never a date input:
+     the range is short, and a keyboard on a wall tablet is not */
+  .pvs-step { display: inline-flex; align-items: center; gap: 2px; font-size: 11px;
+    border: 1px solid var(--pvs-hairline); border-radius: 6px; background: var(--pvs-chip-bg); }
+  .pvs-step button { all: unset; cursor: pointer; padding: 3px 8px; line-height: 1; font-size: 14px;
+    color: var(--primary-text-color); border-radius: 5px; }
+  .pvs-step button:hover:not([disabled]) { background: var(--pvs-hairline); }
+  .pvs-step button:focus-visible { outline: 2px solid var(--pvs-model); outline-offset: -2px; }
+  .pvs-step button[disabled] { cursor: default; opacity: 0.3; }
+  .pvs-step .lbl { padding: 0 4px; min-width: 64px; text-align: center; white-space: nowrap;
+    color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+  .pvs-step.past { border-color: var(--pvs-model); }
+  .pvs-step.past .lbl { color: var(--primary-text-color); }
   svg text { fill: var(--secondary-text-color); font-size: 10px; font-family: inherit; }
   svg .axis text { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; }
   svg .grid { stroke: var(--pvs-hairline); stroke-width: 1; }
@@ -1085,7 +1166,8 @@ async function getRegistryModel(hass) {
           deviceId: dev.id,
           // config entry id — the stable handle for the entry-level
           // diagnostics download (data.conversion_evidence lives there)
-          entryId: dev.config_entry_id ?? null,
+          entryId: dev.primary_config_entry ?? dev.config_entries?.[0]
+            ?? dev.config_entry_id ?? null,
           // subentry ULID: the scope_id the diagnostics key their
           // per-group/per-string blocks by (identifier = <entry>_<scope>)
           scopeId: (() => {
@@ -1335,6 +1417,111 @@ async function issuedFromStatistics(hass, tomorrowEntityId, nDays, issueHour) {
   return byIssueDay; // caller maps: soll(day D) = byIssueDay.get(dayKey(D-1))
 }
 
+// ---- history (PV Strings response services, optional) ----------------------
+
+// Two read-only services answer "what did it look like back then": one day in
+// hours and five-minute intervals, and every week since the start. They are
+// detected by name, never by version — an integration without them gets
+// exactly the dashboard it had, with no stepper anywhere.
+function hasPvsService(hass, name) {
+  return !!hass?.services?.pvstrings?.[name];
+}
+async function callPvsService(hass, service, data) {
+  const res = await hass.callWS({
+    type: "call_service", domain: "pvstrings", service,
+    service_data: data, return_response: true,
+  });
+  return res?.response ?? null;
+}
+// A past day does not change any more, a week list only once a day — both
+// cache for half an hour. Today is never fetched: it is the live card.
+// A malformed answer throws, and cachedWS drops a rejected promise — one bad
+// response must not blank every card of the plant for half an hour.
+function historyDay(hass, entryId, dayKey) {
+  return cachedWS(`hist-day|${entryId}|${dayKey}`, 30 * 60000, async () => {
+    const r = await callPvsService(hass, "get_day", { config_entry_id: entryId, date: dayKey });
+    if (!r || typeof r !== "object" || typeof r.plant !== "object" || r.plant === null) {
+      throw new Error("get_day: unexpected response");
+    }
+    return r;
+  });
+}
+function historyWeeks(hass, entryId) {
+  return cachedWS(`hist-weeks|${entryId}`, 30 * 60000, async () => {
+    const r = await callPvsService(hass, "get_weeks", { config_entry_id: entryId });
+    if (!r || !Array.isArray(r.weeks)) throw new Error("get_weeks: unexpected response");
+    return r;
+  });
+}
+
+// The day being looked at, per plant, shared by every card of that plant: step
+// the plant chart back and the string charts below it follow — nobody wants
+// to click six cards to the same Tuesday. null is today. A wall tablet must
+// not stay on last Tuesday for good, so it falls back to today after a quiet
+// quarter of an hour.
+const HIST_DAY_EVENT = "pvstrings-history-day";
+const HIST_IDLE_MS = 15 * 60000;
+const _histDay = new Map();
+function historyDayOf(entryId) {
+  return _histDay.get(entryId)?.dayKey ?? null;
+}
+function setHistoryDay(entryId, dayKey) {
+  const prev = _histDay.get(entryId);
+  if (prev?.timer) clearTimeout(prev.timer);
+  if (dayKey) {
+    const timer = setTimeout(() => setHistoryDay(entryId, null), HIST_IDLE_MS);
+    _histDay.set(entryId, { dayKey, timer });
+  } else {
+    _histDay.delete(entryId);
+  }
+  window.dispatchEvent(new CustomEvent(HIST_DAY_EVENT, { detail: { entryId } }));
+}
+
+// "2026-08-03" -> "2026-08-04"; the counterpart of previousDayKey.
+function nextDayKey(dayKey) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const p = new Date(Date.UTC(y, m - 1, d) + 86400000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${p.getUTCFullYear()}-${pad(p.getUTCMonth() + 1)}-${pad(p.getUTCDate())}`;
+}
+// Start of an HA-local calendar day, as epoch ms. UTC noon of that date lies
+// on that local day for every zone between -12 and +11; the loop covers the
+// rest instead of assuming it.
+function dayKeyStartMs(hass, dayKey) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  let ms = Date.UTC(y, m - 1, d, 12);
+  for (let i = 0; i < 4; i++) {
+    const k = localParts(hass, ms).dayKey;
+    if (k === dayKey) break;
+    ms += k < dayKey ? 6 * 3600000 : -6 * 3600000;
+  }
+  return localMidnightMs(hass, ms);
+}
+
+// ISO 8601 week number of a local day key ("KW 37"): Thursday decides the year.
+function isoWeekOf(dayKey) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 3 - ((dt.getUTCDay() + 6) % 7));
+  const jan4 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((dt - jan4) / 86400000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+}
+// "KW 37 · 8.9.–14.9." for a week row of get_weeks (week_start = local Monday)
+function weekLabel(hass, weekStart) {
+  const noon = dayKeyStartMs(hass, weekStart) + 12 * 3600000;
+  return `${t(hass, "week_short", { n: isoWeekOf(weekStart) })} · ${fmtDayShort(hass, noon)}–${fmtDayShort(hass, noon + 6 * 86400000)}`;
+}
+
+// The ‹ label › control. `prev`/`next` false disables that side; `past`
+// marks it as looking away from the live value.
+function stepperHTML(hass, label, { prev, next, past }) {
+  return `<span class="pvs-step${past ? " past" : ""}">
+    <button type="button" data-step="-1" aria-label="${esc(t(hass, "hist_prev"))}"${prev ? "" : " disabled"}>‹</button>
+    <span class="lbl">${esc(label)}</span>
+    <button type="button" data-step="1" aria-label="${esc(t(hass, "hist_next"))}"${next ? "" : " disabled"}>›</button>
+  </span>`;
+}
+
 /* ============================ SECTION: UI ================================ */
 
 function problemHTML(hass, { reason, entity, missing = [], hint }) {
@@ -1374,8 +1561,9 @@ function keyLabel(hass, key) {
 }
 
 function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // the apostrophe too: JSON payloads sit in single-quoted data attributes
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 class PvsBaseCard extends HTMLElement {
@@ -1845,7 +2033,26 @@ class PvsForecastCard extends PvsBaseCard {
     this._resolved = null;
     this._actuals = null;
     this._actualsProblem = null;
+    this._past = null;
+    this._power = null;
+    this._earliest = null;
     super.setConfig(config ?? {});
+  }
+  // Every forecast card of a plant follows the day that plant is looked at.
+  connectedCallback() {
+    if (this._histListener) return;
+    this._histListener = (ev) => {
+      if (!ev.detail?.entryId || ev.detail.entryId !== this._resolved?.entryId) return;
+      // a failed day is tried again once somebody steps — failures are not cached
+      if (this._past?.problem) this._past = null;
+      this._render();
+    };
+    window.addEventListener(HIST_DAY_EVENT, this._histListener);
+    if (this._hass && this._config) this._render();
+  }
+  disconnectedCallback() {
+    window.removeEventListener(HIST_DAY_EVENT, this._histListener);
+    this._histListener = null;
   }
   watchedEntities() {
     const r = this._resolved;
@@ -1866,6 +2073,11 @@ class PvsForecastCard extends PvsBaseCard {
       const info = m.byEntityId.get(id);
       const kind = info?.level ?? "plant";
       const r = { kind };
+      // the plant's config entry and, for a string, its string_id — the
+      // handles the history service answers by
+      r.entryId = (kind === "plant" ? info?.node?.entryId : info?.node?.plant?.entryId)
+        ?? info?.node?.entryId ?? null;
+      r.stringId = kind === "string" ? info.node.scopeId ?? null : null;
       if (kind === "plant") {
         r.tomorrowId = info.node.byKey.forecast_tomorrow ?? null;
         r.dayAfterId = info.node.byKey.forecast_day_after ?? null;
@@ -1941,12 +2153,14 @@ class PvsForecastCard extends PvsBaseCard {
     if (!r?.powerId) { this._power = null; return; }
     const token = this._renderToken; // don't outrace _loadActuals' bump
     const startMs = localMidnightMs(hass, Date.now());
+    const stale = () => this._resolved !== r;
     try {
       const stats = await wsStats(hass, {
         ids: [r.powerId],
         startISO: new Date(startMs).toISOString(), endISO: null,
         period: "5minute", types: ["mean"], // units left as-is; W assumed below
       });
+      if (stale()) return;
       const unit = hass.states[r.powerId]?.attributes?.unit_of_measurement ?? "W";
       const scale = unit === "kW" ? 1000 : 1;
       this._power = (stats.get(r.powerId) ?? [])
@@ -1954,37 +2168,146 @@ class PvsForecastCard extends PvsBaseCard {
         .map((x) => ({ ms: x.startMs + 150000, w: x.mean * scale }));
       this._render();
     } catch (_) {
+      if (stale()) return;
       this._power = null;
       this._render();
     }
   }
 
-  _renderLine(card, st, r) {
+  // ---- the day being looked at ---------------------------------------------
+
+  _historyOn() {
+    const r = this._resolved;
+    return this._config?.history !== false && !!r && r.kind !== "group"
+      && !!r.entryId && hasPvsService(this._hass, "get_day");
+  }
+  // null is today — the live card; otherwise a past local day key
+  _viewDay() {
+    if (!this._historyOn()) return null;
+    const d = historyDayOf(this._resolved.entryId);
+    return d && d < localParts(this._hass, Date.now()).dayKey ? d : null;
+  }
+  _stepHTML(day) {
+    if (!this._historyOn()) return "";
+    const hass = this._hass;
+    const cur = day ?? localParts(hass, Date.now()).dayKey;
+    const noon = dayKeyStartMs(hass, cur) + 12 * 3600000;
+    const label = day ? `${fmtWeekday(hass, noon)} ${fmtDayShort(hass, noon)}` : t(hass, "today");
+    const earliest = this._earliest ?? null;
+    return stepperHTML(hass, label, { prev: !earliest || cur > earliest, next: !!day, past: !!day });
+  }
+  _step(dir) {
+    const hass = this._hass, r = this._resolved;
+    if (!r?.entryId) return;
+    const today = localParts(hass, Date.now()).dayKey;
+    const cur = this._viewDay() ?? today;
+    const to = dir < 0 ? previousDayKey(cur) : nextDayKey(cur);
+    setHistoryDay(r.entryId, to >= today ? null : to);
+  }
+  async _loadPast(day) {
+    const r = this._resolved;
+    if (this._past?.dayKey === day && this._past.resolved === r) return;
+    // the request is identified by the resolution it was made for: a card
+    // re-pointed at another plant, or stepped on, while this was in flight
+    // has moved on, and the late answer is dropped
+    const req = { dayKey: day, resolved: r };
+    this._past = req;
+    let next;
+    try {
+      next = { ...req, data: await historyDay(this._hass, r.entryId, day) };
+    } catch (e) {
+      next = { ...req, problem: e?.message ?? String(e) };
+    }
+    if (this._past !== req) return;
+    if (next.data?.earliest_date) this._earliest = next.data.earliest_date;
+    this._past = next;
+    this._render();
+  }
+
+  // Everything a drawing needs, from the live sensors or from a past day. The
+  // two views draw from this and nothing else, so a past Tuesday and today
+  // cannot drift into looking different for reasons that are not the data.
+  _liveSource(line) {
+    const hass = this._hass, cfg = this._config;
+    const days = cfg.days ?? (line ? 1 : 2);
+    return {
+      past: false, days, startMs: localMidnightMs(hass, Date.now()),
+      windowMs: days * 24 * 3600000, nowMs: Date.now(),
+      rows: this._rows(), actuals: this._actuals, power: this._power ?? null,
+      dayAhead: null, totals: null,
+    };
+  }
+  _pastSource(r, day) {
+    const hass = this._hass, d = this._past.data;
+    const series = r.stringId ? d.strings?.[r.stringId] : d.plant;
+    const startMs = dayKeyStartMs(hass, day);
+    const endMs = dayKeyStartMs(hass, nextDayKey(day));
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const hours = (series?.hours ?? [])
+      .map((h) => ({
+        ms: Date.parse(h.start), f: num(h.forecast_kwh), u: num(h.unshaded_kwh),
+        da: num(h.day_ahead_kwh), daAt: h.day_ahead_issued_at ?? null,
+        a: num(h.actual_kwh), cens: !!h.censored,
+      }))
+      .filter((x) => Number.isFinite(x.ms) && x.ms >= startMs && x.ms < endMs)
+      .sort((x, y) => x.ms - y.ms);
+    const rows = hours.filter((x) => x.f != null)
+      .map((x) => ({ ms: x.ms, potential: x.f, unshaded: x.u }));
+    const actuals = new Map(hours.filter((x) => x.a != null).map((x) => [x.ms, x.a]));
+    const dayAhead = new Map(hours.filter((x) => x.da != null)
+      .map((x) => [x.ms, { v: x.da, at: x.daAt }]));
+    // five-minute power: a dense array from the day's start, null = no interval
+    const iv = series?.intervals;
+    const power = [];
+    const ivStart = iv?.start ? Date.parse(iv.start) : NaN;
+    if (Number.isFinite(ivStart) && Array.isArray(iv.power_w)) {
+      const step = (iv.step_minutes ?? 5) * 60000;
+      iv.power_w.forEach((w, i) => {
+        if (typeof w === "number" && Number.isFinite(w)) power.push({ ms: ivStart + i * step + step / 2, w });
+      });
+    }
+    const sum = (vals) => (vals.length ? vals.reduce((s, v) => s + v, 0) : null);
+    const intervalsGone = !power.length && d.intervals_since && day < d.intervals_since && actuals.size
+      ? t(hass, "hist_no_intervals", { date: fmtDayShort(hass, dayKeyStartMs(hass, d.intervals_since) + 12 * 3600000) })
+      : null;
+    return {
+      past: true, day, days: 1, startMs, windowMs: endMs - startMs, nowMs: endMs,
+      rows, actuals, power: power.length ? power : null, dayAhead,
+      totals: {
+        forecast: sum(rows.map((x) => x.potential)),
+        actual: sum([...actuals.values()]),
+        dayAhead: sum([...dayAhead.values()].map((x) => x.v)),
+      },
+      dayAheadGone: !dayAhead.size && d.day_ahead_since && day < d.day_ahead_since,
+      intervalsGone,
+    };
+  }
+
+  _renderLine(card, st, r, src) {
     const hass = this._hass, cfg = this._config;
     const title = cfg.title ?? st.attributes.friendly_name?.replace(/ (Prognose heute|Forecast today)$/i, "") ?? cfg.entity;
-    const rows = this._rows();
-    if (!rows.length) {
-      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span></div>
-        ${withheldHTML(t(hass, "fc_no_hours"))}`);
+    const step = this._stepHTML(src.past ? src.day : null);
+    const rows = src.rows;
+    if (!rows.length && !(src.past && src.actuals.size)) {
+      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${step}</div>
+        ${withheldHTML(t(hass, src.past ? "hist_no_data" : "fc_no_hours"))}`);
     }
     const isGroup = r.kind === "group";
     const showUnshaded = (cfg.show_unshaded ?? true) && !isGroup;
-    const days = cfg.days ?? 1;
-    const startMs = localMidnightMs(hass, Date.now());
-    const windowMs = days * 24 * 3600000;
-    const nowMs = Date.now();
+    const { startMs, windowMs, nowMs } = src;
+    const hoursInWindow = Math.round(windowMs / 3600000);
 
     // series in W: forecast/unshaded at hour centers; actual 5-min or hourly
     const fcPts = rows.map((x) => ({ ms: x.ms + 1800000, v: x.potential * 1000 }));
     const unPts = showUnshaded
-      ? rows.map((x) => ({ ms: x.ms + 1800000, v: x.unshaded * 1000 })) : [];
+      ? rows.filter((x) => x.unshaded != null).map((x) => ({ ms: x.ms + 1800000, v: x.unshaded * 1000 })) : [];
     let actPts = [], hourlyFallback = false;
-    if (this._power?.length) {
-      actPts = this._power.filter((p) => p.ms >= startMs && p.ms <= nowMs)
+    if (src.power?.length) {
+      actPts = src.power.filter((p) => p.ms >= startMs && p.ms <= nowMs)
         .map((p) => ({ ms: p.ms, v: Math.max(0, p.w) }));
-    } else if (this._actuals) {
+    } else if (src.actuals) {
       hourlyFallback = true;
-      actPts = [...this._actuals.entries()]
+      actPts = [...src.actuals.entries()]
         .filter(([ms]) => ms + 3600000 <= nowMs + 60000)
         .sort((a, b) => a[0] - b[0])
         .map(([ms, kwh]) => ({ ms: ms + 1800000, v: kwh * 1000 }));
@@ -2085,14 +2408,15 @@ class PvsForecastCard extends PvsBaseCard {
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${unitKw ? fmtNum(hass, v / 1000, 1) : fmtNum(hass, v, 0)}</text>`;
     }
     grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 2}" text-anchor="end" style="font-size:8.5px">${unitKw ? "kW" : "W"}</text>`;
+    const days = src.days;
     const stepH = wide ? (days === 1 ? 2 : 4) : (days === 1 ? 4 : 6);
-    for (let hOff = 0; hOff <= days * 24; hOff += stepH) {
+    for (let hOff = 0; hOff <= hoursInWindow; hOff += stepH) {
       const ms = startMs + hOff * 3600000;
       const x = xOf(ms);
-      if (hOff % 24 === 0 && hOff > 0 && hOff < days * 24) {
+      if (hOff % 24 === 0 && hOff > 0 && hOff < hoursInWindow) {
         grid += `<line class="grid" x1="${x}" y1="${PAD_T}" x2="${x}" y2="${PAD_T + PH}"/>`;
       }
-      if (hOff < days * 24 || days === 1) {
+      if (hOff < hoursInWindow || days === 1) {
         grid += `<text class="axis" x="${x}" y="${H - 8}" text-anchor="middle">${fmtHour(hass, ms)}</text>`;
       }
     }
@@ -2104,33 +2428,37 @@ class PvsForecastCard extends PvsBaseCard {
         stroke="var(--pvs-measure)" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/>`;
     }
 
-    // hero numbers
-    const prodId = r.producedIds?.[0];
-    const prodSt = prodId ? hass.states[prodId] : null;
-    const heroIst = prodSt && !isNaN(parseFloat(prodSt.state))
-      ? `<div class="fc-hero-item clickable" data-more-info="${prodId}">
-          <span class="hv" style="color:var(--pvs-measure)">${fmtNum(hass, parseFloat(prodSt.state), 1)}<span class="hu">kWh</span></span>
-          <span class="hl">${t(hass, "fc_hero_ist")}</span></div>` : "";
-    const fcState = isGroup ? st.attributes.today_kwh : parseFloat(st.state);
-    const heroProg = fcState != null && !isNaN(fcState)
-      ? `<div class="fc-hero-item right clickable" data-more-info="${cfg.entity}">
-          <span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, fcState, 1)}<span class="hu">kWh</span></span>
-          <span class="hl">${t(hass, "fc_hero_prog")}</span></div>` : "";
+    // hero numbers: the live sensors today, the day's own sums for a past day
+    const heroItem = (v, color, label, entity, right) => v == null || isNaN(v) ? "" :
+      `<div class="fc-hero-item${right ? " right" : ""}${entity ? " clickable" : ""}"${entity ? ` data-more-info="${entity}"` : ""}>
+        <span class="hv" style="color:var(${color})">${fmtNum(hass, v, 1)}<span class="hu">kWh</span></span>
+        <span class="hl">${label}</span></div>`;
+    let heroIst, heroProg;
+    if (src.past) {
+      heroIst = heroItem(src.totals.actual, "--pvs-measure", t(hass, "hist_hero_actual"), null, false);
+      heroProg = heroItem(src.totals.forecast, "--pvs-model", t(hass, "hist_hero_forecast"), null, true);
+    } else {
+      const prodId = r.producedIds?.[0];
+      const prodSt = prodId ? hass.states[prodId] : null;
+      heroIst = heroItem(prodSt ? parseFloat(prodSt.state) : null, "--pvs-measure", t(hass, "fc_hero_ist"), prodId, false);
+      heroProg = heroItem(isGroup ? st.attributes.today_kwh : parseFloat(st.state), "--pvs-model", t(hass, "fc_hero_prog"), cfg.entity, true);
+    }
 
     this._lineGeom = { startMs, windowMs, PAD_L, PW, W };
     this._lineSeries = {
       fc: new Map(rows.map((x) => [x.ms, x])),
-      act: actPts, hourlyFallback,
+      act: actPts, hourlyFallback, dayAhead: src.dayAhead,
     };
 
     const notes = [];
-    if (hourlyFallback && actPts.length) notes.push(`<div class="fc-note">${t(hass, "fc_hourly_fallback")}</div>`);
-    if (this._actualsProblem === "stats_unavailable" && !actPts.length) {
+    if (src.intervalsGone) notes.push(`<div class="fc-note">${src.intervalsGone}</div>`);
+    else if (hourlyFallback && actPts.length) notes.push(`<div class="fc-note">${t(hass, "fc_hourly_fallback")}</div>`);
+    if (!src.past && this._actualsProblem === "stats_unavailable" && !actPts.length) {
       notes.push(`<div class="fc-note">${t(hass, "stats_unavailable", { entity: r.powerId ?? r.producedIds?.join(", ") ?? "?" })}</div>`);
     }
 
     card(`
-      <div class="fc-hero${wide ? " wide" : ""}">${heroIst}<span class="fc-hero-title">${esc(title)}</span>${heroProg}</div>
+      <div class="fc-hero${wide ? " wide" : ""}">${heroIst}<div class="fc-hero-mid"><span class="fc-hero-title">${esc(title)}</span>${step}</div>${heroProg}</div>
       ${notes.join("")}
       <div class="fc-wrap"><svg class="fc-line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         ${grid}
@@ -2188,26 +2516,47 @@ class PvsForecastCard extends PvsBaseCard {
     if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
     this._resolve();
     const r = this._resolved || { kind: "plant", producedIds: [] };
+    const line = (cfg.style ?? "bars") === "line";
+
+    const day = this._viewDay();
+    if (day) {
+      if (this._past?.dayKey !== day || this._past.resolved !== r) this._loadPast(day);
+      if (!this._past?.data) {
+        const title = cfg.title ?? st.attributes.friendly_name?.replace(/ (Prognose heute|Forecast today)$/i, "") ?? cfg.entity;
+        const body = this._past?.problem
+          ? problemHTML(hass, { reason: t(hass, "hist_failed", { error: esc(this._past.problem) }) })
+          : `<div class="pvs-sub">…</div>`;
+        return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${this._stepHTML(day)}</div>${body}`);
+      }
+      const src = this._pastSource(r, day);
+      return line ? this._renderLine(card, st, r, src) : this._renderBars(card, st, r, src);
+    }
+    return line ? this._renderLine(card, st, r, this._liveSource(true))
+      : this._renderBars(card, st, r, this._liveSource(false));
+  }
+
+  _renderBars(card, st, r, src) {
+    const hass = this._hass, cfg = this._config;
     const isGroup = r.kind === "group";
-    if ((cfg.style ?? "bars") === "line") return this._renderLine(card, st, r);
     const showUnshaded = (cfg.show_unshaded ?? true) && !isGroup;
     const showActual = (cfg.show_actual ?? true);
+    const step = this._stepHTML(src.past ? src.day : null);
 
-    const rows = this._rows();
-    const title = cfg.title ?? st.attributes.friendly_name ?? cfg.entity;
-    if (!rows.length) {
-      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span></div>
-        ${withheldHTML(t(hass, "fc_no_hours"))}`);
+    const rows = src.rows;
+    const title = cfg.title ?? (src.past
+      ? st.attributes.friendly_name?.replace(/ (Prognose heute|Forecast today)$/i, "")
+      : st.attributes.friendly_name) ?? cfg.entity;
+    if (!rows.length && !(src.past && src.actuals.size)) {
+      return card(`<div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${step}</div>
+        ${withheldHTML(t(hass, src.past ? "hist_no_data" : "fc_no_hours"))}`);
     }
 
     // ---- slot grid: hourly, contiguous from first to last covered day ----
-    const startMs = localMidnightMs(hass, Date.now());
-    const days = cfg.days ?? 2;
-    const nSlots = days * 24;
+    const { startMs, days, nowMs } = src;
+    const nSlots = Math.round(src.windowMs / 3600000);
     const byMs = new Map(rows.map((x) => [x.ms, x]));
-    const actuals = this._actuals;
-    const nowMs = Date.now();
-    const curHourMs = nowMs - (nowMs % 3600000);
+    const actuals = src.actuals;
+    const curHourMs = src.past ? -1 : nowMs - (nowMs % 3600000);
 
     // daylight span per day (first..last covered hour) for gap ticks
     const dayCover = new Map();
@@ -2219,7 +2568,7 @@ class PvsForecastCard extends PvsBaseCard {
     }
 
     let maxV = 0;
-    for (const x of rows) maxV = Math.max(maxV, showUnshaded ? x.unshaded : x.potential);
+    for (const x of rows) maxV = Math.max(maxV, (showUnshaded ? x.unshaded : null) ?? x.potential);
     if (actuals) for (const v of actuals.values()) maxV = Math.max(maxV, v);
     const yMax = niceMax(maxV * 1.05);
 
@@ -2271,8 +2620,10 @@ class PvsForecastCard extends PvsBaseCard {
             fill="url(#pvs-hatch-fc)"/>`;
         }
       }
+      const da = src.dayAhead?.get(ms) ?? null;
       const payload = { ms, f: row?.potential ?? null, u: row?.unshaded ?? null,
-        a: act ?? null, cur: isCur, gap: !row && cov && ms > cov.min && ms < cov.max };
+        a: act ?? null, cur: isCur, gap: !row && cov && ms > cov.min && ms < cov.max,
+        da: da?.v ?? null, daAt: da?.at ?? null };
       hits += `<rect class="hit" x="${x0}" y="${PAD_T}" width="${SW}" height="${PH}"
         fill="transparent" data-slot='${esc(JSON.stringify(payload))}'/>`;
     }
@@ -2297,10 +2648,14 @@ class PvsForecastCard extends PvsBaseCard {
     const chips = [];
     const chip = (label, value, entityId, sub) => {
       if (value == null) return;
-      chips.push(`<span class="pvs-chip clickable" ${entityId ? `data-more-info="${entityId}"` : ""}>
+      chips.push(`<span class="pvs-chip${entityId ? " clickable" : ""}" ${entityId ? `data-more-info="${entityId}"` : ""}>
         ${label} <span class="v">${value}</span>${sub ? ` <span class="pvs-sub">${sub}</span>` : ""}</span>`);
     };
-    if (isGroup) {
+    if (src.past) {
+      chip(t(hass, "fc_forecast"), src.totals.forecast == null ? null : fmtKwh(hass, src.totals.forecast, 1));
+      chip(t(hass, "fc_actual"), src.totals.actual == null ? null : fmtKwh(hass, src.totals.actual, 1));
+      chip(t(hass, "hist_day_ahead"), src.totals.dayAhead == null ? null : fmtKwh(hass, src.totals.dayAhead, 1));
+    } else if (isGroup) {
       chip(t(hass, "today"), fmtKwh(hass, st.attributes.today_kwh, 1), cfg.entity);
       chip(t(hass, "remaining"), fmtKwh(hass, parseFloat(st.state), 1), cfg.entity);
       chip(t(hass, "tomorrow"), fmtKwh(hass, st.attributes.tomorrow_kwh, 1), cfg.entity);
@@ -2320,21 +2675,25 @@ class PvsForecastCard extends PvsBaseCard {
     if (isGroup && (cfg.show_unshaded ?? true)) {
       notes.push(`<div class="fc-note">${t(hass, "fc_group_unshaded")}</div>`);
     }
-    if (this._actualsProblem === "fc_actual_unresolved") {
+    if (src.past && src.dayAheadGone) {
+      notes.push(`<div class="fc-note">${t(hass, "hist_day_ahead_gone")}</div>`);
+    }
+    if (!src.past && this._actualsProblem === "fc_actual_unresolved") {
       notes.push(`<div class="fc-note">${t(hass, "fc_actual_unresolved")}</div>`);
-    } else if (this._actualsProblem === "stats_unavailable") {
+    } else if (!src.past && this._actualsProblem === "stats_unavailable") {
       notes.push(`<div class="fc-note">${t(hass, "stats_unavailable", { entity: r.producedIds?.join(", ") ?? "?" })}</div>`);
     }
 
+    const hasUnshaded = showUnshaded && rows.some((x) => x.unshaded != null);
     const legend = `<div class="pvs-legend">
-      ${showUnshaded ? `<span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "fc_unshaded")}</span>` : ""}
+      ${hasUnshaded ? `<span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "fc_unshaded")}</span>` : ""}
       <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "fc_forecast")}</span>
       ${showActual ? `<span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "fc_actual")}</span>` : ""}
       <span class="it"><svg width="14" height="10"><rect width="14" height="10" rx="2" fill="url(#pvs-hatch-fcl)"/></svg>${t(hass, "fc_gap")}</span>
     </div>`;
 
     card(`
-      <div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${chips.join("")}</div>
+      <div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${chips.join("")}${step}</div>
       ${notes.join("")}
       <div class="fc-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
         <defs>${hatchPattern("pvs-hatch-fc", "var(--pvs-measure)")}${hatchPattern("pvs-hatch-fcl")}</defs>
@@ -2349,6 +2708,12 @@ class PvsForecastCard extends PvsBaseCard {
     this._wired = true;
     this.shadowRoot.addEventListener("pointerleave", () => {
       this.shadowRoot.querySelector(".fc-xh")?.setAttribute("opacity", "0");
+    });
+    this.shadowRoot.addEventListener("click", (ev) => {
+      const b = ev.target.closest?.("[data-step]");
+      if (!b || b.disabled) return;
+      ev.stopPropagation();
+      this._step(parseInt(b.getAttribute("data-step"), 10));
     });
     wireTooltip(this, {
       selector: ".hit,.lhit",
@@ -2367,6 +2732,8 @@ class PvsForecastCard extends PvsBaseCard {
           ${shadow != null && shadow > 0.5 ? `<div class="r"><span class="k">${t(hass, "fc_known_shadow")}</span><span class="v">${fmtNum(hass, shadow, 0)} %</span></div>` : ""}
           ${d.a != null ? `<div class="r"><span class="k">${t(hass, "fc_actual")}</span><span class="v">${fmtKwh(hass, d.a)}</span></div>` : ""}
           ${delta != null && !d.cur ? `<div class="r"><span class="k">${t(hass, "fc_delta")}</span><span class="v">${fmtSigned(hass, delta)} kWh</span></div>` : ""}
+          ${d.da != null ? `<div class="r"><span class="k">${t(hass, "hist_day_ahead")}</span><span class="v">${fmtKwh(hass, d.da)}</span></div>` : ""}
+          ${d.da != null && d.daAt ? this._issuedNote(d.daAt) : ""}
           ${d.cur ? `<div class="pvs-sub">${t(hass, "in_progress", { min: new Date().getMinutes() })}</div>` : ""}`;
       },
     });
@@ -2396,7 +2763,20 @@ class PvsForecastCard extends PvsBaseCard {
       ${fc && fc.unshaded !== fc.potential ? `<div class="r"><span class="k">${t(hass, "fc_unshaded")}</span><span class="v">${fmtNum(hass, fc.unshaded * 1000, 0)} W</span></div>` : ""}
       ${shadow != null && shadow > 0.5 ? `<div class="r"><span class="k">${t(hass, "fc_known_shadow")}</span><span class="v">${fmtNum(hass, shadow, 0)} %</span></div>` : ""}
       ${act ? `<div class="r"><span class="k">${t(hass, "fc_actual")}</span><span class="v">${fmtNum(hass, act.v, 0)} W</span></div>` : ""}
+      ${s.dayAhead?.get(hourMs) ? `<div class="r"><span class="k">${t(hass, "hist_day_ahead")}</span><span class="v">${fmtNum(hass, s.dayAhead.get(hourMs).v * 1000, 0)} W</span></div>` : ""}
       ${s.hourlyFallback && act ? `<div class="pvs-sub">${t(hass, "fc_hourly_fallback")}</div>` : ""}`;
+  }
+
+  // The day-ahead figure is the run of the evening before at the issue hour;
+  // where that run was missing the integration fell back to an earlier one,
+  // and the tooltip says so rather than claiming the stricter provenance.
+  _issuedNote(iso) {
+    const hass = this._hass, ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return "";
+    const issueHour = this._past?.data?.issue_hour_local;
+    const lp = localParts(hass, ms);
+    if (issueHour != null && lp.hour === issueHour && lp.minute === 0) return "";
+    return `<div class="pvs-sub">${t(hass, "hist_issued_earlier", { when: `${fmtWeekday(hass, ms)} ${fmtHour(hass, ms)}` })}</div>`;
   }
 
   static getConfigElement() { return document.createElement("pvstrings-forecast-editor"); }
@@ -2412,6 +2792,8 @@ const FC_CSS = `
   .fc-note { font-size: 11px; color: var(--secondary-text-color); margin: 2px 0 6px; }
   .hit, .lhit { cursor: crosshair; }
   .fc-hero { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 8px; }
+  .fc-hero-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; align-self: center; }
+  .fc-hero-mid .fc-hero-title { flex: none; max-width: 100%; }
   .fc-hero-title {
     flex: 1; text-align: center; align-self: center;
     font-size: 13px; font-weight: 600; color: var(--secondary-text-color);
@@ -3682,6 +4064,55 @@ const ACC_CSS = `
 class PvsHourProfileCard extends PvsBaseCard {
   getCardSize() { return 4; }
   getGridOptions() { return { columns: "full", rows: "auto" }; }
+  setConfig(config) {
+    this._sel = null;          // null = the live 30 days; else a week_start
+    this._weeksState = null;
+    super.setConfig(config);
+  }
+
+  // Past weeks, where the integration keeps them (get_weeks). Same fold, a
+  // week at a time: what a month hides — whether the morning got better —
+  // becomes a step through the weeks.
+  async _ensureWeeks() {
+    const hass = this._hass, cfg = this._config;
+    if (!cfg?.entity || !hasPvsService(hass, "get_weeks")) return;
+    const st = this._weeksState;
+    if (st && !(st.at && Date.now() - st.at > 30 * 60000)) return;
+    // keep drawing the weeks we have while the refresh runs
+    this._weeksState = { ...(st ?? {}), loading: true, at: Date.now() };
+    try {
+      const m = await getRegistryModel(hass);
+      const info = m.byEntityId.get(cfg.entity);
+      const node = info?.level === "plant" ? info.node : info?.node?.plant;
+      if (!node?.entryId) { this._weeksState = { none: true, at: Date.now() }; return; }
+      const data = await historyWeeks(hass, node.entryId);
+      const weeks = (data?.weeks ?? []).filter((w) => w && typeof w.week_start === "string"
+        && Array.isArray(w.hourly_profile))
+        .sort((x, y) => (x.week_start < y.week_start ? -1 : 1));
+      this._weeksState = { weeks, at: Date.now() };
+    } catch (e) {
+      this._weeksState = { problem: esc(e?.message ?? String(e)), at: Date.now() };
+    }
+    this._render();
+  }
+  _selWeek() {
+    const ws = this._weeksState?.weeks;
+    return ws && this._sel != null ? ws.find((w) => w.week_start === this._sel) ?? null : null;
+  }
+  _stepHTML() {
+    const ws = this._weeksState?.weeks, hass = this._hass;
+    if (!ws?.length) return "";
+    const i = this._sel == null ? ws.length : ws.findIndex((w) => w.week_start === this._sel);
+    const label = this._sel == null ? t(hass, "hp_sel_live") : weekLabel(hass, this._sel);
+    return stepperHTML(hass, label, { prev: i > 0, next: this._sel != null, past: this._sel != null });
+  }
+  _step(dir) {
+    const ws = this._weeksState?.weeks;
+    if (!ws?.length) return;
+    const i = (this._sel == null ? ws.length : ws.findIndex((w) => w.week_start === this._sel)) + dir;
+    this._sel = i >= ws.length ? null : ws[Math.max(0, i)].week_start;
+    this._render();
+  }
 
   _render() {
     const hass = this._hass, cfg = this._config;
@@ -3696,12 +4127,21 @@ class PvsHourProfileCard extends PvsBaseCard {
     const need = requireFeatures(st, ["hourly_profile"]);
     if (!need.ok) return card(problemHTML(hass, { entity: cfg.entity, missing: need.missing }));
 
-    const a = st.attributes;
+    this._ensureWeeks();
+    const week = this._selWeek();
+    // a week is drawn exactly like the live month — only the rows differ
+    const a = week
+      ? { hourly_profile: week.hourly_profile, days_scored: week.days_scored ?? null }
+      : st.attributes;
     const title = cfg.title ?? t(hass, "hp_title");
+    const weekChips = !week ? "" : [
+      week.complete === false ? `<span class="pvs-chip">${t(hass, "week_running")}</span>` : "",
+      week.backfilled ? `<span class="pvs-chip" title="${esc(t(hass, "week_backfilled_tip"))}">${t(hass, "week_backfilled")}</span>` : "",
+    ].join("");
     const head = (extraChip = "") => `<div class="pvs-head">
       <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(title)}</span>
-      ${a.days_scored != null ? `<span class="pvs-chip clickable" data-more-info="${cfg.entity}">${tn(hass, "hp_days_scored", a.days_scored)}</span>` : ""}
-      ${extraChip}${helpChip("hp")}
+      ${a.days_scored != null ? `<span class="pvs-chip${week ? "" : " clickable"}"${week ? "" : ` data-more-info="${cfg.entity}"`}>${tn(hass, "hp_days_scored", a.days_scored)}</span>` : ""}
+      ${weekChips}${extraChip}${this._stepHTML()}${helpChip("hp")}
     </div>`;
 
     // Rows worth drawing. Two kinds get dropped, for two different reasons:
@@ -3808,13 +4248,19 @@ class PvsHourProfileCard extends PvsBaseCard {
         <span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.7"></span>${t(hass, "hp_too_high")}</span>
         <span class="it"><span class="sw" style="background:var(--pvs-measure);opacity:0.7"></span>${t(hass, "hp_too_low")}</span>
       </div>
-      <div class="fc-note">${t(hass, "hp_note")}</div>`);
+      <div class="fc-note">${t(hass, week ? "hp_note_week" : "hp_note")}</div>`);
   }
 
   _wire() {
     this._wireMoreInfo();
     if (this._wired) return;
     this._wired = true;
+    this.shadowRoot.addEventListener("click", (ev) => {
+      const b = ev.target.closest?.("[data-step]");
+      if (!b || b.disabled) return;
+      ev.stopPropagation();
+      this._step(parseInt(b.getAttribute("data-step"), 10));
+    });
     wireTooltip(this, {
       selector: "[data-hp]",
       content: (el) => {
@@ -4285,6 +4731,19 @@ function stageLabel(hass, s) {
 // reachable ceiling, not an asymptote.
 const MATURITY_MAX_N_EFF = 1 / (1 - 0.5 ** (1 / 15));
 
+// Weather axis of the maturity: evidence held across all plant buckets,
+// against the ceiling. `nEffOf(key)` reads a bucket's n_eff from wherever the
+// buckets live — the live model sensor or a week's snapshot.
+function weatherMaturity(nEffOf) {
+  const total = WEATHERS.length * DAYPARTS.length;
+  let sum = 0, seen = 0;
+  for (const w of WEATHERS) for (const d of DAYPARTS) {
+    const n = nEffOf(`${w}|${d}`);
+    if (n > 0) { seen++; sum += Math.min(1, n / MATURITY_MAX_N_EFF); }
+  }
+  return { pct: (sum / total) * 100, seen, total };
+}
+
 class PvsMaturityCard extends PvsBaseCard {
   getCardSize() { return 2; }
   getGridOptions() { return { columns: "full", rows: "auto" }; }
@@ -4299,16 +4758,7 @@ class PvsMaturityCard extends PvsBaseCard {
 
     // weather axis: evidence held across all plant buckets, vs the ceiling
     const buckets = (cfg.entity ? hass.states[cfg.entity] : null)?.attributes?.log_ratio?.plant;
-    let weather = null;
-    if (buckets) {
-      const total = WEATHERS.length * DAYPARTS.length;
-      let sum = 0, seen = 0;
-      for (const w of WEATHERS) for (const d of DAYPARTS) {
-        const c = buckets[`${w}|${d}`];
-        if (c?.n_eff > 0) { seen++; sum += Math.min(1, c.n_eff / MATURITY_MAX_N_EFF); }
-      }
-      weather = { pct: (sum / total) * 100, seen, total };
-    }
+    const weather = buckets ? weatherMaturity((key) => buckets[key]?.n_eff) : null;
 
     // shading axis: observed pooled sky cells vs the year's sun path
     const lat = hass.config?.latitude;
@@ -4384,6 +4834,247 @@ const MATURITY_CSS = `
     background: color-mix(in srgb, var(--primary-text-color, #212121) 40%, transparent); }
   .mat-axis .pvs-sub { margin-top: 7px; line-height: 1.7; }
   .mat-chip { display: inline-block; margin-right: 10px; cursor: pointer; }
+`;
+
+/* ========================= SECTION: CARD:LEARNING ======================== */
+
+// Whether learning pays, week by week, and in total. Two numbers people
+// actually ask about, drawn so that neither can be dressed up:
+//
+// - The main line is the forecast error the learning avoided, in kWh,
+//   against the same integration with learning switched off (get_weeks
+//   `baseline`: same code, geometry and weather run, apply_learning=False —
+//   not "bare physics", which already carries the learned shading map).
+//   It is a running sum from the first week that has both numbers. A sum of
+//   mostly positive weeks rises by itself; a bad week bends it and stays
+//   visible; a plant where learning does nothing draws a flat line, which is
+//   a finding, not a failure of the card.
+// - The thin second line is how much the model has seen (the maturity
+//   formula). It only ever grows, and its label says "seen", not "better".
+//
+// What it does not do: pick a window, smooth a week away, or start the axis
+// anywhere but zero. Weeks rebuilt after the fact are hatched, the running
+// week is faint, and a week without a baseline is marked, not skipped.
+class PvsLearningCard extends PvsBaseCard {
+  getCardSize() { return 5; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  setConfig(config) {
+    this._state = null;
+    super.setConfig(config);
+  }
+  // service data: re-read once the half-hour cache has run out, so the
+  // running week does not freeze at whatever it said when the card was made
+  _shouldUpdate(prev) {
+    return !prev || (!!this._state?.at && Date.now() - this._state.at > 30 * 60000);
+  }
+
+  async _load() {
+    const hass = this._hass, cfg = this._config;
+    const had = this._state?.weeks ? this._state : null;
+    this._state = had ? { ...had, at: Date.now() } : { loading: true, at: Date.now() };
+    try {
+      const m = await getRegistryModel(hass);
+      const info = m.byEntityId.get(cfg.entity);
+      const node = info?.level === "plant" ? info.node : info?.node?.plant;
+      if (!node?.entryId) {
+        this._state = { at: Date.now(), problem: t(hass, "entity_missing", { entity: esc(cfg.entity) }) };
+      } else {
+        const data = await historyWeeks(hass, node.entryId);
+        this._state = { at: Date.now(), weeks: data.weeks
+          .filter((w) => w && typeof w.week_start === "string")
+          .sort((x, y) => (x.week_start < y.week_start ? -1 : 1)) };
+      }
+    } catch (e) {
+      this._state = had ?? { at: Date.now(), problem: t(hass, "hist_failed", { error: esc(e?.message ?? String(e)) }) };
+    }
+    this._render();
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}${LEARN_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    const title = cfg.title ?? t(hass, "learn_title");
+    const head = (chips = "") => `<div class="pvs-head"><span class="pvs-title">${esc(title)}</span>${chips}${helpChip("learning")}</div>`;
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    if (!hasPvsService(hass, "get_weeks")) {
+      return card(head() + problemHTML(hass, { reason: t(hass, "hist_needs_service", { service: "pvstrings.get_weeks" }) }));
+    }
+    if (!this._state || (this._state.at && Date.now() - this._state.at > 30 * 60000)) this._load();
+    if (!this._state || this._state.loading) return card(`${head()}<div class="pvs-sub">…</div>`);
+    if (this._state.problem) return card(head() + problemHTML(hass, { reason: this._state.problem }));
+
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    let cum = null, prevSeen = null;
+    const rows = this._state.weeks.map((w) => {
+      const da = w.day_ahead, bl = w.baseline;
+      const daErr = num(da?.abs_error_kwh), blErr = num(bl?.abs_error_kwh);
+      const gain = daErr != null && blErr != null ? blErr - daErr : null;
+      if (gain != null) cum = (cum ?? 0) + gain;
+      const pct = (err, act) => (err != null && num(act) > 0 ? (err / act) * 100 : null);
+      const mat = w.maturity?.weather_n_eff
+        ? weatherMaturity((key) => w.maturity.weather_n_eff[key]) : null;
+      const newSituation = mat && prevSeen != null && mat.seen > prevSeen;
+      if (mat) prevSeen = mat.seen;
+      return {
+        week: w.week_start, complete: w.complete !== false, backfilled: !!w.backfilled,
+        days: num(w.days_scored), gain, cum: gain != null ? cum : null, cumSoFar: cum,
+        wmape: pct(daErr, da?.actual_kwh), wmapeBase: pct(blErr, bl?.actual_kwh),
+        maturity: mat?.pct ?? null, newSituation,
+      };
+    });
+    const compared = rows.filter((r) => r.gain != null);
+    if (!compared.length) {
+      return card(head() + withheldHTML(t(hass, rows.length ? "learn_no_baseline" : "learn_no_weeks")));
+    }
+
+    // ---- geometry ----------------------------------------------------------
+    const n = rows.length;
+    const PAD_L = 44, PAD_R = 46, PAD_T = 18, PH = 120, GAP = 18, STRIP_H = 56, PAD_B = 18;
+    const SW = Math.max(22, Math.floor((620 - PAD_L - PAD_R) / n));
+    const W = PAD_L + n * SW + PAD_R;
+    const STRIP_Y = PAD_T + PH + GAP, MID = STRIP_Y + STRIP_H / 2;
+    const H = STRIP_Y + STRIP_H + PAD_B;
+    const cx = (i) => PAD_L + i * SW + SW / 2;
+
+    // the running sum's axis always contains zero — the reader must see
+    // where "no gain" is, and a sum drawn from its own minimum would not show it
+    const cums = rows.map((r) => r.cumSoFar).filter((v) => v != null);
+    const hi = niceMax(Math.max(0, ...cums) * 1.08 || 1);
+    const lo = Math.min(0, ...cums) < 0 ? -niceMax(-Math.min(...cums) * 1.08) : 0;
+    const yOf = (v) => PAD_T + PH - ((v - lo) / (hi - lo)) * PH;
+    const mOf = (p) => PAD_T + PH - (p / 100) * PH;
+    const gains = compared.map((r) => Math.abs(r.gain));
+    const gMax = niceMax(Math.max(...gains) || 1);
+    const gOf = (g) => MID - (g / gMax) * (STRIP_H / 2);
+
+    let grid = "";
+    for (const v of lo < 0 ? [lo, 0, hi] : [0, hi / 2, hi]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"${v === 0 ? ' style="stroke:var(--secondary-text-color);opacity:.35"' : ""}/>
+        <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v, Number.isInteger(v) ? 0 : 1)}</text>`;
+    }
+    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 8}" text-anchor="end" style="font-size:8.5px">kWh</text>
+      <text class="axis" x="${W - PAD_R + 5}" y="${mOf(100) + 3}" style="fill:var(--pvs-model-ghost)">100 %</text>
+      <text class="axis" x="${W - PAD_R + 5}" y="${mOf(0) + 3}" style="fill:var(--pvs-model-ghost)">0 %</text>
+      <line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, gMax, 0)}</text>
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">−${fmtNum(hass, gMax, 0)}</text>`;
+
+    // ---- series ------------------------------------------------------------
+    // running sum: a line through the weeks that have a gain; a week without
+    // one breaks the line instead of pretending the sum held there
+    let cumPath = "", prev = false;
+    let matPath = "", mPrev = false;
+    let strip = "", marks = "", hits = "", labels = "";
+    const labelEvery = Math.ceil(n / 12);
+    rows.forEach((r, i) => {
+      const x = cx(i), x0 = PAD_L + i * SW;
+      const faint = !r.complete || (r.days != null && r.days < 4);
+      if (r.cum != null) {
+        cumPath += `${prev ? "L" : "M"}${x.toFixed(1)} ${yOf(r.cum).toFixed(1)}`;
+        marks += `<circle cx="${x}" cy="${yOf(r.cum)}" r="2.6" fill="var(--pvs-model)"${faint ? ' opacity="0.45"' : ""}/>`;
+        prev = true;
+      } else prev = false;
+      if (r.maturity != null) {
+        matPath += `${mPrev ? "L" : "M"}${x.toFixed(1)} ${mOf(r.maturity).toFixed(1)}`;
+        if (r.newSituation) {
+          marks += `<circle cx="${x}" cy="${mOf(r.maturity)}" r="4" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.4"/>`;
+        }
+        mPrev = true;
+      } else mPrev = false;
+      if (r.gain != null) {
+        const y = gOf(Math.max(-gMax, Math.min(gMax, r.gain)));
+        const bh = Math.max(1, Math.abs(MID - y));
+        strip += `<rect x="${x0 + 3}" y="${Math.min(MID, y)}" width="${SW - 6}" height="${bh}" rx="1"
+          fill="${r.gain >= 0 ? "var(--success-color, #43a047)" : "var(--pvs-measure)"}" opacity="${faint ? 0.3 : 0.75}"/>`;
+        if (r.backfilled) {
+          strip += `<rect x="${x0 + 3}" y="${Math.min(MID, y)}" width="${SW - 6}" height="${bh}" fill="url(#pvs-hatch-lr)"/>`;
+        }
+      } else {
+        // no baseline for this week: a hatched stub, never a zero bar
+        strip += `<rect x="${x0 + 3}" y="${MID - 3}" width="${SW - 6}" height="6" rx="1" fill="url(#pvs-hatch-lr)"/>`;
+      }
+      if (i % labelEvery === (n - 1) % labelEvery) {
+        labels += `<text class="axis" x="${x}" y="${H - 5}" text-anchor="middle">${isoWeekOf(r.week)}</text>`;
+      }
+      hits += `<rect class="hit" x="${x0}" y="${PAD_T}" width="${SW}" height="${H - PAD_T - PAD_B}"
+        fill="transparent" data-lw='${esc(JSON.stringify(r))}'/>`;
+    });
+
+    // ---- hero --------------------------------------------------------------
+    const total = compared[compared.length - 1].cum;
+    const since = compared[0].week;
+    const sinceTxt = fmtDayShort(hass, dayKeyStartMs(hass, since) + 12 * 3600000);
+    const lastFull = [...rows].reverse().find((r) => r.complete && r.wmape != null && r.wmapeBase != null);
+    const hero = `<div class="lr-hero">
+      <div class="fc-hero-item">
+        <span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, Math.abs(total), 0)}<span class="hu">kWh</span></span>
+        <span class="hl">${t(hass, Math.round(total) === 0 ? "learn_hero_equal" : total > 0 ? "learn_hero_less" : "learn_hero_more", { since: sinceTxt, n: compared.length })}</span>
+      </div>
+      ${lastFull ? `<div class="fc-hero-item right">
+        <span class="hv" style="color:var(--primary-text-color)">${fmtNum(hass, lastFull.wmape, 1)}<span class="hu">%</span></span>
+        <span class="hl">${t(hass, "learn_hero_wmape", { base: fmtNum(hass, lastFull.wmapeBase, 1), week: isoWeekOf(lastFull.week) })}</span>
+      </div>` : ""}
+    </div>`;
+
+    card(`${head()}
+      ${hero}
+      <div class="fc-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        <defs>${hatchPattern("pvs-hatch-lr")}</defs>
+        ${grid}
+        ${matPath ? `<path d="${matPath}" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.6" stroke-linejoin="round"/>` : ""}
+        ${cumPath ? `<path d="${cumPath}" fill="none" stroke="var(--pvs-model)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>` : ""}
+        ${marks}${strip}${labels}${hits}
+      </svg></div>
+      <div class="pvs-legend">
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "learn_leg_cum")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "learn_leg_seen")}</span>
+        <span class="it"><span class="sw" style="background:var(--success-color, #43a047);opacity:.75"></span>${t(hass, "learn_leg_gain")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-measure);opacity:.75"></span>${t(hass, "learn_leg_loss")}</span>
+        <span class="it"><svg width="14" height="10"><rect width="14" height="10" rx="2" fill="url(#pvs-hatch-lrl)"/><defs>${hatchPattern("pvs-hatch-lrl")}</defs></svg>${t(hass, "learn_leg_backfilled")}</span>
+      </div>
+      <div class="fc-note">${t(hass, "learn_note")}</div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (this._wired) return;
+    this._wired = true;
+    wireTooltip(this, {
+      selector: "[data-lw]",
+      content: (el) => {
+        const hass = this._hass;
+        const r = JSON.parse(el.getAttribute("data-lw"));
+        const row = (k, v) => `<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+        return `<div class="h">${esc(weekLabel(hass, r.week))}</div>
+          ${!r.complete ? `<div class="pvs-sub">${t(hass, "week_running")}</div>` : ""}
+          ${r.wmape != null ? row(t(hass, "learn_tip_with"), `${fmtNum(hass, r.wmape, 1)} %`) : ""}
+          ${r.wmapeBase != null ? row(t(hass, "learn_tip_without"), `${fmtNum(hass, r.wmapeBase, 1)} %`) : ""}
+          ${r.gain != null ? row(t(hass, "learn_tip_gain"), `${fmtSigned(hass, r.gain, 1)} kWh`) : `<div class="pvs-sub">${t(hass, "learn_tip_no_baseline")}</div>`}
+          ${r.cum != null ? row(t(hass, "learn_tip_cum"), `${fmtSigned(hass, r.cum, 0)} kWh`) : ""}
+          ${r.maturity != null ? row(t(hass, "learn_leg_seen"), `${fmtNum(hass, r.maturity, 0)} %`) : ""}
+          ${r.days != null ? row(t(hass, "hp_days"), r.days) : ""}
+          ${r.newSituation ? `<div class="pvs-sub">${t(hass, "learn_tip_new")}</div>` : ""}
+          ${r.backfilled ? `<div class="pvs-sub">${t(hass, "week_backfilled_tip")}</div>` : ""}`;
+      },
+    });
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-hour-profile-editor"); }
+  static getStubConfig(hass, entities) {
+    const guess = (entities ?? []).find((e) =>
+      Array.isArray(hass.states[e]?.attributes?.hourly_profile));
+    return { entity: guess ?? "" };
+  }
+}
+
+const LEARN_CSS = `
+  .lr-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin: 2px 0 8px; flex-wrap: wrap; }
+  .lr-hero .fc-hero-item .hl { max-width: 360px; }
+  .hit { cursor: crosshair; }
 `;
 
 /* ========================== SECTION: CARD:HEALTH ========================= */
@@ -4946,6 +5637,14 @@ async function buildViews(hass, config) {
               : mdCard(t(lang, "missing_card", { key: "forecast_today" })),
           ] },
     ];
+    // Learning progress (response service get_weeks): only where the
+    // integration keeps weeks — an older one simply has no such section.
+    if (hasPvsService(hass, "get_weeks") && plant.byKey.wmape_day_ahead_30d) {
+      accSections.splice(1, 0, { type: "grid", column_span: 2, cards: [
+        { type: "custom:pvstrings-learning", entity: plant.byKey.wmape_day_ahead_30d,
+          grid_options: { columns: "full" } },
+      ] });
+    }
     views.push({
       title: prefix + t(lang, "v_accuracy"), path: `${slug}accuracy`,
       icon: "mdi:target", type: "sections", max_columns: 2, sections: accSections,
@@ -5197,6 +5896,8 @@ const CARDS = [
     "Diagnostic tables (correction factors as ±%, source-bias heatmap, sky overview, conversion, savings provenance)."],
   ["pvstrings-maturity", PvsMaturityCard, "PV Strings Maturity",
     "How far the training has come: weather-bucket evidence and sun-path coverage."],
+  ["pvstrings-learning", PvsLearningCard, "PV Strings Learning Progress",
+    "Forecast error the learning avoided against the same integration without it, week by week and in total."],
   ["pvstrings-accuracy", PvsAccuracyCard, "PV Strings Accuracy",
     "Short-term and day-ahead accuracy on two lines, each with how full its window is."],
   ["pvstrings-health", PvsHealthCard, "PV Strings Health",
@@ -5210,7 +5911,7 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
       type: tag, name, description,
-      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy"].includes(tag),
+      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy", "pvstrings-learning"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }
