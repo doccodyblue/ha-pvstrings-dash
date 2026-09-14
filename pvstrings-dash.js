@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.15.0";
+const PVS_VERSION = "0.15.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -497,6 +497,9 @@ const STR = {
     "learn_hero_more": "more forecast error than without learning · {n} weeks since {since}",
     "learn_hero_equal": "no difference to the forecast without learning so far · {n} weeks since {since}",
     "learn_hero_wmape": "day-ahead error in wk {week} · {base} % without learning",
+    "learn_hero_wmape_only": "day-ahead error in wk {week}",
+    "learn_hero_waiting": "no week compared live yet — the first one counts from wk {week}",
+    "learn_backfilled_note": "Not in the total: {weeks} rebuilt, {gain} kWh. Those weeks set the forecast published back then against one computed today without learning — two versions of the code as well, not only learning on and off.",
     "learn_leg_cum": "error avoided, running total",
     "learn_leg_seen": "seen (maturity)",
     "learn_leg_gain": "week: learning helped",
@@ -507,7 +510,8 @@ const STR = {
     "learn_tip_gain": "error avoided", "learn_tip_cum": "running total",
     "learn_tip_no_baseline": "no comparison value for this week",
     "learn_tip_new": "new weather situation seen this week",
-    "help_learning": "**Error avoided** is the day-ahead forecast error of the integration with learning, against the same integration with learning switched off — same weather run, same geometry, same hours. Not against bare physics: the learned shading map and source correction count as learning too. Summed per day like the WMAPE, then **added up week by week** from the first week that has both numbers — nothing is left out and no window is picked. **Seen** is the maturity: how much evidence the model holds. It only grows and says nothing about being right. It slows down when the sun reaches positions the model has not met yet, as it does every autumn. *Rebuilt* weeks were computed afterwards from the forecasts published at the time; faint weeks are still running or rest on fewer than four days.",
+    "learn_tip_backfilled": "Rebuilt: the forecast published then against one computed today without learning. Not in the running total.",
+    "help_learning": "**Error avoided** is the day-ahead forecast error of the integration with learning, against the same integration with learning switched off — same weather run, same geometry, same hours. Not against bare physics: the learned shading map and source correction count as learning too. Summed per day like the WMAPE, then **added up week by week** from the first week compared live — nothing is left out and no window is picked. **Seen** is the maturity: how much evidence the model holds. It only grows and says nothing about being right. It slows down when the sun reaches positions the model has not met yet, as it does every autumn. *Rebuilt* weeks — the ones before the integration logged the comparison itself — set the forecast published back then against one computed today without learning. That compares two versions of the code as well, and every improvement since then counts against the learning, so they are shown but not added up. Faint weeks are still running or rest on fewer than four days.",
     "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
     /* i18n-en-end */
   },
@@ -840,6 +844,9 @@ const STR = {
     "learn_hero_more": "mehr Prognosefehler als ohne Lernen · {n} Wochen seit {since}",
     "learn_hero_equal": "bisher kein Unterschied zur Prognose ohne Lernen · {n} Wochen seit {since}",
     "learn_hero_wmape": "Day-Ahead-Fehler in KW {week} · ohne Lernen {base} %",
+    "learn_hero_wmape_only": "Day-Ahead-Fehler in KW {week}",
+    "learn_hero_waiting": "noch keine live verglichene Woche — die erste zählt ab KW {week}",
+    "learn_backfilled_note": "Nicht mitgezählt: {weeks} nachgerechnet, {gain} kWh. Diese Wochen stellen die damals veröffentlichte Prognose einer heute ohne Lernen gerechneten gegenüber — also auch zwei Code-Stände, nicht nur Lernen an und aus.",
     "learn_leg_cum": "vermiedener Fehler, aufsummiert",
     "learn_leg_seen": "gesehen (Lernreife)",
     "learn_leg_gain": "Woche: Lernen half",
@@ -850,7 +857,8 @@ const STR = {
     "learn_tip_gain": "vermiedener Fehler", "learn_tip_cum": "aufsummiert",
     "learn_tip_no_baseline": "für diese Woche kein Vergleichswert",
     "learn_tip_new": "diese Woche eine neue Wettersituation gesehen",
-    "help_learning": "**Vermiedener Fehler** ist der Day-Ahead-Prognosefehler der Integration mit Lernen gegenüber derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Nicht gegenüber reiner Physik: die gelernte Verschattungskarte und die Quellen-Korrektur zählen auch als Lernen. Pro Tag gerechnet wie die WMAPE, dann **Woche für Woche aufsummiert**, ab der ersten Woche mit beiden Zahlen — nichts weggelassen, kein Zeitfenster ausgesucht. **Gesehen** ist die Lernreife: wie viel Evidenz das Modell hält. Sie wächst nur und sagt nichts darüber, ob es stimmt. Sie wird langsamer, wenn die Sonne Stände erreicht, die das Modell noch nicht kennt — jeden Herbst. *Nachgerechnete* Wochen sind im Nachhinein aus den damals veröffentlichten Prognosen entstanden; blasse Wochen laufen noch oder stehen auf weniger als vier Tagen.",
+    "learn_tip_backfilled": "Nachgerechnet: die damals veröffentlichte Prognose gegen eine heute ohne Lernen gerechnete. Nicht in der Summe.",
+    "help_learning": "**Vermiedener Fehler** ist der Day-Ahead-Prognosefehler der Integration mit Lernen gegenüber derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Nicht gegenüber reiner Physik: die gelernte Verschattungskarte und die Quellen-Korrektur zählen auch als Lernen. Pro Tag gerechnet wie die WMAPE, dann **Woche für Woche aufsummiert**, ab der ersten live verglichenen Woche — nichts weggelassen, kein Zeitfenster ausgesucht. **Gesehen** ist die Lernreife: wie viel Evidenz das Modell hält. Sie wächst nur und sagt nichts darüber, ob es stimmt. Sie wird langsamer, wenn die Sonne Stände erreicht, die das Modell noch nicht kennt — jeden Herbst. *Nachgerechnete* Wochen — die aus der Zeit, bevor die Integration den Vergleich selbst mitschrieb — stellen die damals veröffentlichte Prognose einer heute ohne Lernen gerechneten gegenüber. Das vergleicht auch zwei Code-Stände, und jede Verbesserung seitdem zählt gegen das Lernen; deshalb werden sie gezeigt, aber nicht aufsummiert. Blasse Wochen laufen noch oder stehen auf weniger als vier Tagen.",
     "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
     /* i18n-de-end */
   },
@@ -4845,7 +4853,7 @@ const MATURITY_CSS = `
 //   against the same integration with learning switched off (get_weeks
 //   `baseline`: same code, geometry and weather run, apply_learning=False —
 //   not "bare physics", which already carries the learned shading map).
-//   It is a running sum from the first week that has both numbers. A sum of
+//   It is a running sum from the first week compared live. A sum of
 //   mostly positive weeks rises by itself; a bad week bends it and stays
 //   visible; a plant where learning does nothing draws a flat line, which is
 //   a finding, not a failure of the card.
@@ -4853,8 +4861,9 @@ const MATURITY_CSS = `
 //   formula). It only ever grows, and its label says "seen", not "better".
 //
 // What it does not do: pick a window, smooth a week away, or start the axis
-// anywhere but zero. Weeks rebuilt after the fact are hatched, the running
-// week is faint, and a week without a baseline is marked, not skipped.
+// anywhere but zero. Weeks rebuilt after the fact are hatched and kept out of
+// the sum (named with their own total below the chart), the running week is
+// faint, and a week without a baseline is marked, not skipped.
 class PvsLearningCard extends PvsBaseCard {
   getCardSize() { return 5; }
   getGridOptions() { return { columns: "full", rows: "auto" }; }
@@ -4908,20 +4917,25 @@ class PvsLearningCard extends PvsBaseCard {
     if (this._state.problem) return card(head() + problemHTML(hass, { reason: this._state.problem }));
 
     const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    // Rebuilt weeks stay out of the running sum: their baseline is computed
+    // with today's code against a forecast published by the code of back
+    // then, so every later fix counts against the learning. They keep their
+    // bar and are named with their total under the chart.
     let cum = null, prevSeen = null;
     const rows = this._state.weeks.map((w) => {
       const da = w.day_ahead, bl = w.baseline;
       const daErr = num(da?.abs_error_kwh), blErr = num(bl?.abs_error_kwh);
       const gain = daErr != null && blErr != null ? blErr - daErr : null;
-      if (gain != null) cum = (cum ?? 0) + gain;
+      const backfilled = !!w.backfilled;
+      if (gain != null && !backfilled) cum = (cum ?? 0) + gain;
       const pct = (err, act) => (err != null && num(act) > 0 ? (err / act) * 100 : null);
       const mat = w.maturity?.weather_n_eff
         ? weatherMaturity((key) => w.maturity.weather_n_eff[key]) : null;
       const newSituation = mat && prevSeen != null && mat.seen > prevSeen;
       if (mat) prevSeen = mat.seen;
       return {
-        week: w.week_start, complete: w.complete !== false, backfilled: !!w.backfilled,
-        days: num(w.days_scored), gain, cum: gain != null ? cum : null, cumSoFar: cum,
+        week: w.week_start, complete: w.complete !== false, backfilled,
+        days: num(w.days_scored), gain, cum: gain != null && !backfilled ? cum : null,
         wmape: pct(daErr, da?.actual_kwh), wmapeBase: pct(blErr, bl?.actual_kwh),
         maturity: mat?.pct ?? null, newSituation,
       };
@@ -4930,10 +4944,17 @@ class PvsLearningCard extends PvsBaseCard {
     if (!compared.length) {
       return card(head() + withheldHTML(t(hass, rows.length ? "learn_no_baseline" : "learn_no_weeks")));
     }
+    const live = compared.filter((r) => !r.backfilled);
+    const rebuilt = compared.filter((r) => r.backfilled);
+    // the upper chart needs a running sum or a maturity line of two weeks;
+    // right after the update it has neither, and an empty frame says nothing
+    const hasSeen = rows.filter((r) => r.maturity != null).length >= 2;
+    const upper = live.length > 0 || hasSeen;
 
     // ---- geometry ----------------------------------------------------------
     const n = rows.length;
-    const PAD_L = 44, PAD_R = 46, PAD_T = 18, PH = 120, GAP = 18, STRIP_H = 56, PAD_B = 18;
+    const PAD_L = 44, PAD_R = 46, PAD_T = 18, STRIP_H = 56, PAD_B = 18;
+    const PH = upper ? 120 : 0, GAP = upper ? 28 : 0;
     const SW = Math.max(22, Math.floor((620 - PAD_L - PAD_R) / n));
     const W = PAD_L + n * SW + PAD_R;
     const STRIP_Y = PAD_T + PH + GAP, MID = STRIP_Y + STRIP_H / 2;
@@ -4942,9 +4963,14 @@ class PvsLearningCard extends PvsBaseCard {
 
     // the running sum's axis always contains zero — the reader must see
     // where "no gain" is, and a sum drawn from its own minimum would not show it
-    const cums = rows.map((r) => r.cumSoFar).filter((v) => v != null);
-    const hi = niceMax(Math.max(0, ...cums) * 1.08 || 1);
-    const lo = Math.min(0, ...cums) < 0 ? -niceMax(-Math.min(...cums) * 1.08) : 0;
+    // A side that barely leaves zero gets a fifth of the other side's range,
+    // or its label would sit on top of the zero label.
+    const cums = rows.map((r) => r.cum).filter((v) => v != null);
+    const top = Math.max(0, ...cums) * 1.08, bottom = -Math.min(0, ...cums) * 1.08;
+    const big = niceMax(Math.max(top, bottom) || 1);
+    const side = (v) => (v <= 0 ? 0 : v >= big ? big : Math.max(niceMax(v), big * 0.2));
+    let hi = side(top), lo = -side(bottom);
+    if (!hi && !lo) hi = big;
     const yOf = (v) => PAD_T + PH - ((v - lo) / (hi - lo)) * PH;
     const mOf = (p) => PAD_T + PH - (p / 100) * PH;
     const gains = compared.map((r) => Math.abs(r.gain));
@@ -4952,14 +4978,18 @@ class PvsLearningCard extends PvsBaseCard {
     const gOf = (g) => MID - (g / gMax) * (STRIP_H / 2);
 
     let grid = "";
-    for (const v of lo < 0 ? [lo, 0, hi] : [0, hi / 2, hi]) {
+    // no live week yet: no kWh axis to draw the (empty) running sum against
+    const ticks = !cums.length ? [] : lo < 0 && hi > 0 ? [lo, 0, hi] : lo < 0 ? [lo, lo / 2, 0] : [0, hi / 2, hi];
+    for (const v of ticks) {
       grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"${v === 0 ? ' style="stroke:var(--secondary-text-color);opacity:.35"' : ""}/>
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v, Number.isInteger(v) ? 0 : 1)}</text>`;
     }
-    grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 8}" text-anchor="end" style="font-size:8.5px">kWh</text>
-      <text class="axis" x="${W - PAD_R + 5}" y="${mOf(100) + 3}" style="fill:var(--pvs-model-ghost)">100 %</text>
-      <text class="axis" x="${W - PAD_R + 5}" y="${mOf(0) + 3}" style="fill:var(--pvs-model-ghost)">0 %</text>
-      <line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
+    if (ticks.length) grid += `<text class="axis" x="${PAD_L - 5}" y="${PAD_T - 8}" text-anchor="end" style="font-size:8.5px">kWh</text>`;
+    if (hasSeen) {
+      grid += `<text class="axis" x="${W - PAD_R + 5}" y="${mOf(100) + 3}" style="fill:var(--pvs-model-ghost)">100 %</text>
+        <text class="axis" x="${W - PAD_R + 5}" y="${mOf(0) + 3}" style="fill:var(--pvs-model-ghost)">0 %</text>`;
+    }
+    grid += `<line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
       <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, gMax, 0)}</text>
       <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">−${fmtNum(hass, gMax, 0)}</text>`;
 
@@ -4978,8 +5008,11 @@ class PvsLearningCard extends PvsBaseCard {
         marks += `<circle cx="${x}" cy="${yOf(r.cum)}" r="2.6" fill="var(--pvs-model)"${faint ? ' opacity="0.45"' : ""}/>`;
         prev = true;
       } else prev = false;
-      if (r.maturity != null) {
+      if (r.maturity != null && hasSeen) {
         matPath += `${mPrev ? "L" : "M"}${x.toFixed(1)} ${mOf(r.maturity).toFixed(1)}`;
+        // a week with no neighbour draws no segment — give it a dot
+        const alone = !mPrev && rows[i + 1]?.maturity == null;
+        if (alone) marks += `<circle cx="${x}" cy="${mOf(r.maturity)}" r="2.4" fill="var(--pvs-model-ghost)"/>`;
         if (r.newSituation) {
           marks += `<circle cx="${x}" cy="${mOf(r.maturity)}" r="4" fill="none" stroke="var(--pvs-model-ghost)" stroke-width="1.4"/>`;
         }
@@ -5005,20 +5038,35 @@ class PvsLearningCard extends PvsBaseCard {
     });
 
     // ---- hero --------------------------------------------------------------
-    const total = compared[compared.length - 1].cum;
-    const since = compared[0].week;
-    const sinceTxt = fmtDayShort(hass, dayKeyStartMs(hass, since) + 12 * 3600000);
-    const lastFull = [...rows].reverse().find((r) => r.complete && r.wmape != null && r.wmapeBase != null);
+    let left;
+    if (live.length) {
+      const total = live[live.length - 1].cum;
+      const sinceTxt = fmtDayShort(hass, dayKeyStartMs(hass, live[0].week) + 12 * 3600000);
+      left = `<span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, Math.abs(total), 0)}<span class="hu">kWh</span></span>
+        <span class="hl">${t(hass, Math.round(total) === 0 ? "learn_hero_equal" : total > 0 ? "learn_hero_less" : "learn_hero_more", { since: sinceTxt, n: live.length })}</span>`;
+    } else {
+      // only rebuilt weeks so far: the first live one is the week after the
+      // last rebuilt one (the running week, normally)
+      const next = rows.find((r) => r.week > rebuilt[rebuilt.length - 1].week) ?? rows[rows.length - 1];
+      left = `<span class="hl">${t(hass, "learn_hero_waiting", { week: isoWeekOf(next.week) })}</span>`;
+    }
+    // the error with learning is a fact in every week; the figure without it
+    // only where the week was compared live
+    const lastFull = [...rows].reverse().find((r) => r.complete && r.wmape != null);
+    const withBase = lastFull && !lastFull.backfilled && lastFull.wmapeBase != null;
     const hero = `<div class="lr-hero">
-      <div class="fc-hero-item">
-        <span class="hv" style="color:var(--pvs-model)">${fmtNum(hass, Math.abs(total), 0)}<span class="hu">kWh</span></span>
-        <span class="hl">${t(hass, Math.round(total) === 0 ? "learn_hero_equal" : total > 0 ? "learn_hero_less" : "learn_hero_more", { since: sinceTxt, n: compared.length })}</span>
-      </div>
+      <div class="fc-hero-item">${left}</div>
       ${lastFull ? `<div class="fc-hero-item right">
         <span class="hv" style="color:var(--primary-text-color)">${fmtNum(hass, lastFull.wmape, 1)}<span class="hu">%</span></span>
-        <span class="hl">${t(hass, "learn_hero_wmape", { base: fmtNum(hass, lastFull.wmapeBase, 1), week: isoWeekOf(lastFull.week) })}</span>
+        <span class="hl">${withBase
+          ? t(hass, "learn_hero_wmape", { base: fmtNum(hass, lastFull.wmapeBase, 1), week: isoWeekOf(lastFull.week) })
+          : t(hass, "learn_hero_wmape_only", { week: isoWeekOf(lastFull.week) })}</span>
       </div>` : ""}
     </div>`;
+    const rebuiltGain = rebuilt.reduce((a, r) => a + r.gain, 0);
+    const rebuiltWeeks = rebuilt.length === 1
+      ? t(hass, "week_short", { n: isoWeekOf(rebuilt[0].week) })
+      : `${t(hass, "week_short", { n: isoWeekOf(rebuilt[0].week) })}–${isoWeekOf(rebuilt[rebuilt.length - 1].week)}`;
 
     card(`${head()}
       ${hero}
@@ -5030,13 +5078,14 @@ class PvsLearningCard extends PvsBaseCard {
         ${marks}${strip}${labels}${hits}
       </svg></div>
       <div class="pvs-legend">
-        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "learn_leg_cum")}</span>
-        <span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "learn_leg_seen")}</span>
+        ${live.length ? `<span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "learn_leg_cum")}</span>` : ""}
+        ${hasSeen ? `<span class="it"><span class="sw" style="background:var(--pvs-model-ghost)"></span>${t(hass, "learn_leg_seen")}</span>` : ""}
         <span class="it"><span class="sw" style="background:var(--success-color, #43a047);opacity:.75"></span>${t(hass, "learn_leg_gain")}</span>
         <span class="it"><span class="sw" style="background:var(--pvs-measure);opacity:.75"></span>${t(hass, "learn_leg_loss")}</span>
         <span class="it"><svg width="14" height="10"><rect width="14" height="10" rx="2" fill="url(#pvs-hatch-lrl)"/><defs>${hatchPattern("pvs-hatch-lrl")}</defs></svg>${t(hass, "learn_leg_backfilled")}</span>
       </div>
-      <div class="fc-note">${t(hass, "learn_note")}</div>`);
+      <div class="fc-note">${t(hass, "learn_note")}</div>
+      ${rebuilt.length ? `<div class="fc-note">${t(hass, "learn_backfilled_note", { weeks: rebuiltWeeks, gain: fmtSigned(hass, rebuiltGain, 0) })}</div>` : ""}`);
   }
 
   _wire() {
@@ -5058,7 +5107,7 @@ class PvsLearningCard extends PvsBaseCard {
           ${r.maturity != null ? row(t(hass, "learn_leg_seen"), `${fmtNum(hass, r.maturity, 0)} %`) : ""}
           ${r.days != null ? row(t(hass, "hp_days"), r.days) : ""}
           ${r.newSituation ? `<div class="pvs-sub">${t(hass, "learn_tip_new")}</div>` : ""}
-          ${r.backfilled ? `<div class="pvs-sub">${t(hass, "week_backfilled_tip")}</div>` : ""}`;
+          ${r.backfilled ? `<div class="pvs-sub">${t(hass, "learn_tip_backfilled")}</div>` : ""}`;
       },
     });
   }

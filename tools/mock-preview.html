@@ -488,8 +488,11 @@
       const actual = 90 + rnd() * 60;
       const err = actual * (0.28 - idx * 0.013 + rnd() * 0.05);
       const baseErr = actual * (0.27 + rnd() * 0.04);
-      const hasBaseline = idx >= 3;
-      const backfilled = idx === 3 || idx === 4;
+      // ?learn=rebuilt: only rebuilt weeks and a running week without a
+      // comparison — the state of every install right after the update
+      const onlyRebuilt = new URLSearchParams(location.search).get("learn") === "rebuilt";
+      const hasBaseline = onlyRebuilt ? idx >= 6 && i > 0 : idx >= 3;
+      const backfilled = onlyRebuilt ? hasBaseline : idx === 3 || idx === 4;
       if (idx >= 5) { n += 2.2; if (idx === 6 || idx === 9) seen += 2; }
       weeks.push({ week_start: key, complete: i > 0, backfilled, days_scored: i > 0 ? 7 : 3,
         day_ahead: { forecast_kwh: +(actual * 1.05).toFixed(1), actual_kwh: +actual.toFixed(1), abs_error_kwh: +(idx === 7 ? baseErr * 1.12 : err).toFixed(1) },
@@ -497,7 +500,7 @@
         hourly_profile: Array.from({ length: 12 }, (_, k) => ({ hour: k + 6,
           forecast_kwh: +(bell(k + 6) * 7 * (1 + (rnd() - 0.4) * 0.3)).toFixed(2),
           actual_kwh: +(bell(k + 6) * 7 * (0.85 + rnd() * 0.3)).toFixed(2), days: i > 0 ? 7 : 3 })),
-        maturity: backfilled || idx < 3 ? null : { weather_n_eff: Object.fromEntries(
+        maturity: backfilled || idx < 3 || (onlyRebuilt && i > 0) ? null : { weather_n_eff: Object.fromEntries(
           ["clear", "partly_cloudy", "overcast", "rain"].flatMap((w) => ["morning", "midday", "afternoon"].map((dp) => [`${w}|${dp}`, dp]))
             .slice(0, seen).map(([k], j) => [k, Math.min(22, n + j)])), sky_cells: { s1: 120 + idx * 9, s2: 100 + idx * 8 } } });
     }

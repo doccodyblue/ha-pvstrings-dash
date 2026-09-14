@@ -402,7 +402,7 @@ running and a week rebuilt after the fact say so in a chip.
 ### `pvstrings-learning`
 
 Whether the learning pays: the day-ahead forecast error it avoided, week by
-week and added up since the first week that can be compared. Needs the
+week and added up since the first week compared live. Needs the
 `pvstrings.get_weeks` service.
 
 ```yaml
@@ -418,8 +418,8 @@ like the WMAPE.
 
 Built so that a flattering picture cannot be made from it:
 
-- **A running total, from the start.** No window is chosen and no week is left
-  out. Mostly helpful weeks make the line rise on their own; a week where the
+- **A running total, from the first live week.** No window is chosen and no
+  live week is left out. Mostly helpful weeks make the line rise on their own; a week where the
   forecast without learning did better bends it down and stays visible; a
   plant where learning achieves nothing draws a flat line.
 - **The axis always contains zero**, so "no gain" is always on the chart.
@@ -427,9 +427,14 @@ Built so that a flattering picture cannot be made from it:
   the model holds. It only grows, and it slows every autumn when the sun
   reaches positions the model has not met. A ring marks a week in which a
   weather situation was seen for the first time.
-- **Provenance on every week.** Weeks rebuilt after the fact are hatched, the
-  running week is faint, and a week without a comparison is a hatched stub,
-  never a zero bar.
+- **Provenance on every week.** The running week is faint, and a week without
+  a comparison is a hatched stub, never a zero bar.
+- **Rebuilt weeks are shown, not added up.** Weeks from before the integration
+  logged the comparison itself set the forecast published back then against
+  one computed today without learning — two versions of the code as well, so
+  every fix since counts against the learning. They keep a hatched bar and
+  their total is named under the chart; until the first live week the card
+  says when it starts counting instead of showing a number.
 
 ### `pvstrings-kv-table`
 
