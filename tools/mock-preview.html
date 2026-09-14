@@ -308,7 +308,7 @@
       attributes: { unit_of_measurement: "°C", device_class: "temperature", thermal_factor: 0.9528,
         air_temp_c: 19.6, wind_ms: 3.9, heat_loss_today_kwh: 0.187, friendly_name: "Strang West Zelltemperatur" } },
     // accuracy figures: short-term windows full, day-ahead still filling
-    "sensor.acc_w7": { entity_id: "sensor.acc_w7", state: "13.3", attributes: { unit_of_measurement: "%", days_scored: 8, friendly_name: "WMAPE 7 Tage" } },
+    "sensor.acc_w7": { entity_id: "sensor.acc_w7", state: "13.3", attributes: { unit_of_measurement: "%", days_scored: 8, uncensored: { wmape: 0.133, bias: -0.0049, daily_bias_kwh: -0.296 }, friendly_name: "WMAPE 7 Tage" } },
     "sensor.acc_w30": { entity_id: "sensor.acc_w30", state: "14.1", attributes: { unit_of_measurement: "%", days_scored: 31, friendly_name: "WMAPE 30 Tage" } },
     "sensor.acc_b7": { entity_id: "sensor.acc_b7", state: "-0.005", attributes: { unit_of_measurement: "kWh", friendly_name: "Bias 7 Tage" } },
     "sensor.acc_da7": { entity_id: "sensor.acc_da7", state: "19.7", attributes: { unit_of_measurement: "%", days_scored: 7, friendly_name: "Fehler Tag voraus 7 Tage" } },

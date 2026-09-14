@@ -325,6 +325,11 @@ shows its day count instead (rule 1); every figure links to its sensor. The
 paragraphs that used to open the view — short-term vs day-ahead, what WMAPE
 means — sit behind the card's **?**.
 
+Both biases are per day. The `bias_7d` sensor's own state is a mean over
+single hours — a few watt-hours, which rounds to zero — so the card takes the
+7-day figure per day from the `wmape_7d` sensor's `uncensored.daily_bias_kwh`
+attribute and falls back to the state only where that is missing.
+
 ![Accuracy card](docs/img/accuracy-dark.png)
 
 ```yaml

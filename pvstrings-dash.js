@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.14.1";
+const PVS_VERSION = "0.14.2";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -394,7 +394,7 @@ const STR = {
     "acc_bias7": "bias 7 days", "acc_bias30": "bias 30 days",
     "acc_yesterday": "yesterday",
     "acc_window": "{d} of {n} days",
-    "help_accuracy": "**Short-term** may correct itself during the day (and, since the nowcast, carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts under each figure say how far along it is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours. **Bias** is the signed mean: positive, the forecast ran high.",
+    "help_accuracy": "**Short-term** may correct itself during the day (and, since the nowcast, carries the sensor correction at horizon 0); **day-ahead** is frozen the evening before. The two are **not comparable until both windows are full** — the day counts under each figure say how far along it is.\n\n**WMAPE** = weighted mean absolute percentage error: the sum of all forecast errors divided by the sum of actual production — 10 % means the forecasts were off by 10 % in total, with sunny hours weighing more than dawn hours. **Bias** is the signed mean per day, in kWh: positive, the forecast ran high.",
     "help_daily": "**Day by day**: what was announced the evening before against what arrived. Blue is the day-ahead figure as issued at the issue hour, orange the metered yield; a hatched stub means no forecast was issued that evening, a hatched top means the day is still running. The chips switch between the plant and its strings — the same chart, one at a time.",
     "health_title": "Collection & learn cycle",
     "health_coverage": "coverage",
@@ -703,7 +703,7 @@ const STR = {
     "acc_bias7": "Bias 7 Tage", "acc_bias30": "Bias 30 Tage",
     "acc_yesterday": "gestern",
     "acc_window": "{d} von {n} Tagen",
-    "help_accuracy": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unter den Zahlen zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden. **Bias** ist der vorzeichenbehaftete Mittelwert: positiv heißt, die Prognose lag zu hoch.",
+    "help_accuracy": "Der **Kurzfrist-Wert** darf sich tagsüber nachkorrigieren (und misst seit dem Nowcast bei Vorlauf 0 dessen Sensor-Korrektur mit); **Day-Ahead** ist am Vorabend eingefroren. Die beiden sind **erst vergleichbar, wenn beide Fenster voll sind** — die Tageszähler unter den Zahlen zeigen, wie weit jedes ist.\n\n**WMAPE** = gewichteter mittlerer absoluter Prozentfehler: die Summe aller Prognosefehler geteilt durch die Summe der echten Erträge — 10 % heißt, die Prognosen lagen in Summe 10 % daneben, wobei sonnige Stunden stärker zählen als Dämmerstunden. **Bias** ist der vorzeichenbehaftete Mittelwert pro Tag, in kWh: positiv heißt, die Prognose lag zu hoch.",
     "help_daily": "**Tag für Tag**: was am Vorabend angesagt war gegen das, was kam. Blau ist der Day-Ahead-Wert, wie er zur Ausgabestunde stand, Orange der gemessene Ertrag; ein schraffierter Stummel heißt, an dem Abend wurde keine Prognose ausgegeben, eine schraffierte Spitze, der Tag läuft noch. Die Chips schalten zwischen Anlage und Strängen um — dasselbe Diagramm, eines nach dem anderen.",
     "health_title": "Erfassung & Lernzyklus",
     "health_coverage": "Abdeckung",
@@ -981,7 +981,9 @@ function fmtPct(hass, v, digits = 0) {
 }
 function fmtSigned(hass, v, digits = 2) {
   if (v == null) return "–";
-  return (v >= 0 ? "+" : "−") + fmtNum(hass, Math.abs(v), digits);
+  // a value that rounds to zero carries no sign: "−0.00" reads as a finding
+  const r = Number(v.toFixed(digits));
+  return (r > 0 ? "+" : r < 0 ? "−" : "±") + fmtNum(hass, Math.abs(v), digits);
 }
 
 // The ONLY sanctioned way to bucket a UTC timestamp into HA-local calendar
@@ -3588,22 +3590,36 @@ class PvsAccuracyCard extends PvsBaseCard {
       const st = hass.states[id];
       const label = t(hass, ACC_LABEL[key]);
       if (!st) return `<div class="acc-stat"><div class="l">${label}</div><div class="v"><span class="pvs-sub">⚠︎ ${esc(id)}</span></div></div>`;
-      const v = parseFloat(st.state);
-      const unit = st.attributes.unit_of_measurement ?? "";
+      let v = parseFloat(st.state);
+      let attrs = st.attributes;
+      const unit = attrs.unit_of_measurement ?? "";
+      // The bias_7d state is a mean over single HOURS (-0.005 kWh, which
+      // rounds to -0.00), while its day-ahead neighbour is per DAY. The same
+      // window's per-day figure sits in the 7-day WMAPE sensor's attributes —
+      // read it from there, so the two biases on this card mean the same
+      // thing, and take that sensor's day count with it.
+      if (key === "bias_7d") {
+        const w = hass.states[ents.wmape_7d]?.attributes;
+        if (w && w.uncensored && "daily_bias_kwh" in w.uncensored) {
+          v = w.uncensored.daily_bias_kwh == null ? NaN : Number(w.uncensored.daily_bias_kwh);
+          attrs = w;
+        }
+      }
       const known = Number.isFinite(v);
       // a withheld figure says how far off it is (rule 1): days scored
       // against the window the key names
       const win = key.includes("30d") ? 30 : key.includes("7d") ? 7 : null;
       // the sensor counts partial days at both ends, so "8 of 7" happens;
       // a full window is full
-      const days = st.attributes.days_scored == null ? null
-        : win ? Math.min(win, st.attributes.days_scored) : st.attributes.days_scored;
+      const days = attrs.days_scored == null ? null
+        : win ? Math.min(win, attrs.days_scored) : attrs.days_scored;
       const sub = win && days != null ? `<span class="n">${t(hass, "acc_window", { d: days, n: win })}</span>` : "";
       const digits = unit === "%" ? 1 : 2;
+      // everything but WMAPE is signed: its sign is the finding
       return `<div class="acc-stat clickable" data-more-info="${id}">
         <div class="l">${label}</div>
         <div class="v">${known
-          ? `<span class="pvs-num">${unit === "%" && !key.startsWith("wmape") ? fmtSigned(hass, v, digits) : fmtNum(hass, v, digits)}</span><span class="u">${esc(unit)}</span>`
+          ? `<span class="pvs-num">${key.startsWith("wmape") ? fmtNum(hass, v, digits) : fmtSigned(hass, v, digits)}</span><span class="u">${esc(unit)}</span>`
           : withheldHTML(days != null && win ? t(hass, "acc_window", { d: days, n: win }) : t(hass, "not_available"))}</div>
         ${known ? sub : ""}
       </div>`;
