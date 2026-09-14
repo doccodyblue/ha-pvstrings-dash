@@ -84,10 +84,12 @@
   await wsReady.catch((e) => { status("FAILED: " + e.message + " — pass #token=<LLAT>"); throw e; });
   const statesList = await callWS({ type: "get_states" });
   const config = await callWS({ type: "get_config" });
+  // the history cards and the strategy gate on the response services
+  const services = await callWS({ type: "get_services" });
   const states = Object.fromEntries(statesList.map((s) => [s.entity_id, s]));
 
   const hass = {
-    states, callWS, config,
+    states, callWS, config, services,
     // entry diagnostics (conversion evidence) come over HTTP, not WS
     fetchWithAuth: (url, opts) => fetch(`http://${HA}${url}`,
       { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts?.headers ?? {}) } }),
@@ -103,6 +105,7 @@
   const sdId = find((s) => s.attributes.strings && typeof s.attributes.strings === "object" && !Array.isArray(s.attributes.strings));
   const collId = find((s) => s.attributes.intervals_written !== undefined);
   const ghiId = find((s) => s.attributes.truth_source !== undefined);
+  const da30Id = find((s) => Array.isArray(s.attributes.hourly_profile));
   // savings provenance: the price block, or the export cap on its own
   const savProv = statesList.filter((s) => s.attributes.price?.by_basis_kwh
     || s.attributes.export_dropped_kwh !== undefined);
@@ -117,6 +120,7 @@
     ["chain", "pvstrings-chain", { entity: stringFcId }],
     ["daily plant 14d", "pvstrings-daily", { entity: plantFcId, days: 14 }],
     ["daily string 7d", "pvstrings-daily", { entity: stringFcId, days: 7 }],
+    ["learning", "pvstrings-learning", { entity: da30Id }],
     ["kv log_ratio_plant", "pvstrings-kv-table", { entity: moId, mode: "log_ratio_plant", title: "Anlage: Wetter × Tagesabschnitt" }],
     ["kv ghi_bias", "pvstrings-kv-table", { entity: moId, mode: "ghi_bias", title: "Source-Bias", truth_entity: ghiId }],
     ["kv censoring", "pvstrings-kv-table", { entity: sdId, mode: "censoring", title: "Zensur-Split" }],

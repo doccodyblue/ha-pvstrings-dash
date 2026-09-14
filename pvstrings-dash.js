@@ -5652,10 +5652,9 @@ async function buildViews(hass, config) {
     });
 
     // ---- Genauigkeit ----
-    // One card of figures, one chart with a selector: two paragraphs, seven
-    // tiles and six charts took four screens to say what fits on one. The
-    // paragraphs sit behind the card's "?"; `diagnostics: full` lays the
-    // six charts out side by side again.
+    // What anyone can read: forecast against actual, day by day, and whether
+    // the learning pays. The figures (WMAPE, bias, both windows) are on the
+    // Nerd view; `diagnostics: full` lays the six charts out side by side.
     const fullAcc = config?.diagnostics === "full";
     const accKeys = [...ACC_KEYS.short, ...ACC_KEYS.dayahead];
     const accEntities = Object.fromEntries(accKeys.filter((k) => plant.byKey[k]).map((k) => [k, plant.byKey[k]]));
@@ -5665,11 +5664,6 @@ async function buildViews(hass, config) {
         .map((s) => ({ name: s.name, entity: s.byKey.string_forecast_today, days: 14 })),
     ];
     const accSections = [
-      { type: "grid", column_span: 2, cards: [
-        Object.keys(accEntities).length
-          ? { type: "custom:pvstrings-accuracy", entities: accEntities, grid_options: { columns: "full" } }
-          : mdCard(t(lang, "missing_card", { key: "wmape_30d" })),
-      ] },
       fullAcc
         ? { type: "grid", column_span: 2, cards: [
             heading(t(lang, "s_daily"), "subtitle"),
@@ -5689,7 +5683,7 @@ async function buildViews(hass, config) {
     // Learning progress (response service get_weeks): only where the
     // integration keeps weeks — an older one simply has no such section.
     if (hasPvsService(hass, "get_weeks") && plant.byKey.wmape_day_ahead_30d) {
-      accSections.splice(1, 0, { type: "grid", column_span: 2, cards: [
+      accSections.unshift({ type: "grid", column_span: 2, cards: [
         { type: "custom:pvstrings-learning", entity: plant.byKey.wmape_day_ahead_30d,
           grid_options: { columns: "full" } },
       ] });
@@ -5725,6 +5719,13 @@ async function buildViews(hass, config) {
             ...(mo ? { model_entity: mo } : {}), ...(sd ? { detail_entity: sd } : {}),
             ...(ghi ? { ghi_entity: ghi } : {}), ...det }
         : mdCard(t(lang, "missing_card", { key: "collector_health" })),
+    ] });
+    // The accuracy figures: WMAPE and bias over both windows. Moved here
+    // from the accuracy view, which keeps the charts people read without them.
+    nerdSections.push({ type: "grid", column_span: 2, cards: [
+      Object.keys(accEntities).length
+        ? { type: "custom:pvstrings-accuracy", entities: accEntities, grid_options: { columns: "full" } }
+        : mdCard(t(lang, "missing_card", { key: "wmape_30d" })),
     ] });
     // Where in the day the day-ahead error sits (PV Strings >= 1.23). The
     // attribute rides on the 30 d day-ahead sensor and is published before
@@ -5871,9 +5872,11 @@ async function buildViews(hass, config) {
     }
     views.push({
       // The path stays `nerd`: it is the URL people bookmark, and the title
-      // has come back to it anyway.
+      // has come back to it anyway. No icon: HA shows a view's icon instead
+      // of its title, and the one tab that reads as a word marks where the
+      // views for everyone end.
       title: prefix + t(lang, "v_nerd"), path: `${slug}nerd`,
-      icon: "mdi:flask-outline", type: "sections", max_columns: 3,
+      type: "sections", max_columns: 3,
       sections: nerdSections,
     });
   }

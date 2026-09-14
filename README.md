@@ -62,16 +62,18 @@ That is the entire configuration. The strategy reads the entity registry and
 builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, savings — written for people, not for debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
-temperature), **Accuracy** (one card of figures — short-term and day-ahead,
-each with how full its window is, the learning progress where the integration
+temperature), **Accuracy** (the learning progress where the integration
 keeps weeks, and one day-by-day chart that switches between the plant and its
 strings), and the **Nerd Dashboard** (status first, numbers on demand:
-training maturity and a one-line collection health strip, the day-ahead error
-by hour, the correction factors as percentages, the source bias as a heatmap,
+training maturity and a one-line collection health strip, the accuracy figures
+— short-term and day-ahead, each with how full its window is — the day-ahead
+error by hour, the correction factors as percentages, the source bias as a heatmap,
 the sky-map overview, the modelled cell temperature, the conversion layer, and
 — where a price sensor or a battery makes it meaningful — what the savings
 figure rests on). Every card on it carries a **?** with the paragraph that
-explains its numbers. Views follow `hass.language` (German and English). The
+explains its numbers. The first three views show as icons in the tab bar; the
+Nerd Dashboard has none, so its tab reads as a word and marks where the views
+for everyone end. Views follow `hass.language` (German and English). The
 generated YAML is a normal dashboard config — take it over and edit it if you
 want to.
 
