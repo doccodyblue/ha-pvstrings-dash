@@ -1,0 +1,75 @@
+name: Bug report
+description: A card will not load, renders wrong, or shows an error
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a figure itself looks wrong (the forecast, an accuracy score, a savings
+        value), check first whether the sensor in Developer Tools → States says the
+        same. If it does, the number comes from the integration: please file it at
+        [ha-pvstrings](https://github.com/doccodyblue/ha-pvstrings/issues) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Which card or view, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PV Strings Dashboard version
+      description: >
+        Shown in HACS, or in the browser console (F12) as the
+        `PVSTRINGS-DASH v…` banner.
+      placeholder: "0.14.1"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: PV Strings integration version
+      placeholder: "1.23.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.9.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it was installed
+      options:
+        - HACS
+        - Manual copy into /config/www
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser or app
+      placeholder: "Chrome 140 / HA Companion iOS"
+  - type: textarea
+    id: config
+    attributes:
+      label: Card or dashboard YAML
+      description: The card config, or the strategy config if it is the generated dashboard.
+      render: yaml
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console output
+      description: F12 → Console, anything red or mentioning `pvstrings`.
+      render: text
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: >
+        Drag it in here. Cards show entity names and production figures, so look
+        it over before posting to a public issue.

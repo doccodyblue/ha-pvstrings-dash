@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Forecast, accuracy or savings figures look wrong
+    url: https://github.com/doccodyblue/ha-pvstrings/issues/new/choose
+    about: The numbers come from the PV Strings integration — report them there.

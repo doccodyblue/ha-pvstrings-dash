@@ -1,0 +1,41 @@
+name: Feature request
+description: A card, view or display you would like to see
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The dashboard can only show what the integration records. If what you want
+        needs data the sensors do not carry today, it may belong at
+        [ha-pvstrings](https://github.com/doccodyblue/ha-pvstrings/issues) first —
+        if you are unsure, file it here and it will be moved.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like to see
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What it would help you judge or decide
+      description: The question you are trying to answer with it. That often matters more than the exact form.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PV Strings Dashboard version
+      description: >
+        Shown in HACS, or in the browser console (F12) as the
+        `PVSTRINGS-DASH v…` banner.
+      placeholder: "0.14.1"
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: PV Strings integration version
+      placeholder: "1.23.0"
+    validations:
+      required: true
