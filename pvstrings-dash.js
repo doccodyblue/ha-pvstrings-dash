@@ -1003,8 +1003,11 @@ const BASE_CSS = `
   .pvs-step button[disabled] { cursor: default; opacity: 0.3; }
   .pvs-step .lbl { padding: 0 4px; min-width: 64px; text-align: center; white-space: nowrap;
     color: var(--secondary-text-color); font-variant-numeric: tabular-nums; font-size: 11px; }
-  .pvs-step button.lbl { padding: 3px 4px; }
-  .pvs-step button.lbl:hover { background: none; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .pvs-step .lbl.pick { position: relative; padding: 3px 4px; cursor: pointer; }
+  .pvs-step .lbl.pick:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+  /* font-size 16px: iOS zooms the page into any smaller field it focuses */
+  .pvs-step .lbl.pick input { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0;
+    box-sizing: border-box; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font-size: 16px; }
   .pvs-step.past { border-color: var(--pvs-model); }
   .pvs-step.past .lbl { color: var(--primary-text-color); }
   svg text { fill: var(--secondary-text-color); font-size: 10px; font-family: inherit; }
@@ -1518,60 +1521,18 @@ function weekLabel(hass, weekStart) {
 
 // The ‹ label › control. `prev`/`next` false disables that side; `past`
 // marks it as looking away from the live value.
-// `pick` makes the label a button that opens a calendar (openDayPicker).
-function stepperHTML(hass, label, { prev, next, past, pick = false }) {
+// `pick` ({ value, min, max } day keys) lays an invisible date input over the
+// label: tapping the label is tapping the input, so Safari, iOS and Firefox
+// open their calendar natively, and Chrome gets showPicker() on the click.
+function stepperHTML(hass, label, { prev, next, past, pick = null }) {
   return `<span class="pvs-step${past ? " past" : ""}">
     <button type="button" data-step="-1" aria-label="${esc(t(hass, "hist_prev"))}"${prev ? "" : " disabled"}>‹</button>
     ${pick
-      ? `<button type="button" class="lbl" data-pick aria-label="${esc(t(hass, "hist_pick"))}" title="${esc(t(hass, "hist_pick"))}">${esc(label)}</button>`
+      ? `<span class="lbl pick" title="${esc(t(hass, "hist_pick"))}">${esc(label)}<input type="date" data-pick
+          aria-label="${esc(t(hass, "hist_pick"))}" value="${esc(pick.value)}"${pick.min ? ` min="${esc(pick.min)}"` : ""}${pick.max ? ` max="${esc(pick.max)}"` : ""}></span>`
       : `<span class="lbl">${esc(label)}</span>`}
     <button type="button" data-step="1" aria-label="${esc(t(hass, "hist_next"))}"${next ? "" : " disabled"}>›</button>
   </span>`;
-}
-
-// The browser's own calendar for a day key, anchored over `anchor`. The input
-// lives on document.body, not in the card: a card re-renders its shadow root
-// whenever a sensor ticks, and an input inside it would close the calendar
-// half-way through a pick. Must run inside the click (showPicker needs the
-// user gesture). A browser without showPicker gets nothing — the arrows are
-// still there.
-let _dayPicker = null;
-function openDayPicker(anchor, { value, min, max }, onPick) {
-  // a calendar dismissed without a cancel event (older Safari) leaves its
-  // input behind; the next one takes its place
-  _dayPicker?.remove();
-  const input = document.createElement("input");
-  if (typeof input.showPicker !== "function") return;
-  _dayPicker = input;
-  input.type = "date";
-  input.value = value;
-  if (min) input.min = min;
-  if (max) input.max = max;
-  const r = anchor.getBoundingClientRect();
-  Object.assign(input.style, {
-    position: "fixed", left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`,
-    height: `${r.height}px`, opacity: "0", pointerEvents: "none", border: "0", padding: "0",
-  });
-  let done = false;
-  const close = () => {
-    if (done) return;
-    done = true;
-    input.remove();
-    if (_dayPicker === input) _dayPicker = null;
-  };
-  input.addEventListener("change", () => {
-    const v = input.value;
-    close();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) onPick(v);
-  });
-  input.addEventListener("cancel", close);
-  input.addEventListener("blur", () => setTimeout(close, 0));
-  document.body.append(input);
-  try {
-    input.showPicker();
-  } catch (_) {
-    close();
-  }
 }
 
 /* ============================ SECTION: UI ================================ */
@@ -2260,18 +2221,17 @@ class PvsForecastCard extends PvsBaseCard {
         // simply opens without a lower bound
         .catch(() => {});
     }
-    return stepperHTML(hass, label, { prev: !earliest || cur > earliest, next: !!day, past: !!day, pick: true });
-  }
-  _pick(anchor) {
-    const hass = this._hass, r = this._resolved;
-    if (!r?.entryId) return;
     const today = localParts(hass, Date.now()).dayKey;
-    openDayPicker(anchor, {
-      value: this._viewDay() ?? today, min: this._earliest ?? undefined, max: today,
-    }, (to) => {
-      if (this._resolved !== r) return;
-      setHistoryDay(r.entryId, to >= today ? null : to);
+    return stepperHTML(hass, label, {
+      prev: !earliest || cur > earliest, next: !!day, past: !!day,
+      pick: { value: cur, min: earliest, max: today },
     });
+  }
+  _pick(value) {
+    const hass = this._hass, r = this._resolved;
+    if (!r?.entryId || !/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return;
+    const today = localParts(hass, Date.now()).dayKey;
+    setHistoryDay(r.entryId, value >= today ? null : value);
   }
   _step(dir) {
     const hass = this._hass, r = this._resolved;
@@ -2582,6 +2542,12 @@ class PvsForecastCard extends PvsBaseCard {
   _render() {
     const hass = this._hass, cfg = this._config;
     if (!hass || !cfg) return;
+    // an open calendar is an input in this shadow root: rebuilding it on a
+    // sensor tick would close the calendar mid-pick
+    if (this.shadowRoot.activeElement?.matches?.("input[data-pick]")) {
+      this._renderHeld = true;
+      return;
+    }
     const card = (inner) => {
       this.shadowRoot.innerHTML = `<style>${BASE_CSS}${FC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
       this._wire();
@@ -2786,11 +2752,27 @@ class PvsForecastCard extends PvsBaseCard {
     this.shadowRoot.addEventListener("pointerleave", () => {
       this.shadowRoot.querySelector(".fc-xh")?.setAttribute("opacity", "0");
     });
+    this.shadowRoot.addEventListener("change", (ev) => {
+      const p = ev.target.closest?.("input[data-pick]");
+      if (!p) return;
+      const v = p.value;
+      p.blur();
+      this._renderHeld = false;
+      this._pick(v);
+    });
+    // a closed calendar without a pick lets the held render through
+    this.shadowRoot.addEventListener("focusout", (ev) => {
+      if (!ev.target.matches?.("input[data-pick]") || !this._renderHeld) return;
+      this._renderHeld = false;
+      setTimeout(() => this._render(), 0);
+    });
     this.shadowRoot.addEventListener("click", (ev) => {
-      const p = ev.target.closest?.("[data-pick]");
+      const p = ev.target.closest?.("input[data-pick]");
       if (p) {
         ev.stopPropagation();
-        this._pick(p);
+        // Chrome opens the calendar only from its icon or showPicker();
+        // the others have opened it already and may refuse a second call
+        try { p.showPicker?.(); } catch (_) { /* native open is enough */ }
         return;
       }
       const b = ev.target.closest?.("[data-step]");
