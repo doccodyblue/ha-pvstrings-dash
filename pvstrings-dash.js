@@ -472,7 +472,7 @@ const STR = {
     "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
     "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
     // history (response services get_day / get_weeks)
-    "hist_prev": "earlier", "hist_next": "later",
+    "hist_prev": "earlier", "hist_next": "later", "hist_pick": "pick a day",
     "hist_failed": "Could not load the history: {error}",
     "hist_needs_service": "Needs the {service} service — a newer PV Strings integration.",
     "hist_no_data": "Nothing was recorded for this day.",
@@ -816,7 +816,7 @@ const STR = {
     "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
     "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
     // Historie (Services get_day / get_weeks)
-    "hist_prev": "früher", "hist_next": "später",
+    "hist_prev": "früher", "hist_next": "später", "hist_pick": "Tag auswählen",
     "hist_failed": "Historie ließ sich nicht laden: {error}",
     "hist_needs_service": "Braucht den Service {service} — eine neuere PV-Strings-Integration.",
     "hist_no_data": "Für diesen Tag ist nichts aufgezeichnet.",
@@ -992,8 +992,8 @@ const BASE_CSS = `
   .pvs-tip .r .k { color: var(--secondary-text-color); }
   .pvs-tip .r .v { font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; }
   .pvs-click { cursor: pointer; }
-  /* history stepper: ‹ label › — a past day or week, never a date input:
-     the range is short, and a keyboard on a wall tablet is not */
+  /* history stepper: ‹ label › — a past day or week. On the day stepper the
+     label also opens the browser's calendar, for more than a few steps */
   .pvs-step { display: inline-flex; align-items: center; gap: 2px; font-size: 11px;
     border: 1px solid var(--pvs-hairline); border-radius: 6px; background: var(--pvs-chip-bg); }
   .pvs-step button { all: unset; cursor: pointer; padding: 3px 8px; line-height: 1; font-size: 14px;
@@ -1002,7 +1002,9 @@ const BASE_CSS = `
   .pvs-step button:focus-visible { outline: 2px solid var(--pvs-model); outline-offset: -2px; }
   .pvs-step button[disabled] { cursor: default; opacity: 0.3; }
   .pvs-step .lbl { padding: 0 4px; min-width: 64px; text-align: center; white-space: nowrap;
-    color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+    color: var(--secondary-text-color); font-variant-numeric: tabular-nums; font-size: 11px; }
+  .pvs-step button.lbl { padding: 3px 4px; }
+  .pvs-step button.lbl:hover { background: none; text-decoration: underline dotted; text-underline-offset: 3px; }
   .pvs-step.past { border-color: var(--pvs-model); }
   .pvs-step.past .lbl { color: var(--primary-text-color); }
   svg text { fill: var(--secondary-text-color); font-size: 10px; font-family: inherit; }
@@ -1516,12 +1518,60 @@ function weekLabel(hass, weekStart) {
 
 // The ‹ label › control. `prev`/`next` false disables that side; `past`
 // marks it as looking away from the live value.
-function stepperHTML(hass, label, { prev, next, past }) {
+// `pick` makes the label a button that opens a calendar (openDayPicker).
+function stepperHTML(hass, label, { prev, next, past, pick = false }) {
   return `<span class="pvs-step${past ? " past" : ""}">
     <button type="button" data-step="-1" aria-label="${esc(t(hass, "hist_prev"))}"${prev ? "" : " disabled"}>‹</button>
-    <span class="lbl">${esc(label)}</span>
+    ${pick
+      ? `<button type="button" class="lbl" data-pick aria-label="${esc(t(hass, "hist_pick"))}" title="${esc(t(hass, "hist_pick"))}">${esc(label)}</button>`
+      : `<span class="lbl">${esc(label)}</span>`}
     <button type="button" data-step="1" aria-label="${esc(t(hass, "hist_next"))}"${next ? "" : " disabled"}>›</button>
   </span>`;
+}
+
+// The browser's own calendar for a day key, anchored over `anchor`. The input
+// lives on document.body, not in the card: a card re-renders its shadow root
+// whenever a sensor ticks, and an input inside it would close the calendar
+// half-way through a pick. Must run inside the click (showPicker needs the
+// user gesture). A browser without showPicker gets nothing — the arrows are
+// still there.
+let _dayPicker = null;
+function openDayPicker(anchor, { value, min, max }, onPick) {
+  // a calendar dismissed without a cancel event (older Safari) leaves its
+  // input behind; the next one takes its place
+  _dayPicker?.remove();
+  const input = document.createElement("input");
+  if (typeof input.showPicker !== "function") return;
+  _dayPicker = input;
+  input.type = "date";
+  input.value = value;
+  if (min) input.min = min;
+  if (max) input.max = max;
+  const r = anchor.getBoundingClientRect();
+  Object.assign(input.style, {
+    position: "fixed", left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`,
+    height: `${r.height}px`, opacity: "0", pointerEvents: "none", border: "0", padding: "0",
+  });
+  let done = false;
+  const close = () => {
+    if (done) return;
+    done = true;
+    input.remove();
+    if (_dayPicker === input) _dayPicker = null;
+  };
+  input.addEventListener("change", () => {
+    const v = input.value;
+    close();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) onPick(v);
+  });
+  input.addEventListener("cancel", close);
+  input.addEventListener("blur", () => setTimeout(close, 0));
+  document.body.append(input);
+  try {
+    input.showPicker();
+  } catch (_) {
+    close();
+  }
 }
 
 /* ============================ SECTION: UI ================================ */
@@ -2038,6 +2088,7 @@ class PvsForecastCard extends PvsBaseCard {
     this._past = null;
     this._power = null;
     this._earliest = null;
+    this._earliestAsked = false;
     super.setConfig(config ?? {});
   }
   // Every forecast card of a plant follows the day that plant is looked at.
@@ -2196,7 +2247,31 @@ class PvsForecastCard extends PvsBaseCard {
     const noon = dayKeyStartMs(hass, cur) + 12 * 3600000;
     const label = day ? `${fmtWeekday(hass, noon)} ${fmtDayShort(hass, noon)}` : t(hass, "today");
     const earliest = this._earliest ?? null;
-    return stepperHTML(hass, label, { prev: !earliest || cur > earliest, next: !!day, past: !!day });
+    // the calendar greys out days before the data; learn where that is before
+    // anyone clicks (the answer for yesterday is cached and is the first step
+    // back anyway)
+    if (!earliest && !this._earliestAsked) {
+      this._earliestAsked = true;
+      historyDay(hass, this._resolved.entryId, previousDayKey(localParts(hass, Date.now()).dayKey))
+        .then((d) => {
+          if (d?.earliest_date && !this._earliest) { this._earliest = d.earliest_date; this._render(); }
+        })
+        // no retry: a render comes with every sensor tick, and the calendar
+        // simply opens without a lower bound
+        .catch(() => {});
+    }
+    return stepperHTML(hass, label, { prev: !earliest || cur > earliest, next: !!day, past: !!day, pick: true });
+  }
+  _pick(anchor) {
+    const hass = this._hass, r = this._resolved;
+    if (!r?.entryId) return;
+    const today = localParts(hass, Date.now()).dayKey;
+    openDayPicker(anchor, {
+      value: this._viewDay() ?? today, min: this._earliest ?? undefined, max: today,
+    }, (to) => {
+      if (this._resolved !== r) return;
+      setHistoryDay(r.entryId, to >= today ? null : to);
+    });
   }
   _step(dir) {
     const hass = this._hass, r = this._resolved;
@@ -2712,6 +2787,12 @@ class PvsForecastCard extends PvsBaseCard {
       this.shadowRoot.querySelector(".fc-xh")?.setAttribute("opacity", "0");
     });
     this.shadowRoot.addEventListener("click", (ev) => {
+      const p = ev.target.closest?.("[data-pick]");
+      if (p) {
+        ev.stopPropagation();
+        this._pick(p);
+        return;
+      }
       const b = ev.target.closest?.("[data-step]");
       if (!b || b.disabled) return;
       ev.stopPropagation();

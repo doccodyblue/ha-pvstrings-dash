@@ -190,7 +190,8 @@ segments. If no 5-minute statistics exist, the card falls back to hourly
 means and says so on the card.
 
 **Looking back.** Where the integration offers the `pvstrings.get_day`
-service, the card head carries a ‹ day › stepper. A past day is drawn exactly
+service, the card head carries a ‹ day › stepper; a click on the day between
+the arrows opens a calendar for jumping further back. A past day is drawn exactly
 like today, from the integration's own record rather than from recorder
 statistics: the forecast as it stood before each hour, what arrived, and — in
 the tooltip — what the evening before had announced. Every forecast card of a
@@ -626,7 +627,7 @@ card it meant to include.
 | daily card (issue-hour reconstruction) | ≥ 1.10.0 |
 | savings provenance (`price.by_basis_kwh`, `export_dropped_kwh`) | ≥ 1.22.0 |
 | hourly day-ahead profile (`hourly_profile`) | ≥ 1.23.0 |
-| day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | not released yet |
+| day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | ≥ 1.25.0 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not
