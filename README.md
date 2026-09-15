@@ -667,6 +667,11 @@ The generated screenshots in `docs/img` carry synthetic data from
 
 MIT, see [LICENSE](LICENSE).
 
+Bugs and feature requests for the cards go into this repository's issues.
+Questions, ideas and screenshots of your plant go into the integration's
+[Discussions](https://github.com/doccodyblue/ha-pvstrings/discussions), one
+place for both repositories.
+
 ---
 
 ## Development
