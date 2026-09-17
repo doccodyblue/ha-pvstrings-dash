@@ -216,6 +216,11 @@ const STR = {
     "nc_active": "running",
     "nc_inactive": "not running",
     "nc_kt": "measured clearness",
+    "nc_fc": "forecast",
+    "nc_vs_brighter": "brighter than forecast",
+    "nc_vs_darker": "darker than forecast",
+    "nc_vs_same": "as forecast",
+    "nc_fc_tip": "Forecast clearness = the weather source's irradiance for now divided by the clear-sky value. Measured is the mean of the last quarter hour, so near sunrise and sunset the two can drift a few hundredths apart on their own.",
     "nc_weight": "weight on the next interval",
     "nc_halflife": "half-life",
     "nc_sky_calm": "calm sky",
@@ -469,7 +474,7 @@ const STR = {
     "help_thermal": "**Cell temperature**: modelled per string from the forecast's air temperature, wind and plane irradiance — not measured. Cells above 25 °C lose output, below they gain; the effect is already inside the physics figure of the forecast chain, this card only makes it visible. A flat, insulated mount runs hotter than an open rack at the same air.",
     "help_conversion": "**Conversion**: AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage — the two are never added. Curves are configured (datasheet or self-entered); where measured DC/AC pairs exist and learning is on, the plant corrects that curve with its own measurement. *Unconverted* means no curve configured, not a measured 0 % loss.",
     "help_hp": "**Day-ahead error by hour**: the same scored pairs the 30-day figure is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — usable as a discount on tomorrow's window sum. Dimmed hours rest on fewer than three days.",
-    "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
+    "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. The blue mark is what the weather source expects for now on the same scale — the gap between the two is what the nowcast corrects. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
     "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
     // history (response services get_day / get_weeks)
     "hist_prev": "earlier", "hist_next": "later", "hist_pick": "pick a day",
@@ -575,6 +580,11 @@ const STR = {
     "nc_active": "läuft",
     "nc_inactive": "läuft nicht",
     "nc_kt": "gemessene Klarheit",
+    "nc_fc": "Prognose",
+    "nc_vs_brighter": "heller als Prognose",
+    "nc_vs_darker": "dunkler als Prognose",
+    "nc_vs_same": "wie Prognose",
+    "nc_fc_tip": "Prognose-Klarheit = Einstrahlung der Wetterquelle für jetzt geteilt durch den Klarhimmel-Wert. Gemessen ist das Mittel der letzten Viertelstunde — um Sonnenauf- und -untergang laufen die beiden deshalb auch von selbst ein paar Hundertstel auseinander.",
     "nc_weight": "Gewicht im nächsten Intervall",
     "nc_halflife": "Halbwertszeit",
     "nc_sky_calm": "ruhiger Himmel",
@@ -813,7 +823,7 @@ const STR = {
     "help_thermal": "**Zelltemperatur**: je Strang modelliert aus Lufttemperatur, Wind und Einstrahlung in Modulebene der Prognose — nicht gemessen. Zellen über 25 °C verlieren Leistung, darunter gewinnen sie; die Wirkung steckt bereits in der Physik-Zahl der Prognosekette, diese Karte macht sie nur sichtbar. Eine flache, hinterlüftungslose Montage läuft bei gleicher Luft heißer als ein freies Gestell.",
     "help_conversion": "**Wandlung**: AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher — die beiden werden nie addiert. Kennlinien sind konfiguriert (Datenblatt oder selbst eingetragen); wo gemessene DC/AC-Paare vorliegen und das Lernen an ist, korrigiert die Anlage die Kennlinie mit der eigenen Messung. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
     "help_hp": "**Day-Ahead-Fehler nach Stunde**: dieselben gescorten Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Gedimmte Stunden stehen auf weniger als drei Tagen.",
-    "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
+    "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Die blaue Marke ist, was die Wetterquelle für jetzt erwartet, auf derselben Skala — der Abstand zwischen beiden ist das, was der Nowcast korrigiert. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
     "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
     // Historie (Services get_day / get_weeks)
     "hist_prev": "früher", "hist_next": "später", "hist_pick": "Tag auswählen",
@@ -3149,13 +3159,30 @@ class PvsNowcastCard extends PvsBaseCard {
 
     // clearness scale: 0 (dark) .. 1.1 (brighter than the clear-sky model)
     const KT_MAX = 1.1;
-    const ktPct = kt != null ? Math.max(0, Math.min(1, kt / KT_MAX)) * 100 : null;
+    const pctOf = (v) => Math.max(0, Math.min(1, v / KT_MAX)) * 100;
+    const ktPct = kt != null ? pctOf(kt) : null;
+    // What the source says for now, on the same scale: without it the
+    // measured figure has nothing to be read against. Sensor orange,
+    // forecast blue — as on every other card.
+    const fcW = a.forecast_wm2, csW = a.clearsky_wm2;
+    const fcKt = Number.isFinite(fcW) && Number.isFinite(csW) && csW > 0 ? fcW / csW : null;
+    let vs = "";
+    if (kt != null && fcKt != null) {
+      const d = kt - fcKt;
+      const key = Math.abs(d) < 0.05 ? "nc_vs_same" : d > 0 ? "nc_vs_brighter" : "nc_vs_darker";
+      const sign = d >= 0 ? "+" : "−";
+      vs = `<span class="nc-fc" title="${esc(t(hass, "nc_fc_tip"))}">
+          <span class="nc-sw fc"></span>${t(hass, "nc_fc")} <b>${fmtNum(hass, fcKt, 2)}</b></span>
+        <span class="pvs-chip">${t(hass, key)}${key === "nc_vs_same" ? ""
+          : ` <span class="v">${sign}${fmtNum(hass, Math.abs(d), 2)}</span>`}</span>`;
+    }
     const ktRow = kt == null ? "" : `
       <div class="nc-kt">
-        <div class="nc-lbl">${t(hass, "nc_kt")}<span class="nc-big">${fmtNum(hass, kt, 2)}</span></div>
+        <div class="nc-lbl"><span class="nc-sw ms"></span>${t(hass, "nc_kt")}<span class="nc-big">${fmtNum(hass, kt, 2)}</span>${vs}</div>
         <div class="nc-scale">
           <div class="nc-fill" style="width:${ktPct.toFixed(1)}%"></div>
           <div class="nc-mark" style="left:${ktPct.toFixed(1)}%"></div>
+          ${fcKt != null ? `<div class="nc-fcmark" style="left:${pctOf(fcKt).toFixed(1)}%"></div>` : ""}
           ${[0.25, 0.5, 0.75, 1].map((v) => `<div class="nc-tick" style="left:${(v / KT_MAX * 100).toFixed(1)}%"></div>`).join("")}
         </div>
         <div class="nc-scale-ax">
@@ -3226,15 +3253,24 @@ const NC_CSS = `
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--pvs-model) 25%, transparent); }
   .nc-kt { margin: 6px 0 2px; }
   .nc-lbl { font-size: 11px; color: var(--secondary-text-color); display: flex;
-    align-items: baseline; gap: 8px; }
+    align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .nc-sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: -3px; }
+  .nc-sw.ms { background: var(--pvs-measure); }
+  .nc-sw.fc { background: var(--pvs-model); margin-right: 3px; }
+  .nc-fc { margin-left: 8px; cursor: help; }
+  .nc-fc b { color: var(--primary-text-color); font-size: 15px; font-weight: 600;
+    font-variant-numeric: tabular-nums; }
   .nc-big { font-size: 24px; font-weight: 600; color: var(--primary-text-color);
     font-variant-numeric: tabular-nums; }
   .nc-scale { position: relative; height: 10px; border-radius: 5px; margin-top: 3px;
     background: linear-gradient(90deg,
-      color-mix(in srgb, var(--pvs-model) 8%, transparent),
-      color-mix(in srgb, var(--pvs-model) 20%, transparent)); overflow: hidden; }
+      color-mix(in srgb, var(--pvs-measure) 8%, transparent),
+      color-mix(in srgb, var(--pvs-measure) 20%, transparent)); overflow: hidden; }
   .nc-fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px;
-    background: var(--pvs-model); opacity: 0.75; }
+    background: var(--pvs-measure); opacity: 0.75; }
+  .nc-fcmark { position: absolute; top: 0; width: 4px; height: 10px; border-radius: 2px;
+    background: var(--pvs-model); transform: translateX(-2px);
+    box-shadow: 0 0 0 1.5px var(--card-background-color); }
   .nc-mark { position: absolute; top: -2px; width: 2px; height: 14px;
     background: var(--primary-text-color); transform: translateX(-1px); }
   .nc-tick { position: absolute; top: 3px; width: 1px; height: 4px;
@@ -5692,7 +5728,7 @@ async function buildViews(hass, config) {
     // ---- Genauigkeit ----
     // What anyone can read: forecast against actual, day by day, and whether
     // the learning pays. The figures (WMAPE, bias, both windows) are on the
-    // Nerd view; `diagnostics: full` lays the six charts out side by side.
+    // Nerd view in full mode; `diagnostics: full` lays the six charts out side by side.
     const fullAcc = config?.diagnostics === "full";
     const accKeys = [...ACC_KEYS.short, ...ACC_KEYS.dayahead];
     const accEntities = Object.fromEntries(accKeys.filter((k) => plant.byKey[k]).map((k) => [k, plant.byKey[k]]));
@@ -5723,6 +5759,18 @@ async function buildViews(hass, config) {
     if (hasPvsService(hass, "get_weeks") && plant.byKey.wmape_day_ahead_30d) {
       accSections.unshift({ type: "grid", column_span: 2, cards: [
         { type: "custom:pvstrings-learning", entity: plant.byKey.wmape_day_ahead_30d,
+          grid_options: { columns: "full" } },
+      ] });
+    }
+    // Where in the day the day-ahead error sits (PV Strings >= 1.23). The
+    // attribute rides on the 30 d day-ahead sensor and is published before
+    // that sensor has a state, so the gate is the attribute, never the state.
+    // The card titles itself — no heading, or the title would read twice.
+    // Readable without the figures behind it: a discount on tomorrow's hours.
+    const da30 = plant.byKey.wmape_day_ahead_30d;
+    if (da30 && Array.isArray(hass.states[da30]?.attributes?.hourly_profile)) {
+      accSections.push({ type: "grid", column_span: 2, cards: [
+        { type: "custom:pvstrings-hour-profile", entity: da30,
           grid_options: { columns: "full" } },
       ] });
     }
@@ -5758,22 +5806,13 @@ async function buildViews(hass, config) {
             ...(ghi ? { ghi_entity: ghi } : {}), ...det }
         : mdCard(t(lang, "missing_card", { key: "collector_health" })),
     ] });
-    // The accuracy figures: WMAPE and bias over both windows. Moved here
-    // from the accuracy view, which keeps the charts people read without them.
-    nerdSections.push({ type: "grid", column_span: 2, cards: [
-      Object.keys(accEntities).length
-        ? { type: "custom:pvstrings-accuracy", entities: accEntities, grid_options: { columns: "full" } }
-        : mdCard(t(lang, "missing_card", { key: "wmape_30d" })),
-    ] });
-    // Where in the day the day-ahead error sits (PV Strings >= 1.23). The
-    // attribute rides on the 30 d day-ahead sensor and is published before
-    // that sensor has a state, so the gate is the attribute, never the state.
-    // The card titles itself — no heading, or the title would read twice.
-    const da30 = plant.byKey.wmape_day_ahead_30d;
-    if (da30 && Array.isArray(hass.states[da30]?.attributes?.hourly_profile)) {
+    // The accuracy figures (WMAPE, bias, both windows) are raw numbers the
+    // charts already tell: full mode only.
+    if (full) {
       nerdSections.push({ type: "grid", column_span: 2, cards: [
-        { type: "custom:pvstrings-hour-profile", entity: da30,
-          grid_options: { columns: "full" } },
+        Object.keys(accEntities).length
+          ? { type: "custom:pvstrings-accuracy", entities: accEntities, grid_options: { columns: "full" } }
+          : mdCard(t(lang, "missing_card", { key: "wmape_30d" })),
       ] });
     }
     if (mo) {
@@ -5796,14 +5835,18 @@ async function buildViews(hass, config) {
     } else {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
     }
-    nerdSections.push({ type: "grid", cards: [
-      { type: "custom:pvstrings-kv-table",
-        entity: strings[0]?.byKey?.string_sky_map ?? sd ?? mo,
-        mode: "sky_overview", title: t(lang, "nerd_sky"),
-        rows: strings.map((s) => ({
-          name: s.name, sky: s.byKey.string_sky_map, shading: s.byKey.string_shading_now,
-        })) },
-    ] });
+    // Sky maps as a table: the shading charts on the strings view show the
+    // same thing drawn — full mode only.
+    if (full) {
+      nerdSections.push({ type: "grid", cards: [
+        { type: "custom:pvstrings-kv-table",
+          entity: strings[0]?.byKey?.string_sky_map ?? sd ?? mo,
+          mode: "sky_overview", title: t(lang, "nerd_sky"),
+          rows: strings.map((s) => ({
+            name: s.name, sky: s.byKey.string_sky_map, shading: s.byKey.string_shading_now,
+          })) },
+      ] });
+    }
     // Thermal (PV Strings >= 1.24): only where a string chain carries the
     // heat share — absence is an older integration, not an error, so the
     // section simply does not exist there.
@@ -5919,12 +5962,9 @@ async function buildViews(hass, config) {
       ] });
     }
     views.push({
-      // The path stays `nerd`: it is the URL people bookmark, and the title
-      // has come back to it anyway. No icon: HA shows a view's icon instead
-      // of its title, and the one tab that reads as a word marks where the
-      // views for everyone end.
+      // The path stays `nerd`: it is the URL people bookmark.
       title: prefix + t(lang, "v_nerd"), path: `${slug}nerd`,
-      type: "sections", max_columns: 3,
+      icon: "mdi:flask-outline", type: "sections", max_columns: 3,
       sections: nerdSections,
     });
   }

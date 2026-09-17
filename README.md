@@ -64,18 +64,15 @@ chart, what arrives behind the inverter, savings — written for people, not for
 debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
 temperature), **Accuracy** (the learning progress where the integration
-keeps weeks, and one day-by-day chart that switches between the plant and its
-strings), and the **Nerd Dashboard** (status first, numbers on demand:
-training maturity and a one-line collection health strip, the accuracy figures
-— short-term and day-ahead, each with how full its window is — the day-ahead
-error by hour, the correction factors as percentages, the source bias as a heatmap,
-the sky-map overview, the modelled cell temperature, the conversion layer with
+keeps weeks, one day-by-day chart that switches between the plant and its
+strings, and the day-ahead error by hour), and the **Nerd Dashboard** (status
+first, numbers on demand: training maturity and a one-line collection health
+strip, the correction factors as percentages, the source bias as a heatmap,
+the modelled cell temperature, the conversion layer with
 one chart per group, and
 — where a price sensor or a battery makes it meaningful — what the savings
 figure rests on). Every card on it carries a **?** with the paragraph that
-explains its numbers. The first three views show as icons in the tab bar; the
-Nerd Dashboard has none, so its tab reads as a word and marks where the views
-for everyone end. Views follow `hass.language` (German and English). The
+explains its numbers. All four views show as icons in the tab bar. Views follow `hass.language` (German and English). The
 generated YAML is a normal dashboard config — take it over and edit it if you
 want to.
 
@@ -89,8 +86,9 @@ strategy:
   diagnostics: full
 ```
 
-restores every raw table, the evidence count on every cell and the explainer
-footer — and on the Accuracy view lays the six day-by-day charts out side by
+restores every raw table, the accuracy figures (WMAPE and bias, short-term
+and day-ahead), the sky-map overview table, the evidence count on every cell
+and the explainer footer — and on the Accuracy view lays the six day-by-day charts out side by
 side again instead of behind a selector.
 
 ---
@@ -578,7 +576,9 @@ Every card carries a **?** with this in short. The longer version:
 - **Nowcast**: the forecast reacting to your own irradiance sensor — the
   measured clearness of the last quarter hour blended into the coming
   intervals, fading back to the provider's forecast with a half-life that
-  depends on how broken the sky is. Inactive at night and without a sensor is
+  depends on how broken the sky is. Next to the measured clearness (orange)
+  the card marks what the weather source expects for now (blue) — the gap is
+  what gets corrected. Inactive at night and without a sensor is
   the normal case; then the reason is the interesting figure. Not the same
   word as *nowcast* in the source-bias table.
 - **Collection**: coverage is the share of 5-minute intervals actually
