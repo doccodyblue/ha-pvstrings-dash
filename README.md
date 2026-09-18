@@ -63,8 +63,8 @@ builds four views: **Overview** (today, remaining, tomorrow, power, forecast
 chart, what arrives behind the inverter, savings — written for people, not for
 debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
-temperature), **Accuracy** (the learning progress where the integration
-keeps weeks, one day-by-day chart that switches between the plant and its
+temperature), **Accuracy** (what learning cost or saved per week where the
+integration keeps weeks, one day-by-day chart that switches between the plant and its
 strings, and where in the day the forecast leaves energy on the table, in kWh per scored day), and the **Nerd Dashboard** (status
 first, numbers on demand: training maturity and a one-line collection health
 strip, the correction factors as percentages, the source bias as a heatmap,
@@ -628,6 +628,7 @@ card it meant to include.
 | savings provenance (`price.by_basis_kwh`, `export_dropped_kwh`) | ≥ 1.22.0 |
 | hourly day-ahead profile (`hourly_profile`) | ≥ 1.23.0 |
 | day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | ≥ 1.25.0 |
+| weekly learning comparison (hourly error, `baseline_basis`) | ≥ 1.25.2 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not
