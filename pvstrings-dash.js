@@ -380,6 +380,8 @@ const STR = {
     "hp_title": "Day-ahead error by hour",
     "hp_forecast": "announced", "hp_actual": "arrived",
     "hp_deviation": "deviation", "hp_days": "days",
+    "hp_unit": "kWh/d",
+    "hp_sum_of": "{f} / {a} kWh over {n} scored days",
     "hp_days_scored_one": "1 day scored", "hp_days_scored_many": "{n} days scored",
     "hp_thin_one": "thin basis — 1 day", "hp_thin_many": "thin basis — {n} days",
     "hp_thin_hours_one": "1 hour on a thin basis", "hp_thin_hours_many": "{n} hours on a thin basis",
@@ -490,7 +492,7 @@ const STR = {
     "week_backfilled": "rebuilt",
     "week_backfilled_tip": "Computed after the fact from the forecasts that were published then; no model snapshot from that week exists.",
     "hp_sel_live": "30 days",
-    "hp_note_week": "The same day-ahead pairs, for this week only, folded by local hour. Positive means the hour was announced too high, as a share of the announcement.",
+    "hp_note_week": "The same day-ahead pairs, for this week only, folded by local hour. Positive means the hour was announced too high, as a share of the announcement. The bars are per scored day, as on the month.",
     // learning progress
     "learn_title": "Learning progress",
     "learn_no_weeks": "no week recorded yet",
@@ -514,7 +516,7 @@ const STR = {
     "learn_tip_new": "new weather situation seen this week",
     "learn_tip_backfilled": "Rebuilt: the forecast published then against one computed today without learning. Not in the running total.",
     "help_learning": "**Error avoided** is the day-ahead forecast error of the integration with learning, against the same integration with learning switched off — same weather run, same geometry, same hours. Not against bare physics: the learned shading map and source correction count as learning too. Summed per day like the WMAPE, then **added up week by week** from the first week compared live — nothing is left out and no window is picked. **Seen** is the maturity: how much evidence the model holds. It only grows and says nothing about being right. It slows down when the sun reaches positions the model has not met yet, as it does every autumn. *Rebuilt* weeks — the ones before the integration logged the comparison itself — set the forecast published back then against one computed today without learning. That compares two versions of the code as well, and every improvement since then counts against the learning, so they are shown but not added up. Faint weeks are still running or rest on fewer than four days.",
-    "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
+    "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. The bars are per scored day, so a week and the month stand side by side; each hour is divided by its own day count, and the sum behind it is in the tooltip. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
     /* i18n-en-end */
   },
   de: {
@@ -733,6 +735,8 @@ const STR = {
     "hp_title": "Day-Ahead-Fehler nach Stunde",
     "hp_forecast": "angesagt", "hp_actual": "gekommen",
     "hp_deviation": "Abweichung", "hp_days": "Tage",
+    "hp_unit": "kWh/Tag",
+    "hp_sum_of": "{f} / {a} kWh aus {n} gescorten Tagen",
     "hp_days_scored_one": "1 Tag gescort", "hp_days_scored_many": "{n} Tage gescort",
     "hp_thin_one": "dünne Basis — 1 Tag", "hp_thin_many": "dünne Basis — {n} Tage",
     "hp_thin_hours_one": "1 Stunde auf dünner Basis", "hp_thin_hours_many": "{n} Stunden auf dünner Basis",
@@ -839,7 +843,7 @@ const STR = {
     "week_backfilled": "nachgerechnet",
     "week_backfilled_tip": "Nachträglich aus den damals veröffentlichten Prognosen gerechnet; einen Modellstand aus dieser Woche gibt es nicht.",
     "hp_sel_live": "30 Tage",
-    "hp_note_week": "Dieselben Day-Ahead-Paare, nur für diese Woche, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage.",
+    "hp_note_week": "Dieselben Day-Ahead-Paare, nur für diese Woche, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage. Die Balken zeigen den Wert pro gescorten Tag, wie beim Monat.",
     // Lernfortschritt
     "learn_title": "Lernfortschritt",
     "learn_no_weeks": "noch keine Woche aufgezeichnet",
@@ -863,7 +867,7 @@ const STR = {
     "learn_tip_new": "diese Woche eine neue Wettersituation gesehen",
     "learn_tip_backfilled": "Nachgerechnet: die damals veröffentlichte Prognose gegen eine heute ohne Lernen gerechnete. Nicht in der Summe.",
     "help_learning": "**Vermiedener Fehler** ist der Day-Ahead-Prognosefehler der Integration mit Lernen gegenüber derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Nicht gegenüber reiner Physik: die gelernte Verschattungskarte und die Quellen-Korrektur zählen auch als Lernen. Pro Tag gerechnet wie die WMAPE, dann **Woche für Woche aufsummiert**, ab der ersten live verglichenen Woche — nichts weggelassen, kein Zeitfenster ausgesucht. **Gesehen** ist die Lernreife: wie viel Evidenz das Modell hält. Sie wächst nur und sagt nichts darüber, ob es stimmt. Sie wird langsamer, wenn die Sonne Stände erreicht, die das Modell noch nicht kennt — jeden Herbst. *Nachgerechnete* Wochen — die aus der Zeit, bevor die Integration den Vergleich selbst mitschrieb — stellen die damals veröffentlichte Prognose einer heute ohne Lernen gerechneten gegenüber. Das vergleicht auch zwei Code-Stände, und jede Verbesserung seitdem zählt gegen das Lernen; deshalb werden sie gezeigt, aber nicht aufsummiert. Blasse Wochen laufen noch oder stehen auf weniger als vier Tagen.",
-    "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
+    "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Die Balken zeigen den Wert pro gescorten Tag, damit eine Woche und der Monat nebeneinander bestehen; jede Stunde wird durch ihre eigene Tageszahl geteilt, die Summe dahinter steht im Tooltip. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
     /* i18n-de-end */
   },
 };
@@ -4260,7 +4264,10 @@ class PvsHourProfileCard extends PvsBaseCard {
     if (!rows.length) return card(head() + withheldHTML(t(hass, "hp_no_hours")));
 
     const n = rows.length;
-    const PAD_L = 36, PAD_R = 8, PAD_T = 8, PH = 104;
+    // PAD_T leaves the unit its own line above the top gridline; anchored
+    // left, because "kWh/Tag" is wider than the axis gutter and would be cut
+    // off hanging off the end of it.
+    const PAD_L = 36, PAD_R = 8, PAD_T = 18, PH = 104;
     // The SVG is stretched to the card's width, which scales the text with
     // it — a five-hour profile in a narrow world would render its labels
     // twice the size of an eighteen-hour one. Widen the slots instead.
@@ -4271,8 +4278,17 @@ class PvsHourProfileCard extends PvsBaseCard {
     const MID = STRIP_Y + STRIP_H / 2;
     const H = STRIP_Y + STRIP_H + PAD_B;
 
+    // Per scored day, not as the sum the attribute carries. The sums are
+    // right but unreadable: an hour of a 30-day window stands four times as
+    // tall as the same hour of a week, so stepping through the weeks — the
+    // whole point of the stepper — compares nothing. Divided by each row's
+    // *own* days, because a dawn hour is scored on fewer days than noon: a
+    // flat divide by the window would sink exactly the edges people read.
+    const perDay = (v, r) => ((r.days ?? 0) > 0 ? (v ?? 0) / r.days : null);
     let peak = 0;
-    for (const r of rows) peak = Math.max(peak, r.forecast_kwh ?? 0, r.actual_kwh ?? 0);
+    for (const r of rows) {
+      peak = Math.max(peak, perDay(r.forecast_kwh, r) ?? 0, perDay(r.actual_kwh, r) ?? 0);
+    }
     const yMax = niceMax(peak * 1.05);
     const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
 
@@ -4302,7 +4318,9 @@ class PvsHourProfileCard extends PvsBaseCard {
       if (n <= 14 || i % 2 === 0) {
         labels += `<text class="axis" x="${x0 + SW / 2}" y="${H - 5}" text-anchor="middle">${String(r.hour).padStart(2, "0")}</text>`;
       }
-      const f = r.forecast_kwh ?? 0, ac = r.actual_kwh ?? 0;
+      // The deviation strip keeps reading the sums: a ratio divides the day
+      // count away, so normalising it would change nothing.
+      const f = perDay(r.forecast_kwh, r) ?? 0, ac = perDay(r.actual_kwh, r) ?? 0;
       if (f > 0) {
         bars += `<rect x="${x0 + 2}" y="${yOf(f)}" width="${bw}" height="${PAD_T + PH - yOf(f)}"
           fill="var(--pvs-model)" rx="1"${op}/>`;
@@ -4322,7 +4340,8 @@ class PvsHourProfileCard extends PvsBaseCard {
           height="${Math.max(1, Math.abs(MID - y))}"
           fill="${dev >= 0 ? "var(--pvs-model)" : "var(--pvs-measure)"}" opacity="${thin ? 0.3 : 0.7}" rx="1"/>`;
       }
-      const tip = { h: r.hour, f, a: ac, dev, days: r.days ?? null, thin };
+      const tip = { h: r.hour, f, a: ac, dev, days: r.days ?? null, thin,
+        fsum: r.forecast_kwh ?? 0, asum: r.actual_kwh ?? 0 };
       hits += `<rect class="hit" x="${x0}" y="${PAD_T}" width="${SW}" height="${H - PAD_T - PAD_B}"
         fill="transparent" data-hp='${esc(JSON.stringify(tip))}'/>`;
     });
@@ -4332,6 +4351,7 @@ class PvsHourProfileCard extends PvsBaseCard {
       grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v)}" x2="${W - PAD_R}" y2="${yOf(v)}"/>
         <text class="axis" x="${PAD_L - 5}" y="${yOf(v) + 3}" text-anchor="end">${fmtNum(hass, v, 1)}</text>`;
     }
+    grid += `<text class="axis" x="2" y="${PAD_T - 7}" style="font-size:8.5px">${t(hass, "hp_unit")}</text>`;
     grid += `<line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
       <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, devMax, 0)}</text>
       <text class="axis" x="${PAD_L - 5}" y="${MID + 3}" text-anchor="end">0</text>
@@ -4372,7 +4392,8 @@ class PvsHourProfileCard extends PvsBaseCard {
           <div class="r"><span class="k">${t(hass, "hp_actual")}</span><span class="v">${fmtKwh(hass, c.a, 2)}</span></div>
           ${c.dev != null ? `<div class="r"><span class="k">${t(hass, "hp_deviation")}</span>
             <span class="v">${fmtSigned(hass, c.dev, 1)} %</span></div>` : ""}
-          ${c.days != null ? `<div class="r"><span class="k">${t(hass, "hp_days")}</span><span class="v">${c.days}</span></div>` : ""}
+          ${c.days != null ? `<div class="pvs-sub">${t(hass, "hp_sum_of", {
+            f: fmtNum(hass, c.fsum, 1), a: fmtNum(hass, c.asum, 1), n: c.days })}</div>` : ""}
           ${c.thin ? `<div class="pvs-sub">${tn(hass, "hp_thin", c.days ?? 0)}</div>` : ""}`;
       },
     });

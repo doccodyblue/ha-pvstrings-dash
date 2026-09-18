@@ -65,7 +65,7 @@ debugging), **Strings** (one
 section per string: forecast line chart, sky map, shading, yield, cell
 temperature), **Accuracy** (the learning progress where the integration
 keeps weeks, one day-by-day chart that switches between the plant and its
-strings, and the day-ahead error by hour), and the **Nerd Dashboard** (status
+strings, and the day-ahead error by hour, per scored day), and the **Nerd Dashboard** (status
 first, numbers on demand: training maturity and a one-line collection health
 strip, the correction factors as percentages, the source bias as a heatmap,
 the modelled cell temperature, the conversion layer with
