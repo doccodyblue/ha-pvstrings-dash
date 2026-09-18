@@ -381,11 +381,12 @@ const STR = {
     "hp_forecast": "announced", "hp_actual": "arrived",
     "hp_deviation": "deviation", "hp_days": "days",
     "hp_unit": "kWh/d",
+    "hp_gap": "shortfall",
     "hp_sum_of": "{f} / {a} kWh over {n} scored days",
     "hp_days_scored_one": "1 day scored", "hp_days_scored_many": "{n} days scored",
     "hp_thin_one": "thin basis — 1 day", "hp_thin_many": "thin basis — {n} days",
     "hp_thin_hours_one": "1 hour on a thin basis", "hp_thin_hours_many": "{n} hours on a thin basis",
-    "hp_too_high": "announced too high", "hp_too_low": "announced too low",
+    "hp_too_high": "promised, not delivered", "hp_too_low": "delivered on top",
     // ---- nerd dashboard 0.13: status strip, factors as ±%, heatmap, help ----
     "s_status": "Status",
     // accuracy card (0.14): seven tiles and two paragraphs become one card
@@ -475,7 +476,7 @@ const STR = {
     "help_maturity": "**Training maturity**: the weather bar is the evidence held across all weather × daypart buckets, relative to the most a bucket can hold — learning forgets slowly, so 100 % means \"as learned as it gets\", not \"finished\"; the tick marks where green begins. The shading bar is the share of the year's sun path each string has observed; it grows no faster than the calendar.",
     "help_thermal": "**Cell temperature**: modelled per string from the forecast's air temperature, wind and plane irradiance — not measured. Cells above 25 °C lose output, below they gain; the effect is already inside the physics figure of the forecast chain, this card only makes it visible. A flat, insulated mount runs hotter than an open rack at the same air.",
     "help_conversion": "**Conversion**: AC is energy behind the inverter, capped at its AC rating when clipping applies but never at regulatory limits; battery charge is DC into the storage — the two are never added. Curves are configured (datasheet or self-entered); where measured DC/AC pairs exist and learning is on, the plant corrects that curve with its own measurement. *Unconverted* means no curve configured, not a measured 0 % loss.",
-    "help_hp": "**Day-ahead error by hour**: the same scored pairs the 30-day figure is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — usable as a discount on tomorrow's window sum. Dimmed hours rest on fewer than three days.",
+    "help_hp": "**Day-ahead error by hour**: the same scored pairs the 30-day figure is built from, folded by local hour, in kWh per scored day. The strip is the gap between promised and arrived — above the line the forecast promised more than came. Read it to see *where in the day* the forecast is weak, and what that costs; the percentage per hour is in the tooltip. Dimmed hours rest on fewer than three days.",
     "help_nowcast": "**Nowcast**: the forecast reacting to your own irradiance sensor. The measured clearness of the last quarter hour is blended into the coming intervals and fades back to the provider's forecast with a half-life that depends on how broken the sky is — reach is two hours, past hours are never touched. The blue mark is what the weather source expects for now on the same scale — the gap between the two is what the nowcast corrects. Inactive at night and without a sensor is the normal case; then the reason is the interesting figure.",
     "hp_no_hours": "No scored hour yet. The profile fills from the first complete day — it is not held back until the accuracy figures are.",
     // history (response services get_day / get_weeks)
@@ -492,7 +493,7 @@ const STR = {
     "week_backfilled": "rebuilt",
     "week_backfilled_tip": "Computed after the fact from the forecasts that were published then; no model snapshot from that week exists.",
     "hp_sel_live": "30 days",
-    "hp_note_week": "The same day-ahead pairs, for this week only, folded by local hour. Positive means the hour was announced too high, as a share of the announcement. The bars are per scored day, as on the month.",
+    "hp_note_week": "The same day-ahead pairs, for this week only, folded by local hour. Both halves are kWh per scored day, as on the month; above the line the hour promised more than arrived.",
     // learning progress
     "learn_title": "Learning progress",
     "learn_no_weeks": "no week recorded yet",
@@ -516,7 +517,7 @@ const STR = {
     "learn_tip_new": "new weather situation seen this week",
     "learn_tip_backfilled": "Rebuilt: the forecast published then against one computed today without learning. Not in the running total.",
     "help_learning": "**Error avoided** is the day-ahead forecast error of the integration with learning, against the same integration with learning switched off — same weather run, same geometry, same hours. Not against bare physics: the learned shading map and source correction count as learning too. Summed per day like the WMAPE, then **added up week by week** from the first week compared live — nothing is left out and no window is picked. **Seen** is the maturity: how much evidence the model holds. It only grows and says nothing about being right. It slows down when the sun reaches positions the model has not met yet, as it does every autumn. *Rebuilt* weeks — the ones before the integration logged the comparison itself — set the forecast published back then against one computed today without learning. That compares two versions of the code as well, and every improvement since then counts against the learning, so they are shown but not added up. Faint weeks are still running or rest on fewer than four days.",
-    "hp_note": "The same day-ahead pairs the 30-day score is built from, folded by local hour. Positive means the hour was announced too high, as a share of the announcement — so it applies as a discount on tomorrow's window sum. The bars are per scored day, so a week and the month stand side by side; each hour is divided by its own day count, and the sum behind it is in the tooltip. Hours with no announced energy carry no percentage: there is nothing to be wrong about.",
+    "hp_note": "Where in the day the day-ahead forecast leaves energy on the table, from the same pairs the 30-day score is built from. Both halves are kWh per scored day — each hour divided by its own day count, so a week and the month stand side by side and the sum behind it is in the tooltip. The strip is the gap: above the line the hour promised more than arrived, below it reality did better. An hour carrying almost nothing shows almost no gap, which is the honest picture — its percentage is in the tooltip, where a question about the model can find it.",
     /* i18n-en-end */
   },
   de: {
@@ -736,11 +737,12 @@ const STR = {
     "hp_forecast": "angesagt", "hp_actual": "gekommen",
     "hp_deviation": "Abweichung", "hp_days": "Tage",
     "hp_unit": "kWh/Tag",
+    "hp_gap": "Differenz",
     "hp_sum_of": "{f} / {a} kWh aus {n} gescorten Tagen",
     "hp_days_scored_one": "1 Tag gescort", "hp_days_scored_many": "{n} Tage gescort",
     "hp_thin_one": "dünne Basis — 1 Tag", "hp_thin_many": "dünne Basis — {n} Tage",
     "hp_thin_hours_one": "1 Stunde auf dünner Basis", "hp_thin_hours_many": "{n} Stunden auf dünner Basis",
-    "hp_too_high": "zu hoch angesagt", "hp_too_low": "zu niedrig angesagt",
+    "hp_too_high": "versprochen, nicht gekommen", "hp_too_low": "mehr gekommen",
     "s_status": "Status",
     "acc_title": "Genauigkeit",
     "acc_short": "Kurzfrist",
@@ -826,7 +828,7 @@ const STR = {
     "help_maturity": "**Lernreife**: Der Wetter-Balken ist das gehaltene Beweisgewicht über alle Wetter × Tagesabschnitt-Buckets, relativ zum Maximum, das ein Bucket halten kann — das Lernen vergisst langsam, 100 % heißt also „so gelernt wie es wird“, nicht „fertig“; die Marke zeigt, wo Grün beginnt. Der Verschattungs-Balken ist der Anteil des Jahres-Sonnenwegs, den jeder Strang schon gesehen hat; er wächst höchstens so schnell wie der Kalender.",
     "help_thermal": "**Zelltemperatur**: je Strang modelliert aus Lufttemperatur, Wind und Einstrahlung in Modulebene der Prognose — nicht gemessen. Zellen über 25 °C verlieren Leistung, darunter gewinnen sie; die Wirkung steckt bereits in der Physik-Zahl der Prognosekette, diese Karte macht sie nur sichtbar. Eine flache, hinterlüftungslose Montage läuft bei gleicher Luft heißer als ein freies Gestell.",
     "help_conversion": "**Wandlung**: AC ist Energie hinter dem Wechselrichter, bei Clipping am AC-Nennwert gedeckelt, aber nie an Regel- oder Rechtslimits; Akkuladung ist DC-Energie in den Speicher — die beiden werden nie addiert. Kennlinien sind konfiguriert (Datenblatt oder selbst eingetragen); wo gemessene DC/AC-Paare vorliegen und das Lernen an ist, korrigiert die Anlage die Kennlinie mit der eigenen Messung. „Ungewandelt“ heißt: keine Kennlinie konfiguriert, nicht 0 % Verlust gemessen.",
-    "help_hp": "**Day-Ahead-Fehler nach Stunde**: dieselben gescorten Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Gedimmte Stunden stehen auf weniger als drei Tagen.",
+    "help_hp": "**Day-Ahead-Fehler nach Stunde**: dieselben gescorten Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet, in kWh pro gescorten Tag. Der Streifen ist die Differenz zwischen versprochen und gekommen — über der Linie hat die Prognose mehr versprochen als kam. Damit liest man, *wo im Tag* die Prognose schwach ist und was das kostet; der Prozentwert je Stunde steht im Tooltip. Gedimmte Stunden stehen auf weniger als drei Tagen.",
     "help_nowcast": "**Nowcast**: die Prognose reagiert auf den eigenen Einstrahlungs-Sensor. Die gemessene Klarheit der letzten Viertelstunde wird in die kommenden Intervalle eingeblendet und mit einer Halbwertszeit, die vom Himmel abhängt, zur Anbieterprognose zurückgeführt — Reichweite zwei Stunden, vergangene Stunden bleiben unangetastet. Die blaue Marke ist, was die Wetterquelle für jetzt erwartet, auf derselben Skala — der Abstand zwischen beiden ist das, was der Nowcast korrigiert. Nachts und ohne Sensor ist „läuft nicht“ der Normalfall; dann ist der Grund die interessantere Zahl.",
     "hp_no_hours": "Noch keine gescorte Stunde. Das Profil füllt sich ab dem ersten vollständigen Tag — es wartet nicht auf die Genauigkeitszahlen.",
     // Historie (Services get_day / get_weeks)
@@ -843,7 +845,7 @@ const STR = {
     "week_backfilled": "nachgerechnet",
     "week_backfilled_tip": "Nachträglich aus den damals veröffentlichten Prognosen gerechnet; einen Modellstand aus dieser Woche gibt es nicht.",
     "hp_sel_live": "30 Tage",
-    "hp_note_week": "Dieselben Day-Ahead-Paare, nur für diese Woche, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage. Die Balken zeigen den Wert pro gescorten Tag, wie beim Monat.",
+    "hp_note_week": "Dieselben Day-Ahead-Paare, nur für diese Woche, nach lokaler Stunde gefaltet. Beide Hälften sind kWh pro gescorten Tag, wie beim Monat; über der Linie hat die Stunde mehr versprochen als kam.",
     // Lernfortschritt
     "learn_title": "Lernfortschritt",
     "learn_no_weeks": "noch keine Woche aufgezeichnet",
@@ -867,7 +869,7 @@ const STR = {
     "learn_tip_new": "diese Woche eine neue Wettersituation gesehen",
     "learn_tip_backfilled": "Nachgerechnet: die damals veröffentlichte Prognose gegen eine heute ohne Lernen gerechnete. Nicht in der Summe.",
     "help_learning": "**Vermiedener Fehler** ist der Day-Ahead-Prognosefehler der Integration mit Lernen gegenüber derselben Integration bei ausgeschaltetem Lernen — derselbe Wetterlauf, dieselbe Geometrie, dieselben Stunden. Nicht gegenüber reiner Physik: die gelernte Verschattungskarte und die Quellen-Korrektur zählen auch als Lernen. Pro Tag gerechnet wie die WMAPE, dann **Woche für Woche aufsummiert**, ab der ersten live verglichenen Woche — nichts weggelassen, kein Zeitfenster ausgesucht. **Gesehen** ist die Lernreife: wie viel Evidenz das Modell hält. Sie wächst nur und sagt nichts darüber, ob es stimmt. Sie wird langsamer, wenn die Sonne Stände erreicht, die das Modell noch nicht kennt — jeden Herbst. *Nachgerechnete* Wochen — die aus der Zeit, bevor die Integration den Vergleich selbst mitschrieb — stellen die damals veröffentlichte Prognose einer heute ohne Lernen gerechneten gegenüber. Das vergleicht auch zwei Code-Stände, und jede Verbesserung seitdem zählt gegen das Lernen; deshalb werden sie gezeigt, aber nicht aufsummiert. Blasse Wochen laufen noch oder stehen auf weniger als vier Tagen.",
-    "hp_note": "Dieselben Day-Ahead-Paare, aus denen die 30-Tage-Zahl gebildet wird, nach lokaler Stunde gefaltet. Positiv heißt: die Stunde wurde zu hoch angesagt, als Anteil der Ansage — so lässt sie sich als Abschlag auf die morgige Fenstersumme anwenden. Die Balken zeigen den Wert pro gescorten Tag, damit eine Woche und der Monat nebeneinander bestehen; jede Stunde wird durch ihre eigene Tageszahl geteilt, die Summe dahinter steht im Tooltip. Stunden ohne angesagte Energie tragen keinen Prozentwert: es gibt nichts, worin man sich irren könnte.",
+    "hp_note": "Wo im Tag die Day-Ahead-Prognose Energie liegen lässt, aus denselben Paaren, aus denen die 30-Tage-Zahl gebildet wird. Beide Hälften sind kWh pro gescorten Tag — jede Stunde geteilt durch ihre eigene Tageszahl, damit eine Woche und der Monat nebeneinander bestehen; die Summe dahinter steht im Tooltip. Der Streifen ist die Differenz: über der Linie hat die Stunde mehr versprochen als kam, darunter war die Realität besser. Eine Stunde mit kaum Energie zeigt kaum Differenz — das ist das ehrliche Bild; ihr Prozentwert steht im Tooltip, wo eine Frage ans Modell ihn findet.",
     /* i18n-de-end */
   },
 };
@@ -4292,15 +4294,24 @@ class PvsHourProfileCard extends PvsBaseCard {
     const yMax = niceMax(peak * 1.05);
     const yOf = (v) => PAD_T + PH - (v / yMax) * PH;
 
-    // Deviation, per the README formula. An hour with nothing announced has
-    // no share to be wrong by — null, not zero, and not drawn.
-    const devOf = (r) => (r.forecast_kwh ?? 0) > 0
+    // The gap, in the same unit as the bars above: what the hour promised
+    // minus what it delivered, per scored day. Energy, not percent, because
+    // the question the card answers is where in the day the forecast leaves
+    // energy on the table — and because a percentage lets an hour carrying
+    // 0.02 kWh set the scale and flatten noon into a hairline. The share is
+    // still in the tooltip, where a model question can find it.
+    const gapOf = (r) => {
+      const f = perDay(r.forecast_kwh, r), ac = perDay(r.actual_kwh, r);
+      return f == null || ac == null ? null : f - ac;
+    };
+    const shareOf = (r) => (r.forecast_kwh ?? 0) > 0
       ? ((r.forecast_kwh - (r.actual_kwh ?? 0)) / r.forecast_kwh) * 100 : null;
-    const devs = rows.map(devOf).filter((d) => d != null).map(Math.abs);
+    const gaps = rows.map(gapOf).filter((d) => d != null).map(Math.abs);
     // Symmetric, so "too high" and "too low" stay comparable at a glance;
-    // floored so a near-perfect month does not magnify its own noise.
-    const devMax = niceMax(Math.max(10, ...devs));
-    const dOf = (d) => MID - (d / devMax) * (STRIP_H / 2);
+    // floored against the day's own size so a near-perfect month does not
+    // magnify its own noise into a mountain range.
+    const gapMax = niceMax(Math.max(peak * 0.1, ...gaps));
+    const dOf = (d) => MID - (d / gapMax) * (STRIP_H / 2);
 
     // Dimming only reads as dimming next to something bright. On a fresh
     // plant every hour is thin, so the chip says it in words — otherwise
@@ -4329,18 +4340,19 @@ class PvsHourProfileCard extends PvsBaseCard {
         bars += `<rect x="${x0 + 3 + bw}" y="${yOf(ac)}" width="${bw}" height="${PAD_T + PH - yOf(ac)}"
           fill="var(--pvs-measure)" rx="1"${op}/>`;
       }
-      const dev = devOf(r);
+      const dev = gapOf(r);
       if (dev != null) {
         // Colour carries the direction in the palette the whole dashboard
         // reads by: blue is the model, so a bar above the line is the model
         // having promised too much; orange is measurement, so a bar below
         // is reality having beaten it.
-        const y = dOf(Math.max(-devMax, Math.min(devMax, dev)));
+        const y = dOf(Math.max(-gapMax, Math.min(gapMax, dev)));
         strip += `<rect x="${x0 + 2}" y="${Math.min(MID, y)}" width="${SW - 4}"
           height="${Math.max(1, Math.abs(MID - y))}"
           fill="${dev >= 0 ? "var(--pvs-model)" : "var(--pvs-measure)"}" opacity="${thin ? 0.3 : 0.7}" rx="1"/>`;
       }
-      const tip = { h: r.hour, f, a: ac, dev, days: r.days ?? null, thin,
+      const tip = { h: r.hour, f, a: ac, dev, share: shareOf(r),
+        days: r.days ?? null, thin,
         fsum: r.forecast_kwh ?? 0, asum: r.actual_kwh ?? 0 };
       hits += `<rect class="hit" x="${x0}" y="${PAD_T}" width="${SW}" height="${H - PAD_T - PAD_B}"
         fill="transparent" data-hp='${esc(JSON.stringify(tip))}'/>`;
@@ -4353,9 +4365,9 @@ class PvsHourProfileCard extends PvsBaseCard {
     }
     grid += `<text class="axis" x="2" y="${PAD_T - 7}" style="font-size:8.5px">${t(hass, "hp_unit")}</text>`;
     grid += `<line class="grid" x1="${PAD_L}" y1="${MID}" x2="${W - PAD_R}" y2="${MID}"/>
-      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, devMax, 0)}</text>
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + 4}" text-anchor="end">+${fmtNum(hass, gapMax, 2)}</text>
       <text class="axis" x="${PAD_L - 5}" y="${MID + 3}" text-anchor="end">0</text>
-      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">−${fmtNum(hass, devMax, 0)}</text>`;
+      <text class="axis" x="${PAD_L - 5}" y="${STRIP_Y + STRIP_H + 3}" text-anchor="end">−${fmtNum(hass, gapMax, 2)}</text>`;
 
     card(`${head(thinCount
       ? `<span class="pvs-chip">${tn(hass, "hp_thin_hours", thinCount)}</span>` : "")}
@@ -4365,7 +4377,7 @@ class PvsHourProfileCard extends PvsBaseCard {
       <div class="pvs-legend">
         <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "hp_forecast")}</span>
         <span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "hp_actual")}</span>
-        <span class="it" style="margin-left:4px">${t(hass, "hp_deviation")}:</span>
+        <span class="it" style="margin-left:4px">${t(hass, "hp_gap")}:</span>
         <span class="it"><span class="sw" style="background:var(--pvs-model);opacity:0.7"></span>${t(hass, "hp_too_high")}</span>
         <span class="it"><span class="sw" style="background:var(--pvs-measure);opacity:0.7"></span>${t(hass, "hp_too_low")}</span>
       </div>
@@ -4390,8 +4402,10 @@ class PvsHourProfileCard extends PvsBaseCard {
         return `<div class="h">${String(c.h).padStart(2, "0")}:00–${String((c.h + 1) % 24).padStart(2, "0")}:00</div>
           <div class="r"><span class="k">${t(hass, "hp_forecast")}</span><span class="v">${fmtKwh(hass, c.f, 2)}</span></div>
           <div class="r"><span class="k">${t(hass, "hp_actual")}</span><span class="v">${fmtKwh(hass, c.a, 2)}</span></div>
-          ${c.dev != null ? `<div class="r"><span class="k">${t(hass, "hp_deviation")}</span>
-            <span class="v">${fmtSigned(hass, c.dev, 1)} %</span></div>` : ""}
+          ${c.dev != null ? `<div class="r"><span class="k">${t(hass, "hp_gap")}</span>
+            <span class="v">${fmtSigned(hass, c.dev, 2)} kWh</span></div>` : ""}
+          ${c.share != null ? `<div class="r"><span class="k">${t(hass, "hp_deviation")}</span>
+            <span class="v">${fmtSigned(hass, c.share, 1)} %</span></div>` : ""}
           ${c.days != null ? `<div class="pvs-sub">${t(hass, "hp_sum_of", {
             f: fmtNum(hass, c.fsum, 1), a: fmtNum(hass, c.asum, 1), n: c.days })}</div>` : ""}
           ${c.thin ? `<div class="pvs-sub">${tn(hass, "hp_thin", c.days ?? 0)}</div>` : ""}`;
