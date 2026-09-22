@@ -245,6 +245,43 @@ publishes no per-interval curve.
 
 ![Nowcast card](docs/img/nowcast-dark.png)
 
+### `pvstrings-sensor-check`
+
+Whether that irradiance sensor is telling the truth (PV Strings ≥ 1.26).
+A cheap weather station does not measure irradiance: it measures
+illuminance with a diode weighted for the human eye and divides by a
+constant, and that constant holds for exactly one reference case — the
+lower the sun, the redder its light and the larger the share the diode
+never sees. The integration holds every closed hour against an
+independent reanalysis archive; the card draws the result per sun
+elevation, against 1.0.
+
+```yaml
+type: custom:pvstrings-sensor-check
+entity: sensor.<anlage>_einstrahlung_prognose
+```
+
+The shape is the finding, not the headline number: flat is a calibration
+factor, growing towards the horizon is a spectral error, and a gap
+between east and west is a sensor that is not level. Bands that have not
+gathered a kilowatt-hour of reference across five separate days yet are
+drawn as a hatched stub at the baseline — never as a value, and never
+left out.
+
+**Nothing on this card corrects the forecast**, and the card says so in
+as many words. The nowcast, the source-bias layer and the sky map have
+absorbed parts of the same error already; a factor in front of them
+would correct it twice.
+
+The card disappears where there is nothing to check — on an older
+integration, and on a plant with no irradiance sensor, whose zeros would
+otherwise read as a measurement. Banked hours waiting for their
+reference are shown as such: the archive runs about a week behind real
+time, so a few dozen are the normal state. A plant with no reference at
+all is pointed at `pvstrings.backfill_irradiance_check`, with the
+warning that only the owner knows whether the sensor stood in the same
+place, clean and level, over the period it would read.
+
 ### `pvstrings-curve`
 
 The learned efficiency curve against the datasheet prior it started from
@@ -581,6 +618,13 @@ Every card carries a **?** with this in short. The longer version:
   what gets corrected. Inactive at night and without a sensor is
   the normal case; then the reason is the interesting figure. Not the same
   word as *nowcast* in the source-bias table.
+- **Sensor check**: the same sensor, graded against an independent reanalysis
+  archive per sun elevation. 1.0 is agreement; a flat error is a calibration
+  factor, one that grows towards the horizon is a spectral error, and an
+  east-west gap is a sensor that is not level. Bands without a kilowatt-hour
+  of reference across five days are hatched stubs, not values. None of it
+  corrects the forecast — parts of the same error are already absorbed
+  elsewhere in the chain.
 - **Collection**: coverage is the share of 5-minute intervals actually
   captured, counted over daylight hours only. *Lower bound* marks hours where
   the inverter was curtailed — real yield would have been higher. **Skip
@@ -629,6 +673,7 @@ card it meant to include.
 | hourly day-ahead profile (`hourly_profile`) | ≥ 1.23.0 |
 | day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | ≥ 1.25.0 |
 | weekly learning comparison (hourly error, `baseline_basis`) | ≥ 1.25.2 |
+| irradiance sensor check (`sensor_check`) | ≥ 1.26.0 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not

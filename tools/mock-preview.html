@@ -28,6 +28,10 @@
 <h4>conversion evidence (460px)</h4><div class="narrow" id="conve"></div>
 <h4>nowcast — running (460px)</h4><div class="narrow" id="nc1"></div>
 <h4>nowcast — inactive, reason is the content (460px)</h4><div class="narrow" id="nc2"></div>
+<h4>sensor check — 72 days of evidence (820px)</h4><div style="width:820px" id="sc1"></div>
+<h4>sensor check — two bands speak, three do not yet (460px)</h4><div class="narrow" id="sc2"></div>
+<h4>sensor check — sensor configured, nothing referenced yet (460px)</h4><div class="narrow" id="sc3"></div>
+<h4>sensor check — no irradiance sensor: must render NOTHING (460px)</h4><div class="narrow" id="sc4"></div>
 <h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
 <h4>curve — blocked: inverter reports derived AC (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
@@ -366,6 +370,53 @@
         forecast_error_wm2: -141.5, nowcast_active: false,
         nowcast_reason: "thin_window", station_air_share_today: null,
         friendly_name: "PV Anlage Einstrahlung Prognose" } },
+    // ---- irradiance sensor check ----------------------------------------
+    // The real figures from Andy's GW2000A, 889 hours over 72 days: a quarter
+    // low at noon, nearly half low at dusk. Nothing corrects it.
+    "sensor.ghi_check": { entity_id: "sensor.ghi_check", state: "612",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
+        ghi_entity: "sensor.gw2000a_solar_radiation", illuminance_entity: null,
+        sensor_check: { ratio: 0.742, hours: 889, days: 72, reference_kwh: 343.0,
+          by_elevation: [{ elevation: "3-15", ratio: 0.597, hours: 91, days: 60, reference_kwh: 10.17, usable: true }, { elevation: "15-25", ratio: 0.654, hours: 158, days: 72, reference_kwh: 32.79, usable: true }, { elevation: "25-35", ratio: 0.726, hours: 186, days: 72, reference_kwh: 63.21, usable: true }, { elevation: "35-45", ratio: 0.749, hours: 228, days: 72, reference_kwh: 101.83, usable: true }, { elevation: "45-90", ratio: 0.775, hours: 226, days: 55, reference_kwh: 134.96, usable: true }],
+          east_west: { east: 0.747, west: 0.706, difference: 0.041 },
+          slope: 0.178, reference_sources: ["era5", "satellite_radiation_seamless"],
+          reading: "reads low, and more so as the sun drops",
+          hours_awaiting_reference: 23, epoch: 0 },
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
+    // Two weeks in: the two midday bands speak, dawn and dusk do not yet —
+    // they must look like "not yet", never like a value.
+    "sensor.ghi_check_thin": { entity_id: "sensor.ghi_check_thin", state: "480",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
+        ghi_entity: "sensor.pyranometer", illuminance_entity: null,
+        sensor_check: { ratio: 1.024, hours: 112, days: 12, reference_kwh: 40.4,
+          by_elevation: [{ elevation: "3-15", ratio: null, hours: 4, days: 3, reference_kwh: 0.31, usable: false }, { elevation: "15-25", ratio: null, hours: 9, days: 4, reference_kwh: 0.94, usable: false }, { elevation: "25-35", ratio: 1.031, hours: 41, days: 12, reference_kwh: 13.6, usable: true }, { elevation: "35-45", ratio: 1.018, hours: 52, days: 12, reference_kwh: 22.4, usable: true }, { elevation: "45-90", ratio: null, hours: 6, days: 2, reference_kwh: 3.1, usable: false }],
+          east_west: { east: 1.071, west: 0.968, difference: 0.103 },
+          slope: 0.013, reference_sources: ["era5"],
+          reading: "differs east to west -- check that the sensor is level",
+          hours_awaiting_reference: 18, epoch: 0 },
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
+    // Sensor configured, backfill never run: banked hours, no reference.
+    "sensor.ghi_check_fresh": { entity_id: "sensor.ghi_check_fresh", state: "310",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "measured",
+        ghi_entity: "sensor.pyranometer", illuminance_entity: null,
+        sensor_check: { ratio: null, hours: 0, days: 0, reference_kwh: 0.0,
+          by_elevation: [{ elevation: "3-15", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "15-25", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "25-35", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "35-45", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "45-90", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }],
+          east_west: { east: null, west: null, difference: null },
+          slope: null, reference_sources: [],
+          reading: "not enough evidence yet",
+          hours_awaiting_reference: 61, epoch: 0 },
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
+    // No irradiance sensor at all: the block exists and is empty, and the
+    // card must disappear rather than publish its zeros.
+    "sensor.ghi_check_none": { entity_id: "sensor.ghi_check_none", state: "unknown",
+      attributes: { unit_of_measurement: "W/m²", truth_source: "nowcast",
+        ghi_entity: null, illuminance_entity: null,
+        sensor_check: { ratio: null, hours: 0, days: 0, reference_kwh: 0.0,
+          by_elevation: [{ elevation: "3-15", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "15-25", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "25-35", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "35-45", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }, { elevation: "45-90", ratio: null, hours: 0, days: 0, reference_kwh: 0.0, usable: false }],
+          east_west: { east: null, west: null, difference: null },
+          slope: null, reference_sources: [], reading: "not enough evidence yet",
+          hours_awaiting_reference: 0, epoch: 0 },
+        friendly_name: "PV Anlage Einstrahlung Prognose" } },
     "sensor.g3_ac": { entity_id: "sensor.g3_ac", state: "0.9",
       attributes: { forecast: acG1, today_kwh: 4.2, tomorrow_kwh: 3.6,
         output_path: "direct", curve_source: "datasheet", curve_prior: "datasheet",
@@ -551,6 +602,10 @@
         mode: "conversion_evidence", title: "Lernen — Wandlungs-Evidenz" }],
       ["#nc1", "pvstrings-nowcast", { entity: "sensor.ghi_on" }],
       ["#nc2", "pvstrings-nowcast", { entity: "sensor.ghi_off" }],
+      ["#sc1", "pvstrings-sensor-check", { entity: "sensor.ghi_check" }],
+      ["#sc2", "pvstrings-sensor-check", { entity: "sensor.ghi_check_thin" }],
+      ["#sc3", "pvstrings-sensor-check", { entity: "sensor.ghi_check_fresh" }],
+      ["#sc4", "pvstrings-sensor-check", { entity: "sensor.ghi_check_none" }],
       ["#curve1", "pvstrings-curve", { entity: "sensor.g1_ac", title: "Wandlungs-Kennlinie — Netz" }],
       ["#curve2", "pvstrings-curve", { entity: "sensor.g3_ac", title: "Wandlungs-Kennlinie — Ost-WR" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",

@@ -12,8 +12,8 @@
  *   FMT       number/date/energy formatting (Intl, HA timezone)
  *   DATA      websocket wrappers, registry model, statistics helpers
  *   UI        problem panel, withheld chip, tooltip, base card class
- *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST / CARD:CURVE
- *   CARD:CHAIN
+ *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST
+ *   CARD:SENSORCHECK / CARD:CURVE / CARD:CHAIN
  *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE / CARD:MATURITY
  *   CARD:LEARNING / CARD:HEALTH / CARD:THERMAL
  *   STRATEGY  registry -> generated dashboard
@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.18.0";
+const PVS_VERSION = "0.19.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -89,6 +89,14 @@ const FEATURES = {
   nowcast: {
     test: (a) => a != null && "nowcast_active" in a,
     attr: "nowcast_active", since: "1.21.0",
+  },
+  // the irradiance sensor graded against an independent reanalysis archive
+  // (>= 1.26). Tested on the block, not on its ratio: a plant whose sensor
+  // has no referenced hour yet publishes the block full of nulls, and that
+  // is a state to draw, not a missing feature.
+  sensor_check: {
+    test: (a) => a?.sensor_check != null && "by_elevation" in a.sensor_check,
+    attr: "sensor_check", since: "1.26.0",
   },
   // conversion entities must say what they are — without output_path and
   // curve_source the card would silently assume AC semantics
@@ -241,6 +249,47 @@ const STR = {
     "nc_reason_learning_off": "learning is switched off",
     "nc_reason_other": "not running: {reason}",
     "nc_not_confused": "Not the same as “learned against the source's own short-horizon run” in the source-bias table: that phrase describes where the bias is learned from, not what corrects the forecast here.",
+    // ---- irradiance sensor check (PV Strings >= 1.26) --------------------
+    // The plant's own irradiance sensor held against an independent
+    // reanalysis archive, folded by sun elevation. Diagnosis only, and the
+    // card has to say so: nothing here corrects the forecast.
+    "sc_title": "Irradiance sensor vs. archive",
+    "sc_overall": "overall",
+    "sc_axis_elev": "sun elevation",
+    "sc_reference": "reference 1.0",
+    "sc_measured": "measured / reference",
+    "sc_band_unusable": "not yet",
+    "sc_band_why": "A band speaks once it holds {kwh} kWh/m² of reference across {days} separate days.",
+    "sc_evidence": "{hours} hours · {days} days · {kwh} kWh/m² reference",
+    "sc_sources": "reference: {sources}",
+    "sc_pending": "{n} banked hours are still waiting for their reference — the archive runs about a week behind real time, so a few dozen is the normal state and not a backlog.",
+    "sc_never_referenced": "no hour carries a reference yet — run pvstrings.backfill_irradiance_check once, and only over a period in which the sensor stood in the same place, clean and level",
+    "sc_no_evidence": "no elevation band carries enough evidence yet",
+    "sc_slope": "spread",
+    "sc_slope_tip": "Highest minus lowest usable band. Flat is a calibration error, rising towards noon is a spectral one — that single number is what separates the two.",
+    "sc_tilt": "east − west",
+    "sc_tilt_tip": "East minus west at matched sun elevations. From ±0.08 the sensor is probably not level; a north-south tilt hides from this test entirely.",
+    "sc_note": "Diagnosis only: none of this corrects the forecast. The nowcast, the source-bias layer and the sky map have long since absorbed parts of this error, so a factor in front of them would correct it twice.",
+    "sc_tip_ratio": "measured / reference",
+    "sc_tip_hours": "hours",
+    "sc_tip_days": "days",
+    "sc_tip_ref": "reference",
+    // The integration publishes its verdict in English, from a closed set of
+    // phrases. Translated here rather than passed through — a German
+    // dashboard stays German.
+    "sc_dir_low": "reads low",
+    "sc_dir_high": "reads high",
+    "sc_dir_crosses": "crosses the reference",
+    "sc_shape_drops": "{dir}, and more so as the sun drops",
+    "sc_shape_rises": "{dir}, and more so as the sun rises — unusual",
+    "sc_shape_flat": "{dir} by about the same amount at every sun height",
+    "sc_read_thin": "not enough evidence yet",
+    "sc_read_tilt": "differs east to west — check that the sensor is level",
+    "sc_read_oneband": "one elevation band only — no shape yet",
+    "sc_read_uneven": "uneven across the sky, with no clear trend",
+    "sc_read_agrees": "agrees with the reference",
+    "sc_read_close": "close to the reference, but not evenly so",
+    "help_sensorcheck": "**Irradiance sensor check**: a cheap weather station does not measure irradiance. It measures illuminance with a diode weighted for the human eye and divides by a constant, and that constant holds for exactly one reference case — the lower the sun, the redder its light and the larger the share the diode never sees. Every closed hour is held against an independent reanalysis archive and folded by sun elevation; **1.0 means the sensor agrees with the reference**. A flat error is a calibration factor, one that grows towards the horizon is a spectral error, and a gap between east and west is a sensor that is not level. Bands that have not gathered a kilowatt-hour of reference across five days yet are drawn as a hatched stub, never as a value. **Nothing here corrects the forecast** — the nowcast, the source-bias layer and the sky map have absorbed parts of this error already, so a factor in front of them would correct it twice.",
     "conv_curve_datasheet": "datasheet curve",
     // `custom` is hand-entered support points — a claim by the owner, not a
     // measurement. Since measured curves now exist, the wording must not
@@ -611,6 +660,41 @@ const STR = {
     "nc_reason_learning_off": "das Lernen ist ausgeschaltet",
     "nc_reason_other": "läuft nicht: {reason}",
     "nc_not_confused": "Nicht dasselbe wie „nur gegen den Kurzfrist-Lauf der Quelle selbst gelernt“ in der Source-Bias-Tabelle: das beschreibt, woher der Bias gelernt wird, nicht was hier die Prognose korrigiert.",
+    // ---- Sensor-Check (PV Strings >= 1.26) -------------------------------
+    "sc_title": "Einstrahlungssensor gegen Archiv",
+    "sc_overall": "gesamt",
+    "sc_axis_elev": "Sonnenhöhe",
+    "sc_reference": "Referenz 1,0",
+    "sc_measured": "gemessen / Referenz",
+    "sc_band_unusable": "noch nicht",
+    "sc_band_why": "Ein Band sagt etwas aus, sobald es {kwh} kWh/m² Referenz an {days} verschiedenen Tagen trägt.",
+    "sc_evidence": "{hours} Stunden · {days} Tage · {kwh} kWh/m² Referenz",
+    "sc_sources": "Referenz: {sources}",
+    "sc_pending": "{n} gebankte Stunden warten noch auf ihre Referenz — das Archiv hinkt der Echtzeit rund eine Woche hinterher, ein paar Dutzend sind der Normalzustand und kein Rückstand.",
+    "sc_never_referenced": "noch keine Stunde hat eine Referenz — einmal pvstrings.backfill_irradiance_check ausführen, und nur über einen Zeitraum, in dem der Sensor am selben Ort stand, sauber und waagerecht",
+    "sc_no_evidence": "noch kein Höhenband trägt genug Evidenz",
+    "sc_slope": "Spanne",
+    "sc_slope_tip": "Höchstes minus niedrigstes brauchbares Band. Flach ist ein Kalibrierfehler, zum Mittag hin steigend ein Spektralfehler — diese eine Zahl trennt die beiden.",
+    "sc_tilt": "Ost − West",
+    "sc_tilt_tip": "Ost minus West bei abgeglichenen Sonnenhöhen. Ab ±0,08 steht der Sensor vermutlich nicht waagerecht; eine Nord-Süd-Schräglage entgeht diesem Test ganz.",
+    "sc_note": "Reine Diagnose: nichts davon korrigiert die Prognose. Nowcast, Source-Bias-Schicht und Himmelskarte haben Teile dieses Fehlers längst aufgenommen, ein Faktor davor würde doppelt korrigieren.",
+    "sc_tip_ratio": "gemessen / Referenz",
+    "sc_tip_hours": "Stunden",
+    "sc_tip_days": "Tage",
+    "sc_tip_ref": "Referenz",
+    "sc_dir_low": "liest zu niedrig",
+    "sc_dir_high": "liest zu hoch",
+    "sc_dir_crosses": "kreuzt die Referenz",
+    "sc_shape_drops": "{dir}, und umso stärker, je tiefer die Sonne steht",
+    "sc_shape_rises": "{dir}, und umso stärker, je höher die Sonne steht — ungewöhnlich",
+    "sc_shape_flat": "{dir}, bei jeder Sonnenhöhe etwa gleich stark",
+    "sc_read_thin": "noch nicht genug Evidenz",
+    "sc_read_tilt": "unterscheidet sich von Ost nach West — prüfen, ob der Sensor waagerecht steht",
+    "sc_read_oneband": "nur ein Höhenband — noch keine Form erkennbar",
+    "sc_read_uneven": "ungleichmäßig über den Himmel, ohne klaren Trend",
+    "sc_read_agrees": "stimmt mit der Referenz überein",
+    "sc_read_close": "nah an der Referenz, aber nicht gleichmäßig",
+    "help_sensorcheck": "**Sensor-Check**: Eine billige Wetterstation misst keine Einstrahlung. Sie misst Beleuchtungsstärke mit einer aufs menschliche Auge gewichteten Diode und teilt durch eine Konstante — und die stimmt für genau einen Referenzfall: Je tiefer die Sonne steht, desto röter ihr Licht und desto größer der Anteil, den die Diode nicht sieht. Jede abgeschlossene Stunde wird gegen ein unabhängiges Reanalyse-Archiv gehalten und nach Sonnenstand gebändert; **1,0 heißt, der Sensor stimmt mit der Referenz überein**. Ein flacher Fehler ist ein Kalibrierfaktor, ein zum Horizont hin wachsender ein Spektralfehler, und ein Unterschied zwischen Ost und West ein Sensor, der nicht waagerecht steht. Bänder, die noch keine Kilowattstunde Referenz an fünf Tagen gesammelt haben, stehen als schraffierter Stummel da, nie als Wert. **Nichts davon korrigiert die Prognose** — Nowcast, Source-Bias-Schicht und Himmelskarte haben Teile dieses Fehlers bereits aufgenommen, ein Faktor davor würde doppelt korrigieren.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
     "conv_curve_custom": "selbst eingetragen",
     "conv_curve_learned": "gelernte Kennlinie",
@@ -3302,6 +3386,242 @@ const NC_CSS = `
   .kv-note.dim { color: var(--secondary-text-color); }
 `;
 
+/* ===================== SECTION: CARD:SENSORCHECK ========================= */
+
+// The plant's own irradiance sensor graded against an independent reanalysis
+// archive, folded by sun elevation (PV Strings >= 1.26). A cheap station does
+// not measure irradiance at all: it measures illuminance with an eye-weighted
+// diode and divides by a constant that holds for one reference case, so the
+// error grows as the sun reddens. Diagnosis only — the integration corrects
+// none of it, because the nowcast, the bias layer and the sky map have
+// absorbed parts of the same error already. The card says that out loud.
+//
+// Absence is silence here, against the usual rule: a plant with no irradiance
+// sensor has no check to fail, and a card reading "0.0" would be a claim
+// about a sensor that does not exist.
+
+// Mirrors core/irradiance_check.py — quoted in the tooltip, never computed
+// from: `usable` is the only truth about whether a band says anything.
+const SC_BAND_MIN_KWH = 1;
+const SC_BAND_MIN_DAYS = 5;
+
+const SC_PLAIN_READINGS = {
+  "not enough evidence yet": "sc_read_thin",
+  "differs east to west -- check that the sensor is level": "sc_read_tilt",
+  "one elevation band only -- no shape yet": "sc_read_oneband",
+  "uneven across the sky, with no clear trend": "sc_read_uneven",
+  "agrees with the reference": "sc_read_agrees",
+  "close to the reference, but not evenly so": "sc_read_close",
+};
+// The compound verdicts are a direction plus a shape, so they translate as
+// two pieces — German puts them in the same order, and a template keeps the
+// door open where it would not.
+const SC_SHAPES = [
+  [", and more so as the sun drops", "sc_shape_drops"],
+  [", and more so as the sun rises -- unusual", "sc_shape_rises"],
+  [" by about the same amount at every sun height", "sc_shape_flat"],
+];
+const SC_DIRECTIONS = {
+  "reads low": "sc_dir_low",
+  "reads high": "sc_dir_high",
+  "crosses the reference": "sc_dir_crosses",
+};
+
+// A phrase this dash does not know (newer integration) falls back to the
+// English original: still true, only untranslated — better than a blank line
+// where the verdict belongs.
+function scReading(hass, reading) {
+  if (!reading) return null;
+  const plain = SC_PLAIN_READINGS[reading];
+  if (plain) return t(hass, plain);
+  for (const [suffix, key] of SC_SHAPES) {
+    if (!reading.endsWith(suffix)) continue;
+    const dir = SC_DIRECTIONS[reading.slice(0, -suffix.length)];
+    if (dir) return t(hass, key, { dir: t(hass, dir) });
+  }
+  return reading;
+}
+
+class PvsSensorCheckCard extends PvsBaseCard {
+  getCardSize() { return 4; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.style.removeProperty("display");
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${SC_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wireMoreInfo();
+      if (!this._wired) {
+        this._wired = true;
+        wireTooltip(this, { selector: "[data-band]", content: (el) => this._bandTip(el) });
+      }
+    };
+    // An unconfigured card is a mistake and says so. Everything below is a
+    // legitimate absence and disappears without a word.
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const hide = () => { this.shadowRoot.innerHTML = ""; this.style.display = "none"; };
+    const st = hass.states[cfg.entity];
+    if (!st) return hide();
+    const a = st.attributes;
+    if (!FEATURES.sensor_check.test(a)) return hide();
+    // No irradiance sensor configured: the check does not exist for this
+    // plant. Its zeros are not a reading.
+    if (!a.ghi_entity && !a.illuminance_entity) return hide();
+
+    const sc = a.sensor_check;
+    const bands = sc.by_elevation ?? [];
+    const usable = bands.filter((b) => b.usable && b.ratio != null);
+
+    // ---- head --------------------------------------------------------------
+    const chips = [];
+    if (sc.ratio != null) {
+      chips.push(`<span class="pvs-chip">${t(hass, "sc_overall")}
+        <span class="v">${fmtNum(hass, sc.ratio, 2)}</span></span>`);
+    }
+    if (sc.slope != null) {
+      chips.push(`<span class="pvs-chip" title="${esc(t(hass, "sc_slope_tip"))}">${t(hass, "sc_slope")}
+        <span class="v">${fmtNum(hass, sc.slope, 2)}</span></span>`);
+    }
+    const tilt = sc.east_west?.difference;
+    if (tilt != null) {
+      // The integration's own threshold: below it the verdict stays silent
+      // about tilt, so the chip must not shout either.
+      const off = Math.abs(tilt) >= 0.08;
+      chips.push(`<span class="pvs-chip${off ? " warn" : ""}" title="${esc(t(hass, "sc_tilt_tip"))}">${t(hass, "sc_tilt")}
+        <span class="v">${fmtSigned(hass, tilt, 2)}</span></span>`);
+    }
+    const head = `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(cfg.title ?? t(hass, "sc_title"))}</span>
+      ${chips.join("")}${helpChip("sensorcheck")}</div>`;
+
+    // ---- verdict, translated ------------------------------------------------
+    const verdict = scReading(hass, sc.reading);
+    // Why there is no ratio yet: banked hours waiting for the archive is a
+    // different state from a plant with no history at all, and only the
+    // first one has an action attached to it.
+    const pending = sc.hours_awaiting_reference ?? 0;
+    const noRatio = sc.ratio == null
+      ? withheldHTML(pending > 0 ? t(hass, "sc_never_referenced") : t(hass, "sc_no_evidence"))
+      : "";
+
+    // ---- the five bands over the sun's height -------------------------------
+    const PAD_L = 32, PAD_R = 12, PAD_T = 18, PAD_B = 32, PW = 540, PH = 148;
+    const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
+    const top = Math.max(1.2, Math.ceil((Math.max(1, ...usable.map((b) => b.ratio)) + 0.12) * 10) / 10);
+    const yOf = (v) => PAD_T + PH - (Math.max(0, Math.min(top, v)) / top) * PH;
+    const slot = PW / Math.max(1, bands.length);
+    const barW = Math.min(58, slot * 0.5);
+    // A band without a verdict gets the stub the daily card gives a day
+    // whose forecast was never issued: hatched, at the baseline, the height
+    // of nothing. Never omitted, and never up at the bright end of the
+    // scale where it would read as a value.
+    const STUB = 13;
+
+    let grid = "";
+    for (const v of [0, 0.5, 1]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(v).toFixed(1)}" x2="${W - PAD_R}" y2="${yOf(v).toFixed(1)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${(yOf(v) + 3).toFixed(1)}" text-anchor="end">${fmtNum(hass, v, 1)}</text>`;
+    }
+    // 1.0 is not a gridline, it is the thing everything is measured against.
+    const refY = yOf(1).toFixed(1);
+    grid += `<line class="sc-ref" x1="${PAD_L}" y1="${refY}" x2="${W - PAD_R}" y2="${refY}"/>
+      <text class="sc-reflbl" x="${W - PAD_R}" y="${(yOf(1) - 5).toFixed(1)}" text-anchor="end">${t(hass, "sc_reference")}</text>`;
+
+    let cols = "";
+    bands.forEach((b, i) => {
+      const cx = PAD_L + slot * (i + 0.5);
+      const x = cx - barW / 2;
+      const label = String(b.elevation ?? "?").replace("-", "–");
+      const data = `data-band="${esc(label)}" data-usable="${b.usable ? 1 : 0}"
+        data-ratio="${b.ratio ?? ""}" data-hours="${b.hours ?? 0}"
+        data-days="${b.days ?? 0}" data-kwh="${b.reference_kwh ?? 0}"`;
+      if (b.usable && b.ratio != null) {
+        const y = yOf(b.ratio);
+        cols += `<rect class="sc-bar" ${data} x="${x.toFixed(1)}" y="${y.toFixed(1)}"
+            width="${barW.toFixed(1)}" height="${Math.max(1, PAD_T + PH - y).toFixed(1)}" rx="2"/>
+          <text class="sc-val" x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle">${fmtNum(hass, b.ratio, 2)}</text>`;
+      } else {
+        const y = PAD_T + PH - STUB;
+        cols += `<rect class="sc-stub" ${data} x="${x.toFixed(1)}" y="${y.toFixed(1)}"
+            width="${barW.toFixed(1)}" height="${STUB}" rx="2" fill="var(--pvs-unobserved)"/>
+          <rect class="sc-stub" ${data} x="${x.toFixed(1)}" y="${y.toFixed(1)}"
+            width="${barW.toFixed(1)}" height="${STUB}" rx="2" fill="url(#pvs-sc-hatch)"/>
+          <text class="sc-notyet" x="${cx.toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle">${t(hass, "sc_band_unusable")}</text>`;
+      }
+      cols += `<text class="axis" x="${cx.toFixed(1)}" y="${(H - PAD_B + 14).toFixed(1)}" text-anchor="middle">${esc(label)}</text>`;
+    });
+    cols += `<text class="sc-axtitle" x="${(PAD_L + PW / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle">${t(hass, "sc_axis_elev")} (°)</text>`;
+
+    // ---- evidence, small, underneath ----------------------------------------
+    const ev = [];
+    if (sc.hours) {
+      ev.push(t(hass, "sc_evidence", {
+        hours: fmtNum(hass, sc.hours, 0), days: fmtNum(hass, sc.days ?? 0, 0),
+        kwh: fmtNum(hass, sc.reference_kwh ?? 0, 0),
+      }));
+    }
+    if (sc.reference_sources?.length) {
+      ev.push(t(hass, "sc_sources", { sources: sc.reference_sources.join(", ") }));
+    }
+    // Only once there is a ratio: before that the withheld line above has
+    // already said what is missing, and repeating the count reads as two
+    // different problems.
+    if (pending > 0 && sc.ratio != null) ev.push(t(hass, "sc_pending", { n: fmtNum(hass, pending, 0) }));
+
+    card(`
+      ${head}
+      ${verdict ? `<div class="sc-verdict">${esc(verdict)}</div>` : ""}
+      ${noRatio}
+      <div class="sc-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        <defs>${hatchPattern("pvs-sc-hatch")}</defs>
+        ${grid}${cols}
+      </svg></div>
+      <div class="pvs-legend">
+        <span class="it"><span class="sw" style="background:var(--pvs-measure)"></span>${t(hass, "sc_measured")}</span>
+        <span class="it"><svg width="16" height="10"><line x1="0" y1="5" x2="16" y2="5"
+          stroke="var(--primary-text-color)" stroke-width="1.4" stroke-dasharray="5 3" opacity="0.55"/></svg>${t(hass, "sc_reference")}</span>
+        <span class="it"><svg width="14" height="10"><rect width="14" height="10" rx="2" fill="var(--pvs-unobserved)"/><rect width="14" height="10" rx="2" fill="url(#pvs-sc-hatch-l)"/><defs>${hatchPattern("pvs-sc-hatch-l")}</defs></svg>${t(hass, "sc_band_unusable")}</span>
+      </div>
+      ${ev.map((line) => `<div class="sc-ev">${line}</div>`).join("")}
+      <div class="sc-note">${t(hass, "sc_note")}</div>`);
+  }
+
+  _bandTip(el) {
+    const hass = this._hass, d = el.dataset;
+    const row = (k, v) => `<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+    return `<div class="h">${esc(d.band)}°</div>
+      ${d.ratio ? row(t(hass, "sc_tip_ratio"), fmtNum(hass, Number(d.ratio), 3)) : ""}
+      ${row(t(hass, "sc_tip_hours"), fmtNum(hass, Number(d.hours), 0))}
+      ${row(t(hass, "sc_tip_days"), fmtNum(hass, Number(d.days), 0))}
+      ${row(t(hass, "sc_tip_ref"), `${fmtNum(hass, Number(d.kwh), 1)} kWh/m²`)}
+      ${d.usable === "0" ? `<div class="k" style="margin-top:5px">${t(hass, "sc_band_why", { kwh: SC_BAND_MIN_KWH, days: SC_BAND_MIN_DAYS })}</div>` : ""}`;
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entity: "" }; }
+}
+
+const SC_CSS = `
+  .sc-verdict { font-size: 17px; font-weight: 600; line-height: 1.35;
+    color: var(--primary-text-color); margin: 2px 0 10px; }
+  .sc-wrap { margin-top: 4px; }
+  .sc-wrap svg { width: 100%; height: auto; display: block; }
+  .sc-bar { fill: var(--pvs-measure); cursor: help; }
+  .sc-stub { cursor: help; }
+  .sc-bar:hover { opacity: 0.85; }
+  .sc-val { fill: var(--primary-text-color); font-size: 10.5px;
+    font-family: var(--pvs-mono); font-variant-numeric: tabular-nums; }
+  .sc-notyet { fill: var(--secondary-text-color); font-size: 9.5px; }
+  .sc-ref { stroke: var(--primary-text-color); stroke-width: 1.4;
+    stroke-dasharray: 5 3; opacity: 0.55; }
+  .sc-reflbl, .sc-axtitle { fill: var(--secondary-text-color); font-size: 9.5px; }
+  .sc-ev { font-size: 11px; color: var(--secondary-text-color); margin-top: 4px; line-height: 1.5; }
+  .sc-note { font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 6px;
+    background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 10px; }
+`;
+
 /* ====================== SECTION: CARD:CURVE ============================== */
 
 // The learned conversion curve against the prior it started from.
@@ -5823,6 +6143,14 @@ async function buildViews(hass, config) {
         // story: the bias map says what the source gets wrong on average,
         // the nowcast what the sensor says about the next two hours
         ...(ghi ? [{ type: "custom:pvstrings-nowcast", entity: ghi }] : []),
+        // ... and the third thing that sensor knows: whether it is telling
+        // the truth. Added only where the check exists AND a sensor is
+        // configured — on a plant without one the block is all nulls, and
+        // a card of zeros would be a claim about hardware that is not there.
+        ...(ghi && FEATURES.sensor_check.test(hass.states[ghi]?.attributes)
+          && (hass.states[ghi]?.attributes?.ghi_entity
+            || hass.states[ghi]?.attributes?.illuminance_entity)
+          ? [{ type: "custom:pvstrings-sensor-check", entity: ghi }] : []),
       ] });
     } else {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
@@ -6014,6 +6342,8 @@ const CARDS = [
     "Hourly forecast vs unshaded vs actual — the whole shading diagnostic in one chart."],
   ["pvstrings-nowcast", PvsNowcastCard, "PV Strings Nowcast",
     "How the measured clearness of the last quarter hour is blended into the coming forecast."],
+  ["pvstrings-sensor-check", PvsSensorCheckCard, "PV Strings Sensor Check",
+    "The plant's irradiance sensor against an independent archive, per sun elevation. Diagnosis only."],
   ["pvstrings-curve", PvsCurveCard, "PV Strings Conversion Curve",
     "The learned efficiency curve against the datasheet prior it started from."],
   ["pvstrings-conversion", PvsConversionCard, "PV Strings Conversion",
@@ -6043,7 +6373,7 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
       type: tag, name, description,
-      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy", "pvstrings-learning"].includes(tag),
+      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy", "pvstrings-learning", "pvstrings-sensor-check"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }
