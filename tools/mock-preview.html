@@ -32,6 +32,7 @@
 <h4>sensor check — two bands speak, three do not yet (460px)</h4><div class="narrow" id="sc2"></div>
 <h4>sensor check — sensor configured, nothing referenced yet (460px)</h4><div class="narrow" id="sc3"></div>
 <h4>sensor check — no irradiance sensor: must render NOTHING (460px)</h4><div class="narrow" id="sc4"></div>
+<h4>calibration trial — day one, nothing scored yet (460px)</h4><div class="narrow" id="cal1"></div>
 <h4>learned curve vs prior (820px)</h4><div style="width:820px" id="curve1"></div>
 <h4>curve — blocked: inverter reports derived AC (820px)</h4><div style="width:820px" id="curve2"></div>
 <h4>maturity (940px container)</h4><div class="wideb" id="mat"></div>
@@ -436,6 +437,7 @@
     { entity_id: "sensor.plant_da30", platform: "pvstrings", device_id: "dp", unique_id: "e_wmape_day_ahead_30d", translation_key: "wmape_day_ahead_30d" },
     { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
+    { entity_id: "sensor.ghi_check", platform: "pvstrings", device_id: "dp", unique_id: "e_ghi_forecast", translation_key: "ghi_forecast" },
     { entity_id: "sensor.g1_ac", platform: "pvstrings", device_id: "dg", unique_id: "e_g1_forecast_ac", translation_key: "group_forecast_ac" },
     { entity_id: "sensor.g3_ac", platform: "pvstrings", device_id: "dg3", unique_id: "e_g3_forecast_ac", translation_key: "group_forecast_ac" },
   ];
@@ -569,6 +571,25 @@
           return { response: mockDay(dt) };
         }
         if (cmd.domain === "pvstrings" && cmd.service === "get_weeks") return { response: mockWeeks() };
+        if (cmd.domain === "pvstrings" && cmd.service === "calibration_trial") {
+          const fresh = () => ({ horizon: "da", hours_archived: 0, hours_clear: 0, days: 0,
+            hours_of_day: [], live_profile: {}, shadow_profile: {},
+            live_worst_hour: null, shadow_worst_hour: null,
+            live_level: null, shadow_level: null, improvement: null,
+            verdict: { decided: false, days: 0, days_needed: 15,
+              min_improvement: 0.5, max_level_drift: 0.02,
+              blocking: ["only 0 clear days, needs 15",
+                "no profile on one of the branches",
+                "no level on one of the branches"] } });
+          return { response: { running: true, published_branch: "live", applied: false,
+            curve: { active: true, revision: "c6768bb33c1a", capped: false,
+              evidence_from_deg: 11.7, evidence_to_deg: 51.6,
+              knots: [{ elevation: 11.7, factor: 1.5 }, { elevation: 20.5, factor: 1.5 },
+                { elevation: 30.6, factor: 1.343 }, { elevation: 40.4, factor: 1.307 },
+                { elevation: 51.6, factor: 1.26 }] },
+            day_ahead: fresh(), short_term: { ...fresh(), horizon: "now" },
+            note: "Diagnosis of a trial, not a setting." } };
+        }
         return {};
       case "config/entity_registry/list": return entReg;
       case "config/device_registry/list": return devReg;
@@ -578,7 +599,7 @@
     }
   };
   const hass = { states, callWS,
-    services: { pvstrings: { get_day: {}, get_weeks: {} } },
+    services: { pvstrings: { get_day: {}, get_weeks: {}, calibration_trial: {} } },
     fetchWithAuth: async (url) => url.includes("/api/diagnostics/")
       ? new Response(JSON.stringify(diagJson), { status: 200 })
       : new Response("{}", { status: 404 }),
@@ -606,6 +627,7 @@
       ["#sc2", "pvstrings-sensor-check", { entity: "sensor.ghi_check_thin" }],
       ["#sc3", "pvstrings-sensor-check", { entity: "sensor.ghi_check_fresh" }],
       ["#sc4", "pvstrings-sensor-check", { entity: "sensor.ghi_check_none" }],
+      ["#cal1", "pvstrings-calibration", { entity: "sensor.ghi_check" }],
       ["#curve1", "pvstrings-curve", { entity: "sensor.g1_ac", title: "Wandlungs-Kennlinie — Netz" }],
       ["#curve2", "pvstrings-curve", { entity: "sensor.g3_ac", title: "Wandlungs-Kennlinie — Ost-WR" }],
       ["#sdp", "pvstrings-kv-table", { entity: "sensor.plant_mo",

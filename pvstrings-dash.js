@@ -13,7 +13,7 @@
  *   DATA      websocket wrappers, registry model, statistics helpers
  *   UI        problem panel, withheld chip, tooltip, base card class
  *   CARD:SKYMAP / CARD:FORECAST / CARD:CONVERSION / CARD:NOWCAST
- *   CARD:SENSORCHECK / CARD:CURVE / CARD:CHAIN
+ *   CARD:SENSORCHECK / CARD:CALIBRATION / CARD:CURVE / CARD:CHAIN
  *   CARD:DAILY / CARD:HOURPROFILE / CARD:KVTABLE / CARD:MATURITY
  *   CARD:LEARNING / CARD:HEALTH / CARD:THERMAL
  *   STRATEGY  registry -> generated dashboard
@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.19.2";
+const PVS_VERSION = "0.20.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -289,6 +289,56 @@ const STR = {
     "sc_read_uneven": "uneven across the sky, with no clear trend",
     "sc_read_agrees": "agrees with the reference",
     "sc_read_close": "close to the reference, but not evenly so",
+    // ---- calibration trial (PV Strings >= 1.26) ---------------------------
+    // A second, complete model branch reading the same sensor through a
+    // correction curve, learning its own model from scratch. Diagnosis of a
+    // trial, never a setting — and for the first weeks it has nothing to draw
+    // but its own progress, which must read as "collecting", not "broken".
+    "cal_title": "Calibration trial",
+    "cal_running": "running",
+    "cal_not_needed": "no trial needed",
+    "cal_no_evidence": "waiting for evidence",
+    "cal_loading": "reading the trial…",
+    "cal_days": "{days} of {needed} clear days",
+    "cal_hours_sub": "{archived} hours archived, {clear} of them on clear days",
+    "cal_hours_none": "the first hour is archived on the hour — the trial started today",
+    "cal_published_live": "The forecast still comes from the existing model.",
+    "cal_published_cal": "The forecast now comes from the calibrated model.",
+    "cal_curve": "correction curve",
+    "cal_curve_range": "{from}× at {low}° → {to}× at {high}°",
+    "cal_curve_capped": "curve capped",
+    "cal_curve_rev": "revision {rev}",
+    "cal_h_da": "evening before",
+    "cal_h_now": "short-term",
+    "cal_h_tip": "The evening-before issue is where the bias layer and the weather class decide; the nowcast does not reach that far. Short-term includes it.",
+    "cal_leg_live": "existing model",
+    "cal_leg_cal": "calibrated branch",
+    "cal_leg_ref": "reference 1.0",
+    "cal_axis_hour": "hour of day",
+    "cal_chart_empty": "no scored hours yet",
+    "cal_chart_empty_sub": "the trial is collecting clear days",
+    "cal_col_live": "existing",
+    "cal_col_cal": "calibrated",
+    "cal_row_worst": "worst hour",
+    "cal_row_worst_tip": "How far the worst hour of the day is from getting it right. One number that catches both failings: a branch that is uniformly wrong cannot improve it by flattening, and one whose average is right cannot hide a morning at 1.46 behind an afternoon at 0.70.",
+    "cal_row_level": "level",
+    "cal_row_level_tip": "Forecast over actual across every scored hour. It is watched alongside the shape, because a branch that is uniformly low would otherwise win on shape alone while being wrong all day.",
+    "cal_not_yet": "not yet",
+    "cal_improvement": "worst hour improved by",
+    "cal_improvement_needed": "needs {pct}",
+    "cal_waiting": "After {needed} clear days the criterion decides: the worst hour has to lose {improvement} of its error without the level drifting by more than {drift}.",
+    "cal_decided": "The criterion is met — the calibrated branch is measurably better.",
+    "cal_decided_note": "Switching it on stays a decision of yours; nothing switches itself.",
+    "cal_blocking_head": "Not decided yet:",
+    "cal_block_days": "only {n} clear days so far, {m} needed",
+    "cal_block_noprofile": "one of the branches has no hourly profile yet",
+    "cal_block_nolevel": "one of the branches has no level yet",
+    "cal_block_worst": "worst hour {a} against {b} — needs {c}",
+    "cal_block_drift": "level {a} drifted further than {b}",
+    "cal_note": "Every learned layer was trained while reading a sensor that runs low. Rather than correcting that after the fact, a second branch learns the model again through a curve — and is published only if it proves better.",
+    "cal_note_idle": "The check finds nothing about this sensor that a correction curve would fix, so no second branch is running.",
+    "cal_note_wait": "A correction curve needs the sensor check to have gathered evidence first. Until then no second branch runs.",
+    "help_calibration": "**Calibration trial**: the irradiance sensor reads low by an amount that depends on the sun's height, and every layer this plant has learned — the shading map, the source bias, the weather corrections — was trained while reading it. Putting a factor in front of the sensor now would correct the same error twice, because those layers have absorbed parts of it already. So a **second, complete model branch** runs alongside: same plant, same weather, but the sensor read through a correction curve, and its own model learned from scratch. Both branches are scored on the same clear hours, and the card shows their forecast-over-actual by hour of day against 1.0. The criterion was written down **before** the trial began: after the number of clear days named above, the worst hour of the day has to lose half its error, and the overall level must not drift by more than 0.02 while it happens. Until then the published forecast is the existing one, and the empty chart means the trial is still collecting — not that anything is wrong.",
     "help_sensorcheck": "**Irradiance sensor check**: a cheap weather station does not measure irradiance. It measures illuminance with a diode weighted for the human eye and divides by a constant, and that constant holds for exactly one reference case — the lower the sun, the redder its light and the larger the share the diode never sees. Every closed hour is held against an independent reanalysis archive and folded by sun elevation; **1.0 means the sensor agrees with the reference**. A flat error is a calibration factor, one that grows towards the horizon is a spectral error, and a gap between east and west is a sensor that is not level. Bands that have not gathered a kilowatt-hour of reference across five days yet are drawn as a hatched stub, never as a value. **Nothing here corrects the forecast** — the nowcast, the source-bias layer and the sky map have absorbed parts of this error already, so a factor in front of them would correct it twice.",
     "conv_curve_datasheet": "datasheet curve",
     // `custom` is hand-entered support points — a claim by the owner, not a
@@ -695,6 +745,52 @@ const STR = {
     "sc_read_uneven": "ungleichmäßig über den Himmel, ohne klaren Trend",
     "sc_read_agrees": "stimmt mit der Referenz überein",
     "sc_read_close": "nah an der Referenz, aber nicht gleichmäßig",
+    // ---- Kalibrierungsversuch (PV Strings >= 1.26) ------------------------
+    "cal_title": "Kalibrierungsversuch",
+    "cal_running": "läuft",
+    "cal_not_needed": "kein Versuch nötig",
+    "cal_no_evidence": "wartet auf Evidenz",
+    "cal_loading": "Versuch wird gelesen…",
+    "cal_days": "{days} von {needed} klaren Tagen",
+    "cal_hours_sub": "{archived} Stunden archiviert, davon {clear} an klaren Tagen",
+    "cal_hours_none": "die erste Stunde wird zur vollen Stunde archiviert — der Versuch läuft seit heute",
+    "cal_published_live": "Die Prognose kommt weiterhin vom bisherigen Modell.",
+    "cal_published_cal": "Die Prognose kommt jetzt vom kalibrierten Modell.",
+    "cal_curve": "Korrekturkurve",
+    "cal_curve_range": "{from}× bei {low}° → {to}× bei {high}°",
+    "cal_curve_capped": "Kurve gedeckelt",
+    "cal_curve_rev": "Fassung {rev}",
+    "cal_h_da": "Vorabend",
+    "cal_h_now": "Kurzfristig",
+    "cal_h_tip": "Am Vorabend entscheiden Bias-Schicht und Wetterklassifikation; der Nowcast reicht nicht so weit. Kurzfristig zählt er mit.",
+    "cal_leg_live": "bisheriges Modell",
+    "cal_leg_cal": "kalibrierter Zweig",
+    "cal_leg_ref": "Referenz 1,0",
+    "cal_axis_hour": "Stunde des Tages",
+    "cal_chart_empty": "noch keine gewerteten Stunden",
+    "cal_chart_empty_sub": "der Versuch sammelt klare Tage",
+    "cal_col_live": "bisher",
+    "cal_col_cal": "kalibriert",
+    "cal_row_worst": "schlechteste Stunde",
+    "cal_row_worst_tip": "Wie weit die schlechteste Stunde des Tages davon entfernt ist, richtig zu liegen. Eine Zahl, die beide Fehler fängt: Ein durchgehend falscher Zweig kann sie nicht durch Glätten verbessern, und ein im Mittel richtiger kann keinen Vormittag bei 1,46 hinter einem Nachmittag bei 0,70 verstecken.",
+    "cal_row_level": "Pegel",
+    "cal_row_level_tip": "Prognose durch Ist über alle gewerteten Stunden. Er wird neben der Form mitgeprüft, weil ein durchgehend zu niedriger Zweig sonst allein über die Form gewinnen würde, während er den ganzen Tag falsch liegt.",
+    "cal_not_yet": "noch nicht",
+    "cal_improvement": "schlechteste Stunde verbessert um",
+    "cal_improvement_needed": "gebraucht werden {pct}",
+    "cal_waiting": "Nach {needed} klaren Tagen entscheidet das Kriterium: Die schlechteste Stunde muss {improvement} ihres Fehlers verlieren, ohne dass der Pegel um mehr als {drift} abdriftet.",
+    "cal_decided": "Das Kriterium ist erfüllt — der kalibrierte Zweig ist nachweislich besser.",
+    "cal_decided_note": "Das Umschalten bleibt deine Entscheidung; von allein schaltet nichts um.",
+    "cal_blocking_head": "Noch nicht entschieden:",
+    "cal_block_days": "erst {n} klare Tage, gebraucht werden {m}",
+    "cal_block_noprofile": "einer der beiden Zweige hat noch kein Stundenprofil",
+    "cal_block_nolevel": "einer der beiden Zweige hat noch keinen Pegel",
+    "cal_block_worst": "schlechteste Stunde {a} gegen {b} — gebraucht wird {c}",
+    "cal_block_drift": "Pegel {a} ist weiter abgedriftet als {b}",
+    "cal_note": "Jede gelernte Schicht wurde beim Lesen eines zu niedrig messenden Sensors trainiert. Statt das nachträglich zu korrigieren, lernt ein zweiter Zweig das Modell durch eine Kurve neu — veröffentlicht wird er nur, wenn er sich als besser erweist.",
+    "cal_note_idle": "Die Prüfung findet an diesem Sensor nichts, was eine Korrekturkurve beheben würde — deshalb läuft kein zweiter Zweig.",
+    "cal_note_wait": "Eine Korrekturkurve braucht erst Evidenz aus dem Sensor-Check. Bis dahin läuft kein zweiter Zweig.",
+    "help_calibration": "**Kalibrierungsversuch**: Der Einstrahlungssensor liest je nach Sonnenstand zu niedrig, und jede Schicht, die diese Anlage gelernt hat — Himmelskarte, Source-Bias, Wetterkorrekturen — wurde beim Lesen dieses Sensors trainiert. Einen Faktor davorzuschalten würde denselben Fehler doppelt korrigieren, weil jene Schichten Teile davon längst aufgenommen haben. Deshalb läuft ein **zweiter, vollständiger Modellzweig** daneben: dieselbe Anlage, dasselbe Wetter, aber der Sensor durch eine Korrekturkurve gelesen und das eigene Modell von Grund auf neu gelernt. Beide Zweige werden über dieselben klaren Stunden gewertet; die Karte zeigt Prognose durch Ist je Stunde des Tages gegen 1,0. Das Kriterium wurde **vor** dem Versuch festgeschrieben: Nach der oben genannten Zahl klarer Tage muss die schlechteste Stunde des Tages die Hälfte ihres Fehlers verlieren, ohne dass der Pegel dabei um mehr als 0,02 abdriftet. Bis dahin bleibt die veröffentlichte Prognose die bisherige, und das leere Diagramm heißt, dass der Versuch noch sammelt — nicht, dass etwas nicht stimmt.",
     "help_sensorcheck": "**Sensor-Check**: Eine billige Wetterstation misst keine Einstrahlung. Sie misst Beleuchtungsstärke mit einer aufs menschliche Auge gewichteten Diode und teilt durch eine Konstante — und die stimmt für genau einen Referenzfall: Je tiefer die Sonne steht, desto röter ihr Licht und desto größer der Anteil, den die Diode nicht sieht. Jede abgeschlossene Stunde wird gegen ein unabhängiges Reanalyse-Archiv gehalten und nach Sonnenstand gebändert; **1,0 heißt, der Sensor stimmt mit der Referenz überein**. Ein flacher Fehler ist ein Kalibrierfaktor, ein zum Horizont hin wachsender ein Spektralfehler, und ein Unterschied zwischen Ost und West ein Sensor, der nicht waagerecht steht. Bänder, die noch keine Kilowattstunde Referenz an fünf Tagen gesammelt haben, stehen als schraffierter Stummel da, nie als Wert. **Nichts davon korrigiert die Prognose** — Nowcast, Source-Bias-Schicht und Himmelskarte haben Teile dieses Fehlers bereits aufgenommen, ein Faktor davor würde doppelt korrigieren.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
     "conv_curve_custom": "selbst eingetragen",
@@ -3631,6 +3727,375 @@ const SC_CSS = `
     background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 10px; }
 `;
 
+/* ===================== SECTION: CARD:CALIBRATION ========================= */
+
+// The second model branch, running beside the published one.
+//
+// The sensor reads low by an amount that depends on the sun's height, and
+// every layer this plant has learned was trained while reading it. A factor
+// in front of the sensor would correct the same error twice, so instead a
+// whole second branch reads it through a correction curve and learns its own
+// model from scratch. Both are scored on the same clear hours; a criterion
+// written down before the trial began decides which one gets published.
+//
+// The hard part is the first six weeks, when there is nothing to draw but
+// the progress. Design rule 1 carries the whole card here: "not yet" and
+// "nothing" must never look the same, and neither may look like "broken".
+// So the axes are drawn empty rather than hidden, the day count is the
+// headline while it is the only real figure, and the blocking reasons that
+// are mere consequences of having no days are not listed at all.
+
+const CAL_TTL = 30 * 60000;
+
+// Read-only and slow-moving: a clear day arrives once a day at most.
+function calibrationTrial(hass, entryId) {
+  return cachedWS(`cal-trial|${entryId}`, CAL_TTL, async () => {
+    const r = await callPvsService(hass, "calibration_trial", { config_entry_id: entryId });
+    if (!r || typeof r !== "object" || r.day_ahead == null) {
+      throw new Error("calibration_trial: unexpected response");
+    }
+    return r;
+  });
+}
+
+// The integration writes its blocking reasons in English, from a closed set.
+// Translated here rather than passed through; an unknown phrasing falls back
+// to the original, which is still true — the same bargain the sensor check
+// makes.
+const CAL_BLOCK_PLAIN = {
+  "no profile on one of the branches": "cal_block_noprofile",
+  "no level on one of the branches": "cal_block_nolevel",
+};
+const CAL_BLOCK_PATTERNS = [
+  [/^only (\d+) clear days, needs (\d+)$/, "cal_block_days", ["n", "m"]],
+  [/^worst hour ([\d.]+) against ([\d.]+), needs ([\d.]+)$/, "cal_block_worst", ["a", "b", "c"]],
+  [/^level ([\d.]+) drifted further than ([\d.]+)$/, "cal_block_drift", ["a", "b"]],
+];
+function calBlocking(hass, reason) {
+  if (!reason) return null;
+  const plain = CAL_BLOCK_PLAIN[reason];
+  if (plain) return t(hass, plain);
+  for (const [re, key, names] of CAL_BLOCK_PATTERNS) {
+    const m = reason.match(re);
+    if (!m) continue;
+    const vars = {};
+    // Localised, but with the source's own precision: rounding "1.002" to
+    // two places would turn a drift verdict into "1,00 against 1,00".
+    names.forEach((name, i) => {
+      const raw = m[i + 1];
+      vars[name] = fmtNum(hass, Number(raw), (raw.split(".")[1] ?? "").length);
+    });
+    return t(hass, key, vars);
+  }
+  return reason;
+}
+
+class PvsCalibrationCard extends PvsBaseCard {
+  getCardSize() { return 5; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  setConfig(config) {
+    this._state = null;
+    this._horizon = config?.horizon === "now" ? "now" : "da";
+    super.setConfig(config);
+  }
+  // Service data, not state data: re-read when the cache has run out.
+  _shouldUpdate(prev) {
+    return !prev || (!!this._state?.at && Date.now() - this._state.at > CAL_TTL);
+  }
+
+  async _load() {
+    const hass = this._hass, cfg = this._config;
+    const had = this._state?.data ? this._state : null;
+    this._state = had ? { ...had, at: Date.now() } : { loading: true, at: Date.now() };
+    try {
+      const m = await getRegistryModel(hass);
+      const info = m.byEntityId.get(cfg.entity);
+      const node = info?.level === "plant" ? info.node : info?.node?.plant;
+      if (!node?.entryId) throw new Error(t(hass, "entity_missing", { entity: cfg.entity }));
+      this._state = { at: Date.now(), data: await calibrationTrial(hass, node.entryId) };
+    } catch (e) {
+      // A failed read keeps the last good answer rather than blanking the
+      // card: this one is watched for weeks, and an empty card on a hiccup
+      // is exactly the "something is broken" it must never say.
+      this._state = had ?? { at: Date.now(), problem: e?.message ?? String(e) };
+    }
+    this._render();
+  }
+
+  _render() {
+    const hass = this._hass, cfg = this._config;
+    if (!hass || !cfg) return;
+    const card = (inner) => {
+      this.style.removeProperty("display");
+      this.shadowRoot.innerHTML = `<style>${BASE_CSS}${CAL_CSS}</style><ha-card>${inner}<div class="pvs-tip"></div></ha-card>`;
+      this._wire();
+    };
+    if (!cfg.entity) return card(problemHTML(hass, { reason: t(hass, "no_entity_config") }));
+    const hide = () => { this.shadowRoot.innerHTML = ""; this.style.display = "none"; };
+    const st = hass.states[cfg.entity];
+    if (!st) return hide();
+    // Absence is silence, as on the sensor check: an integration without the
+    // service, and a plant with no irradiance sensor, have no trial to show.
+    if (!hasPvsService(hass, "calibration_trial")) return hide();
+    const a = st.attributes;
+    if (!a.ghi_entity && !a.illuminance_entity) return hide();
+
+    if (!this._state || (this._state.at && Date.now() - this._state.at > CAL_TTL)) this._load();
+
+    const help = helpChip("calibration");
+    const head = (chip = "") => `<div class="pvs-head">
+      <span class="pvs-title clickable" data-more-info="${cfg.entity}">${esc(cfg.title ?? t(hass, "cal_title"))}</span>
+      ${chip}${help}</div>`;
+
+    if (!this._state || this._state.loading) {
+      return card(head() + `<div class="pvs-sub">${t(hass, "cal_loading")}</div>`);
+    }
+    if (this._state.problem) {
+      return card(head() + problemHTML(hass, { reason: esc(this._state.problem), entity: cfg.entity }));
+    }
+    const d = this._state.data;
+
+    // ---- no branch running ------------------------------------------------
+    // Two different reasons, and they must not read alike: a sensor the check
+    // has nothing to say about yet, and one it has looked at and found
+    // straight enough. Neither is a fault, so neither gets a warning colour.
+    if (!d.running) {
+      const thin = d.curve == null && (a.sensor_check?.ratio == null);
+      return card(
+        head(`<span class="pvs-chip">${t(hass, thin ? "cal_no_evidence" : "cal_not_needed")}</span>`)
+        + `<div class="cal-note">${t(hass, thin ? "cal_note_wait" : "cal_note_idle")}</div>`);
+    }
+
+    // ---- running ----------------------------------------------------------
+    const h = this._horizon === "now" ? d.short_term : d.day_ahead;
+    const v = h?.verdict ?? {};
+    const days = v.days ?? h?.days ?? 0;
+    const needed = v.days_needed ?? 0;
+
+    const pct = needed > 0 ? Math.min(100, (days / needed) * 100) : 0;
+    const archived = h?.hours_archived ?? 0;
+    const progress = `
+      <div class="cal-prog">
+        <div class="cal-prog-row">
+          <span class="cal-prog-lbl">${t(hass, "cal_days", {
+            days: `<b class="pvs-num">${fmtNum(hass, days, 0)}</b>`,
+            needed: `<span class="pvs-num">${fmtNum(hass, needed, 0)}</span>` })}</span>
+        </div>
+        <div class="cal-track"><div class="cal-fill" style="width:${Math.max(1.5, pct).toFixed(1)}%"></div></div>
+        <div class="pvs-sub">${archived > 0
+          ? t(hass, "cal_hours_sub", { archived: fmtNum(hass, archived, 0), clear: fmtNum(hass, h?.hours_clear ?? 0, 0) })
+          : t(hass, "cal_hours_none")}</div>
+      </div>`;
+
+    // The question with its own line, because it is the one people actually
+    // came to ask. Read off the response, never inferred from the verdict.
+    const applied = d.applied === true || d.published_branch === "calibrated";
+    const published = `<div class="cal-pub${applied ? " on" : ""}">${
+      t(hass, applied ? "cal_published_cal" : "cal_published_live")}</div>`;
+
+    // What is being tried, in one line of chips.
+    const c = d.curve;
+    const first = c?.knots?.[0], last = c?.knots?.[c.knots.length - 1];
+    const curveChips = c ? `<div class="cal-chips">
+      <span class="pvs-chip"><span class="cal-sw cal"></span>${t(hass, "cal_curve")}</span>
+      ${first && last ? `<span class="pvs-chip"><span class="v">${t(hass, "cal_curve_range", {
+        from: fmtNum(hass, first.factor, 2), low: fmtNum(hass, first.elevation, 0),
+        to: fmtNum(hass, last.factor, 2), high: fmtNum(hass, last.elevation, 0) })}</span></span>` : ""}
+      ${c.capped ? `<span class="pvs-chip warn">${t(hass, "cal_curve_capped")}</span>` : ""}
+      ${c.revision ? `<span class="pvs-chip dim">${t(hass, "cal_curve_rev", { rev: esc(String(c.revision).slice(0, 8)) })}</span>` : ""}
+    </div>` : "";
+
+    const tab = (key, label) => `<span class="pvs-chip cal-tab${this._horizon === key ? " on" : ""}"
+      data-horizon="${key}" title="${esc(t(hass, "cal_h_tip"))}">${label}</span>`;
+    const tabs = `<div class="cal-tabs">${tab("da", t(hass, "cal_h_da"))}${tab("now", t(hass, "cal_h_now"))}</div>`;
+
+    // ---- the two hourly profiles against 1.0 ------------------------------
+    const hours = Array.isArray(h?.hours_of_day) ? h.hours_of_day.slice().sort((x, y) => x - y) : [];
+    const live = h?.live_profile ?? {}, shadow = h?.shadow_profile ?? {};
+    const vals = hours.flatMap((x) => [live[String(x)], shadow[String(x)]])
+      .filter((x) => typeof x === "number" && Number.isFinite(x));
+    // An empty trial still gets a chart: axes, the reference it will be read
+    // against, and a sentence in the middle saying what is missing. Hiding it
+    // would make the card look like it had failed to draw.
+    const HOURS_EMPTY = [5, 7, 9, 11, 13, 15, 17, 19];
+    const xs = hours.length ? hours : HOURS_EMPTY;
+    const lo = Math.min(0.8, ...vals.map((x) => x - 0.05));
+    const hi = Math.max(1.2, ...vals.map((x) => x + 0.05));
+    const PAD_L = 32, PAD_R = 12, PAD_T = 14, PAD_B = 28, PW = 380, PH = 104;
+    const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
+    const x0 = xs[0], x1 = xs[xs.length - 1];
+    const xOf = (x) => PAD_L + (x1 === x0 ? PW / 2 : ((x - x0) / (x1 - x0)) * PW);
+    const yOf = (y) => PAD_T + PH - ((Math.max(lo, Math.min(hi, y)) - lo) / (hi - lo)) * PH;
+
+    let grid = "";
+    for (const g of [lo, 1, hi]) {
+      grid += `<line class="grid" x1="${PAD_L}" y1="${yOf(g).toFixed(1)}" x2="${W - PAD_R}" y2="${yOf(g).toFixed(1)}"/>
+        <text class="axis" x="${PAD_L - 5}" y="${(yOf(g) + 3).toFixed(1)}" text-anchor="end">${fmtNum(hass, g, 2)}</text>`;
+    }
+    grid += `<line class="cal-ref" x1="${PAD_L}" y1="${yOf(1).toFixed(1)}" x2="${W - PAD_R}" y2="${yOf(1).toFixed(1)}"/>`;
+    for (const x of xs.filter((_, i) => i % Math.ceil(xs.length / 8) === 0)) {
+      grid += `<text class="axis" x="${xOf(x).toFixed(1)}" y="${(H - PAD_B + 13).toFixed(1)}" text-anchor="middle">${x}</text>`;
+    }
+    grid += `<text class="cal-axtitle" x="${(PAD_L + PW / 2).toFixed(1)}" y="${H - 3}" text-anchor="middle">${t(hass, "cal_axis_hour")}</text>`;
+
+    const lineOf = (prof, cls) => {
+      const pts = hours.map((x) => [x, prof[String(x)]])
+        .filter(([, y]) => typeof y === "number" && Number.isFinite(y));
+      if (!pts.length) return "";
+      const dd = pts.map(([x, y], i) => `${i ? "L" : "M"}${xOf(x).toFixed(1)} ${yOf(y).toFixed(1)}`).join("");
+      const dots = pts.map(([x, y]) => `<circle class="${cls}" cx="${xOf(x).toFixed(1)}" cy="${yOf(y).toFixed(1)}" r="2.4"/>`).join("");
+      return `<path class="${cls}" d="${dd}" fill="none"/>${dots}`;
+    };
+    const empty = !hours.length;
+    const plot = empty
+      ? `<text class="cal-empty" x="${(PAD_L + PW / 2).toFixed(1)}" y="${(PAD_T + PH * 0.3).toFixed(1)}" text-anchor="middle">${t(hass, "cal_chart_empty")}</text>
+         <text class="cal-empty-sub" x="${(PAD_L + PW / 2).toFixed(1)}" y="${(PAD_T + PH * 0.3 + 13).toFixed(1)}" text-anchor="middle">${t(hass, "cal_chart_empty_sub")}</text>`
+      : lineOf(live, "cal-l-live") + lineOf(shadow, "cal-l-cal");
+
+    // ---- the two number pairs ---------------------------------------------
+    const cell = (value, digits, better) => value == null
+      ? `<td class="cal-ny">${t(hass, "cal_not_yet")}</td>`
+      : `<td class="pvs-num${better ? " good" : ""}">${fmtNum(hass, value, digits)}</td>`;
+    const lw = h?.live_worst_hour, sw = h?.shadow_worst_hour;
+    const ll = h?.live_level, sl = h?.shadow_level;
+    const numbers = `<table class="cal-num">
+      <tr><th></th><th><span class="cal-sw live"></span>${t(hass, "cal_col_live")}</th>
+        <th><span class="cal-sw cal"></span>${t(hass, "cal_col_cal")}</th></tr>
+      <tr><th class="cal-help" title="${esc(t(hass, "cal_row_worst_tip"))}">${t(hass, "cal_row_worst")}</th>
+        ${cell(lw, 2, false)}${cell(sw, 2, lw != null && sw != null && sw < lw)}</tr>
+      <tr><th class="cal-help" title="${esc(t(hass, "cal_row_level_tip"))}">${t(hass, "cal_row_level")}</th>
+        ${cell(ll, 3, false)}${cell(sl, 3, ll != null && sl != null && Math.abs(sl - 1) < Math.abs(ll - 1))}</tr>
+    </table>`;
+
+    // How much of the worst hour's error has gone, against how much has to.
+    // Same grammar as the maturity bar: a tick where the target sits.
+    const imp = h?.improvement, minImp = v.min_improvement ?? 0.5;
+    const impBar = imp == null ? "" : `
+      <div class="cal-imp">
+        <div class="cal-prog-row"><span class="cal-prog-lbl">${t(hass, "cal_improvement")}
+          <b class="pvs-num${imp >= minImp ? " good" : ""}">${fmtPct(hass, imp * 100, 0)}</b></span>
+          <span class="pvs-sub">${t(hass, "cal_improvement_needed", { pct: fmtPct(hass, minImp * 100, 0) })}</span></div>
+        <div class="cal-track">
+          <div class="cal-fill${imp >= minImp ? " good" : ""}" style="width:${Math.max(0, Math.min(100, imp * 100)).toFixed(1)}%"></div>
+          <div class="cal-tick" style="left:${(minImp * 100).toFixed(1)}%"></div>
+        </div>
+      </div>`;
+
+    // ---- the verdict ------------------------------------------------------
+    // While the day count is short, every other blocking reason is a
+    // consequence of it. Listing "no profile" and "no level" underneath would
+    // read as three faults where there is one clock still running.
+    let verdict;
+    if (v.decided) {
+      verdict = `<div class="cal-verdict good">${t(hass, "cal_decided")}</div>
+        <div class="pvs-sub">${t(hass, "cal_decided_note")}</div>`;
+    } else if (days < needed) {
+      verdict = `<div class="cal-verdict">${t(hass, "cal_waiting", {
+        needed: fmtNum(hass, needed, 0),
+        improvement: fmtPct(hass, minImp * 100, 0),
+        drift: fmtNum(hass, v.max_level_drift ?? 0.02, 2) })}</div>`;
+    } else {
+      const reasons = (v.blocking ?? []).map((r) => calBlocking(hass, r)).filter(Boolean);
+      verdict = `<div class="cal-verdict">${t(hass, "cal_blocking_head")}</div>
+        <ul class="cal-block">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`;
+    }
+
+    card(`
+      ${head(`<span class="pvs-chip"><span class="cal-dot"></span>${t(hass, "cal_running")}</span>`)}
+      ${progress}
+      ${published}
+      ${curveChips}
+      ${tabs}
+      <div class="cal-wrap"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">
+        ${grid}${plot}
+      </svg></div>
+      <div class="pvs-legend">
+        <span class="it"><span class="sw" style="background:var(--pvs-model)"></span>${t(hass, "cal_leg_live")}</span>
+        <span class="it"><span class="sw" style="background:var(--pvs-cat-3)"></span>${t(hass, "cal_leg_cal")}</span>
+        <span class="it"><svg width="16" height="10"><line x1="0" y1="5" x2="16" y2="5"
+          stroke="var(--primary-text-color)" stroke-width="1.4" stroke-dasharray="5 3" opacity="0.55"/></svg>${t(hass, "cal_leg_ref")}</span>
+      </div>
+      ${numbers}
+      ${impBar}
+      ${verdict}
+      <div class="cal-note">${t(hass, "cal_note")}</div>`);
+  }
+
+  _wire() {
+    this._wireMoreInfo();
+    if (!this._tabsWired) {
+      this._tabsWired = true;
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const el = ev.target.closest?.("[data-horizon]");
+        if (!el) return;
+        this._horizon = el.getAttribute("data-horizon");
+        this._render();
+      });
+    }
+    if (!this._wired) { this._wired = true; wireTooltip(this); }
+  }
+
+  static getConfigElement() { return document.createElement("pvstrings-chain-editor"); }
+  static getStubConfig() { return { entity: "" }; }
+}
+
+const CAL_CSS = `
+  .cal-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+    background: var(--pvs-cat-3);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pvs-cat-3) 25%, transparent); }
+  .cal-prog { margin: 4px 0 12px; }
+  .cal-prog .pvs-sub { margin-top: 6px; display: block; }
+  .cal-prog-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+  .cal-prog-lbl { font-size: 12.5px; color: var(--secondary-text-color); }
+  .cal-prog-lbl b { font-size: 15px; font-weight: 600; color: var(--primary-text-color); }
+  .cal-prog-lbl b.good { color: var(--success-color, #43a047); }
+  .cal-track { position: relative; height: 6px; border-radius: 3px; background: var(--pvs-unobserved); }
+  .cal-fill { height: 100%; border-radius: 3px; background: var(--pvs-cat-3); }
+  .cal-fill.good { background: var(--success-color, #43a047); }
+  .cal-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 1px;
+    background: color-mix(in srgb, var(--primary-text-color, #212121) 40%, transparent); }
+  /* the answer to "is it already steering my plant" — its own block, never a tooltip */
+  .cal-pub { font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--primary-text-color);
+    background: var(--pvs-chip-bg); border-left: 3px solid var(--pvs-model);
+    border-radius: 6px; padding: 8px 11px; margin: 0 0 10px; }
+  .cal-pub.on { border-left-color: var(--pvs-cat-3); }
+  .cal-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pvs-chip.dim { opacity: 0.7; }
+  .cal-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+  .cal-tab { cursor: pointer; border-color: var(--pvs-hairline); }
+  .cal-tab.on { color: var(--primary-text-color); border-color: var(--pvs-model);
+    background: color-mix(in srgb, var(--pvs-model) 14%, transparent); }
+  .cal-wrap svg { width: 100%; height: auto; display: block; }
+  .cal-ref { stroke: var(--primary-text-color); stroke-width: 1.4; stroke-dasharray: 5 3; opacity: 0.55; }
+  .cal-axtitle { fill: var(--secondary-text-color); font-size: 9.5px; }
+  .cal-empty { fill: var(--primary-text-color); font-size: 12px; }
+  .cal-empty-sub { fill: var(--secondary-text-color); font-size: 9.5px; }
+  path.cal-l-live { stroke: var(--pvs-model); stroke-width: 2.2; stroke-linejoin: round; }
+  circle.cal-l-live { fill: var(--pvs-model); }
+  path.cal-l-cal { stroke: var(--pvs-cat-3); stroke-width: 2.2; stroke-linejoin: round; }
+  circle.cal-l-cal { fill: var(--pvs-cat-3); }
+  .cal-sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+    margin-right: 5px; vertical-align: middle; }
+  .cal-sw.live { background: var(--pvs-model); }
+  .cal-sw.cal { background: var(--pvs-cat-3); }
+  table.cal-num { border-collapse: collapse; width: 100%; font-size: 11.5px; margin-top: 8px; }
+  table.cal-num th, table.cal-num td { text-align: right; padding: 4px 8px;
+    border-bottom: 1px solid var(--pvs-hairline); }
+  table.cal-num tr > th:first-child { text-align: left; color: var(--secondary-text-color);
+    font-weight: 500; white-space: nowrap; }
+  table.cal-num th.cal-help { cursor: help; }
+  table.cal-num td { color: var(--primary-text-color); }
+  table.cal-num td.good { color: var(--success-color, #43a047); font-weight: 600; }
+  table.cal-num td.cal-ny { color: var(--secondary-text-color); font-style: italic; opacity: 0.75; }
+  .cal-imp { margin-top: 10px; }
+  .cal-verdict { font-size: 12.5px; line-height: 1.5; color: var(--primary-text-color); margin-top: 10px; }
+  .cal-verdict.good { color: var(--success-color, #43a047); font-weight: 600; }
+  ul.cal-block { margin: 4px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 1.6;
+    color: var(--secondary-text-color); }
+  .cal-note { font-size: 11px; line-height: 1.5; padding: 6px 9px; border-radius: 6px;
+    background: var(--pvs-chip-bg); color: var(--secondary-text-color); margin-top: 10px; }
+`;
+
 /* ====================== SECTION: CARD:CURVE ============================== */
 
 // The learned conversion curve against the prior it started from.
@@ -6167,8 +6632,15 @@ async function buildViews(hass, config) {
         // configured — on a plant without one the block is all nulls, and a
         // card of zeros would be a claim about hardware that is not there.
         const ga = hass.states[ghi]?.attributes;
-        if (FEATURES.sensor_check.test(ga) && (ga?.ghi_entity || ga?.illuminance_entity)) {
+        const hasSensor = !!(ga?.ghi_entity || ga?.illuminance_entity);
+        if (FEATURES.sensor_check.test(ga) && hasSensor) {
           sensorCards.push({ type: "custom:pvstrings-sensor-check", entity: ghi });
+        }
+        // What is being done about what the check found. The card asks the
+        // service itself and withdraws where there is no trial, so the only
+        // question here is whether there could be one at all.
+        if (hasSensor && hasPvsService(hass, "calibration_trial")) {
+          sensorCards.push({ type: "custom:pvstrings-calibration", entity: ghi });
         }
         sensorSection = { type: "grid", cards: [
           heading(t(lang, "nerd_sensor")), ...sensorCards,
@@ -6374,6 +6846,8 @@ const CARDS = [
     "How the measured clearness of the last quarter hour is blended into the coming forecast."],
   ["pvstrings-sensor-check", PvsSensorCheckCard, "PV Strings Sensor Check",
     "The plant's irradiance sensor against an independent archive, per sun elevation. Diagnosis only."],
+  ["pvstrings-calibration", PvsCalibrationCard, "PV Strings Calibration Trial",
+    "The second model branch reading the sensor through a correction curve, against the published one."],
   ["pvstrings-curve", PvsCurveCard, "PV Strings Conversion Curve",
     "The learned efficiency curve against the datasheet prior it started from."],
   ["pvstrings-conversion", PvsConversionCard, "PV Strings Conversion",
@@ -6403,7 +6877,7 @@ for (const [tag, cls, name, description] of CARDS) {
   if (!window.customCards.some((c) => c.type === tag)) {
     window.customCards.push({
       type: tag, name, description,
-      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy", "pvstrings-learning", "pvstrings-sensor-check"].includes(tag),
+      preview: !["pvstrings-kv-table", "pvstrings-maturity", "pvstrings-health", "pvstrings-thermal", "pvstrings-accuracy", "pvstrings-learning", "pvstrings-sensor-check", "pvstrings-calibration"].includes(tag),
       documentationURL: "https://github.com/doccodyblue/ha-pvstrings-dash",
     });
   }

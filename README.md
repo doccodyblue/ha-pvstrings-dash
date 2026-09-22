@@ -68,7 +68,8 @@ integration keeps weeks, one day-by-day chart that switches between the plant an
 strings, and where in the day the forecast leaves energy on the table, in kWh per scored day), and the **Nerd Dashboard** (status
 first, numbers on demand: training maturity and a one-line collection health
 strip, the correction factors as percentages, the source bias as a heatmap,
-what your own irradiance sensor says and whether it can be believed,
+what your own irradiance sensor says, whether it can be believed and
+what the trial running beside it makes of that,
 the modelled cell temperature, the conversion layer with
 one chart per group, and
 — where a price sensor or a battery makes it meaningful — what the savings
@@ -282,6 +283,42 @@ time, so a few dozen are the normal state. A plant with no reference at
 all is pointed at `pvstrings.backfill_irradiance_check`, with the
 warning that only the owner knows whether the sensor stood in the same
 place, clean and level, over the period it would read.
+
+### `pvstrings-calibration`
+
+The second model branch, running beside the published one (PV Strings
+≥ 1.26, service `pvstrings.calibration_trial`). The irradiance sensor
+reads low by an amount that depends on the sun's height, and every layer
+the plant has learned was trained while reading it — so a factor in
+front of the sensor would correct the same error twice. Instead a whole
+second branch reads the sensor through a correction curve and learns its
+own model from scratch. Both are scored on the same clear hours.
+
+```yaml
+type: custom:pvstrings-calibration
+entity: sensor.<anlage>_einstrahlung_prognose
+```
+
+The card draws forecast over actual by hour of day for both branches
+against 1.0, and under it the two figures the criterion is made of: the
+worst hour of the day, and the overall level. The criterion itself was
+written down before the trial began — after fifteen clear days the worst
+hour has to lose half its error without the level drifting more than
+0.02 — and the card says in its own line whether the published forecast
+is still the old one. It is, until somebody decides otherwise; nothing
+switches itself.
+
+For the first weeks there is nothing to draw but progress, and that is
+the state the card is built for. The axes and the reference line are
+drawn empty with the reason written inside them, the day count is the
+headline, and the blocking reasons that are mere consequences of having
+no days yet are not listed at all — three sentences of "no profile, no
+level, no days" would read as three faults where there is one clock
+still running.
+
+The card disappears where there is nothing to show: no service, or no
+irradiance sensor. A sensor the check has found straight enough gets one
+quiet line instead — no trial is needed, which is not a failure either.
 
 ### `pvstrings-curve`
 
@@ -626,6 +663,14 @@ Every card carries a **?** with this in short. The longer version:
   of reference across five days are hatched stubs, not values. None of it
   corrects the forecast — parts of the same error are already absorbed
   elsewhere in the chain.
+- **Calibration trial**: a second, complete model branch reading the same
+  sensor through a correction curve and learning its own model from scratch.
+  Both branches are scored on the same clear hours; the card shows forecast
+  over actual by hour of day against 1.0, plus the worst hour and the level
+  the pre-registered criterion is made of. The published forecast stays the
+  existing one until the criterion says otherwise, and the card says so in
+  its own line. An empty chart means the trial is still collecting clear
+  days — the day count beside it says how many.
 - **Collection**: coverage is the share of 5-minute intervals actually
   captured, counted over daylight hours only. *Lower bound* marks hours where
   the inverter was curtailed — real yield would have been higher. **Skip
@@ -675,6 +720,7 @@ card it meant to include.
 | day stepper, week stepper, learning progress (`pvstrings.get_day` / `get_weeks` services) | ≥ 1.25.0 |
 | weekly learning comparison (hourly error, `baseline_basis`) | ≥ 1.25.2 |
 | irradiance sensor check (`sensor_check`) | ≥ 1.26.0 |
+| calibration trial (`pvstrings.calibration_trial` service) | ≥ 1.26.0 |
 
 The three design rules behind all of this, bought with the integration's own
 bug history (three arithmetic bugs, all of which looked exactly like "not
