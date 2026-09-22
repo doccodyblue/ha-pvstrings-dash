@@ -3507,7 +3507,10 @@ class PvsSensorCheckCard extends PvsBaseCard {
       : "";
 
     // ---- the five bands over the sun's height -------------------------------
-    const PAD_L = 32, PAD_R = 12, PAD_T = 18, PAD_B = 32, PW = 540, PH = 148;
+    // Deliberately a small viewBox: the card sits in a single column of the
+    // Nerd view, and a 540-wide plot scaled down to 370 px leaves the axis
+    // labels at six pixels.
+    const PAD_L = 30, PAD_R = 12, PAD_T = 16, PAD_B = 30, PW = 380, PH = 128;
     const W = PAD_L + PW + PAD_R, H = PAD_T + PH + PAD_B;
     const top = Math.max(1.2, Math.ceil((Math.max(1, ...usable.map((b) => b.ratio)) + 0.12) * 10) / 10);
     const yOf = (v) => PAD_T + PH - (Math.max(0, Math.min(top, v)) / top) * PH;
