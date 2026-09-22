@@ -68,6 +68,7 @@ integration keeps weeks, one day-by-day chart that switches between the plant an
 strings, and where in the day the forecast leaves energy on the table, in kWh per scored day), and the **Nerd Dashboard** (status
 first, numbers on demand: training maturity and a one-line collection health
 strip, the correction factors as percentages, the source bias as a heatmap,
+what your own irradiance sensor says and whether it can be believed,
 the modelled cell temperature, the conversion layer with
 one chart per group, and
 — where a price sensor or a battery makes it meaningful — what the savings

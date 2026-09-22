@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.19.0";
+const PVS_VERSION = "0.19.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -262,14 +262,14 @@ const STR = {
     "sc_band_why": "A band speaks once it holds {kwh} kWh/m² of reference across {days} separate days.",
     "sc_evidence": "{hours} hours · {days} days · {kwh} kWh/m² reference",
     "sc_sources": "reference: {sources}",
-    "sc_pending": "{n} banked hours are still waiting for their reference — the archive runs about a week behind real time, so a few dozen is the normal state and not a backlog.",
+    "sc_pending": "{n} hours still waiting for their reference — the archive runs about a week behind, which is normal.",
     "sc_never_referenced": "no hour carries a reference yet — run pvstrings.backfill_irradiance_check once, and only over a period in which the sensor stood in the same place, clean and level",
     "sc_no_evidence": "no elevation band carries enough evidence yet",
     "sc_slope": "spread",
     "sc_slope_tip": "Highest minus lowest usable band. Flat is a calibration error, rising towards noon is a spectral one — that single number is what separates the two.",
     "sc_tilt": "east − west",
     "sc_tilt_tip": "East minus west at matched sun elevations. From ±0.08 the sensor is probably not level; a north-south tilt hides from this test entirely.",
-    "sc_note": "Diagnosis only: none of this corrects the forecast. The nowcast, the source-bias layer and the sky map have long since absorbed parts of this error, so a factor in front of them would correct it twice.",
+    "sc_note": "Diagnosis only — none of this corrects the forecast.",
     "sc_tip_ratio": "measured / reference",
     "sc_tip_hours": "hours",
     "sc_tip_days": "days",
@@ -491,6 +491,7 @@ const STR = {
     "factor_thin": "thin evidence — pulled towards 0 %",
     "factor_legend": "correction the physics forecast is multiplied by; +7 % means reality delivered 7 % more than computed",
     "nerd_weather_source": "Weather source",
+    "nerd_sensor": "Irradiance sensor",
     "bias_title": "Source bias by hour × horizon",
     "bias_legend_high": "source too high",
     "bias_legend_low": "source too low",
@@ -670,14 +671,14 @@ const STR = {
     "sc_band_why": "Ein Band sagt etwas aus, sobald es {kwh} kWh/m² Referenz an {days} verschiedenen Tagen trägt.",
     "sc_evidence": "{hours} Stunden · {days} Tage · {kwh} kWh/m² Referenz",
     "sc_sources": "Referenz: {sources}",
-    "sc_pending": "{n} gebankte Stunden warten noch auf ihre Referenz — das Archiv hinkt der Echtzeit rund eine Woche hinterher, ein paar Dutzend sind der Normalzustand und kein Rückstand.",
+    "sc_pending": "{n} Stunden warten noch auf ihre Referenz — das Archiv hinkt rund eine Woche hinterher, das ist normal.",
     "sc_never_referenced": "noch keine Stunde hat eine Referenz — einmal pvstrings.backfill_irradiance_check ausführen, und nur über einen Zeitraum, in dem der Sensor am selben Ort stand, sauber und waagerecht",
     "sc_no_evidence": "noch kein Höhenband trägt genug Evidenz",
     "sc_slope": "Spanne",
     "sc_slope_tip": "Höchstes minus niedrigstes brauchbares Band. Flach ist ein Kalibrierfehler, zum Mittag hin steigend ein Spektralfehler — diese eine Zahl trennt die beiden.",
     "sc_tilt": "Ost − West",
     "sc_tilt_tip": "Ost minus West bei abgeglichenen Sonnenhöhen. Ab ±0,08 steht der Sensor vermutlich nicht waagerecht; eine Nord-Süd-Schräglage entgeht diesem Test ganz.",
-    "sc_note": "Reine Diagnose: nichts davon korrigiert die Prognose. Nowcast, Source-Bias-Schicht und Himmelskarte haben Teile dieses Fehlers längst aufgenommen, ein Faktor davor würde doppelt korrigieren.",
+    "sc_note": "Reine Diagnose — nichts davon korrigiert die Prognose.",
     "sc_tip_ratio": "gemessen / Referenz",
     "sc_tip_hours": "Stunden",
     "sc_tip_days": "Tage",
@@ -883,6 +884,7 @@ const STR = {
     "factor_thin": "dünne Evidenz — gegen 0 % gezogen",
     "factor_legend": "Korrektur, mit der die Physik-Prognose multipliziert wird; +7 % heißt: real kam 7 % mehr als gerechnet",
     "nerd_weather_source": "Wetterquelle",
+    "nerd_sensor": "Einstrahlungssensor",
     "bias_title": "Source-Bias nach Stunde × Horizont",
     "bias_legend_high": "Quelle zu hoch",
     "bias_legend_low": "Quelle zu niedrig",
@@ -3558,16 +3560,20 @@ class PvsSensorCheckCard extends PvsBaseCard {
     cols += `<text class="sc-axtitle" x="${(PAD_L + PW / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle">${t(hass, "sc_axis_elev")} (°)</text>`;
 
     // ---- evidence, small, underneath ----------------------------------------
+    // Evidence and its provenance are one thought and share a line: the card
+    // sits in a single column of the Nerd view, where every line costs height.
     const ev = [];
+    const counts = [];
     if (sc.hours) {
-      ev.push(t(hass, "sc_evidence", {
+      counts.push(t(hass, "sc_evidence", {
         hours: fmtNum(hass, sc.hours, 0), days: fmtNum(hass, sc.days ?? 0, 0),
         kwh: fmtNum(hass, sc.reference_kwh ?? 0, 0),
       }));
     }
     if (sc.reference_sources?.length) {
-      ev.push(t(hass, "sc_sources", { sources: sc.reference_sources.join(", ") }));
+      counts.push(t(hass, "sc_sources", { sources: sc.reference_sources.join(", ") }));
     }
+    if (counts.length) ev.push(counts.join(" · "));
     // Only once there is a ratio: before that the withheld line above has
     // already said what is missing, and repeating the count reads as two
     // different problems.
@@ -6138,23 +6144,33 @@ async function buildViews(hass, config) {
         { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_string_all",
           title: t(lang, "nerd_strings_table"), ...det },
       ] });
+      // What the weather SOURCE gets wrong, on its own. The sections view is
+      // a plain grid: sections line up in rows and a row is as tall as its
+      // tallest member, so three cards stacked here left the two columns
+      // beside it standing empty for two card-heights.
       nerdSections.push({ type: "grid", cards: [
         heading(t(lang, "nerd_weather_source")),
         { type: "custom:pvstrings-kv-table", entity: mo, mode: "ghi_bias",
           title: t(lang, "bias_title"), ...(ghi ? { truth_entity: ghi } : {}), ...det },
-        // the nowcast lives on the same sensor and is the other half of the
-        // story: the bias map says what the source gets wrong on average,
-        // the nowcast what the sensor says about the next two hours
-        ...(ghi ? [{ type: "custom:pvstrings-nowcast", entity: ghi }] : []),
-        // ... and the third thing that sensor knows: whether it is telling
-        // the truth. Added only where the check exists AND a sensor is
-        // configured — on a plant without one the block is all nulls, and
-        // a card of zeros would be a claim about hardware that is not there.
-        ...(ghi && FEATURES.sensor_check.test(hass.states[ghi]?.attributes)
-          && (hass.states[ghi]?.attributes?.ghi_entity
-            || hass.states[ghi]?.attributes?.illuminance_entity)
-          ? [{ type: "custom:pvstrings-sensor-check", entity: ghi }] : []),
       ] });
+      // What the plant's own SENSOR says, in its own section: the nowcast
+      // (what it says about the next two hours) and the report card (whether
+      // it can be believed at all). Splitting them off is not only height —
+      // the bias map is about the provider, these two are about the hardware
+      // on the roof.
+      if (ghi) {
+        const sensorCards = [{ type: "custom:pvstrings-nowcast", entity: ghi }];
+        // The check exists only where the attribute does AND a sensor is
+        // configured — on a plant without one the block is all nulls, and a
+        // card of zeros would be a claim about hardware that is not there.
+        const ga = hass.states[ghi]?.attributes;
+        if (FEATURES.sensor_check.test(ga) && (ga?.ghi_entity || ga?.illuminance_entity)) {
+          sensorCards.push({ type: "custom:pvstrings-sensor-check", entity: ghi });
+        }
+        nerdSections.push({ type: "grid", cards: [
+          heading(t(lang, "nerd_sensor")), ...sensorCards,
+        ] });
+      }
     } else {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
     }
