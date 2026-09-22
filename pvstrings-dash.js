@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.19.1";
+const PVS_VERSION = "0.19.2";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -6114,6 +6114,9 @@ async function buildViews(hass, config) {
     const coll = plant.byKey.collector_health;
     const sd = plant.byKey.strings_detail;
     const nerdSections = [];
+    // Built with the weather source, placed after the thermal card — see
+    // there for why.
+    let sensorSection = null;
     // status: how far the training is, and whether collection runs at all —
     // the two questions every other card on this view rests on
     nerdSections.push({ type: "grid", column_span: 3, cards: [
@@ -6157,7 +6160,7 @@ async function buildViews(hass, config) {
       // (what it says about the next two hours) and the report card (whether
       // it can be believed at all). Splitting them off is not only height —
       // the bias map is about the provider, these two are about the hardware
-      // on the roof.
+      // on the roof. Pushed further down; see the push site.
       if (ghi) {
         const sensorCards = [{ type: "custom:pvstrings-nowcast", entity: ghi }];
         // The check exists only where the attribute does AND a sensor is
@@ -6167,9 +6170,9 @@ async function buildViews(hass, config) {
         if (FEATURES.sensor_check.test(ga) && (ga?.ghi_entity || ga?.illuminance_entity)) {
           sensorCards.push({ type: "custom:pvstrings-sensor-check", entity: ghi });
         }
-        nerdSections.push({ type: "grid", cards: [
+        sensorSection = { type: "grid", cards: [
           heading(t(lang, "nerd_sensor")), ...sensorCards,
-        ] });
+        ] };
       }
     } else {
       nerdSections.push({ type: "grid", cards: [mdCard(t(lang, "missing_card", { key: "model_observations" }))] });
@@ -6199,6 +6202,14 @@ async function buildViews(hass, config) {
         { type: "custom:pvstrings-thermal", rows: thermalRows, grid_options: { columns: "full" } },
       ] });
     }
+    // The sensor section goes last of the single-column ones, because the
+    // sections view lines sections up in rows and a row is as tall as its
+    // tallest member. Learning, the source and the heat are all about one
+    // card-height; the sensor pair is half again as tall. Last means it
+    // falls into the row that also holds the conversion block, which is
+    // taller than all of them — so the tall one stands next to the tallest
+    // and the short ones line up with each other.
+    if (sensorSection) nerdSections.push(sensorSection);
     // conversion layer (optional): configuration + realized ratio per group
     const convNerd = groups.filter((g) =>
       (g.byKey.group_forecast_ac || g.byKey.group_forecast_battery_charge) && g.byKey.group_forecast_remaining);
