@@ -316,9 +316,17 @@ no days yet are not listed at all — three sentences of "no profile, no
 level, no days" would read as three faults where there is one clock
 still running.
 
-The card disappears where there is nothing to show: no service, or no
-irradiance sensor. A sensor the check has found straight enough gets one
-quiet line instead — no trial is needed, which is not a failure either.
+The trial is an option and off by default — the diagnosis costs a few
+lines, but the trial costs a second forecast and a second learn cycle
+every hour, and that is not something to spend on somebody's plant
+without asking. So "not running" means three different things, and the
+card keeps them apart. **Switched off** is the interesting one: it shows
+what the sensor check found, what a trial would do about it, and where
+the switch is — an offer, not a warning, and only where there is a
+finding to offer it for. **Switched on but no branch yet** is the day-one
+state, or a sensor the check has found straight enough to need no curve.
+**No irradiance sensor** removes the card, as does an integration without
+the service.
 
 ### `pvstrings-curve`
 

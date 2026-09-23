@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.20.0";
+const PVS_VERSION = "0.21.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -298,6 +298,10 @@ const STR = {
     "cal_running": "running",
     "cal_not_needed": "no trial needed",
     "cal_no_evidence": "waiting for evidence",
+    "cal_off": "switched off",
+    "cal_offer": "That is what the check found. A trial would learn the whole model again through a correction curve and be published only if it proved better. It costs a second forecast and a second learn cycle every hour, so it stays off until you ask for it:",
+    "cal_where": "Settings → Devices & services → PV Strings → Configure → Advanced → “Run the calibration trial”",
+    "cal_off_nofinding": "The trial is switched off. The sensor check has nothing to say about this sensor yet, so there is nothing a correction curve could be built from.",
     "cal_loading": "reading the trial…",
     "cal_days": "{days} of {needed} clear days",
     "cal_hours_sub": "{archived} hours archived, {clear} of them on clear days",
@@ -337,7 +341,7 @@ const STR = {
     "cal_block_drift": "level {a} drifted further than {b}",
     "cal_note": "Every learned layer was trained while reading a sensor that runs low. Rather than correcting that after the fact, a second branch learns the model again through a curve — and is published only if it proves better.",
     "cal_note_idle": "The check finds nothing about this sensor that a correction curve would fix, so no second branch is running.",
-    "cal_note_wait": "A correction curve needs the sensor check to have gathered evidence first. Until then no second branch runs.",
+    "cal_note_wait": "No second branch yet: a correction curve only comes into being once the sensor check has gathered evidence enough to justify one.",
     "help_calibration": "**Calibration trial**: the irradiance sensor reads low by an amount that depends on the sun's height, and every layer this plant has learned — the shading map, the source bias, the weather corrections — was trained while reading it. Putting a factor in front of the sensor now would correct the same error twice, because those layers have absorbed parts of it already. So a **second, complete model branch** runs alongside: same plant, same weather, but the sensor read through a correction curve, and its own model learned from scratch. Both branches are scored on the same clear hours, and the card shows their forecast-over-actual by hour of day against 1.0. The criterion was written down **before** the trial began: after the number of clear days named above, the worst hour of the day has to lose half its error, and the overall level must not drift by more than 0.02 while it happens. Until then the published forecast is the existing one, and the empty chart means the trial is still collecting — not that anything is wrong.",
     "help_sensorcheck": "**Irradiance sensor check**: a cheap weather station does not measure irradiance. It measures illuminance with a diode weighted for the human eye and divides by a constant, and that constant holds for exactly one reference case — the lower the sun, the redder its light and the larger the share the diode never sees. Every closed hour is held against an independent reanalysis archive and folded by sun elevation; **1.0 means the sensor agrees with the reference**. A flat error is a calibration factor, one that grows towards the horizon is a spectral error, and a gap between east and west is a sensor that is not level. Bands that have not gathered a kilowatt-hour of reference across five days yet are drawn as a hatched stub, never as a value. **Nothing here corrects the forecast** — the nowcast, the source-bias layer and the sky map have absorbed parts of this error already, so a factor in front of them would correct it twice.",
     "conv_curve_datasheet": "datasheet curve",
@@ -750,6 +754,10 @@ const STR = {
     "cal_running": "läuft",
     "cal_not_needed": "kein Versuch nötig",
     "cal_no_evidence": "wartet auf Evidenz",
+    "cal_off": "ausgeschaltet",
+    "cal_offer": "Das hat die Prüfung gefunden. Ein Versuch würde das ganze Modell noch einmal durch eine Korrekturkurve lernen und nur veröffentlicht, wenn er sich als besser erweist. Er kostet eine zweite Prognose und einen zweiten Lernzyklus pro Stunde und bleibt deshalb aus, bis du ihn einschaltest:",
+    "cal_where": "Einstellungen → Geräte & Dienste → PV Strings → Konfigurieren → Erweitert → „Kalibrierungsversuch laufen lassen“",
+    "cal_off_nofinding": "Der Versuch ist ausgeschaltet. Der Sensor-Check hat zu diesem Sensor noch nichts zu sagen — es gibt also auch nichts, woraus sich eine Korrekturkurve bauen ließe.",
     "cal_loading": "Versuch wird gelesen…",
     "cal_days": "{days} von {needed} klaren Tagen",
     "cal_hours_sub": "{archived} Stunden archiviert, davon {clear} an klaren Tagen",
@@ -789,7 +797,7 @@ const STR = {
     "cal_block_drift": "Pegel {a} ist weiter abgedriftet als {b}",
     "cal_note": "Jede gelernte Schicht wurde beim Lesen eines zu niedrig messenden Sensors trainiert. Statt das nachträglich zu korrigieren, lernt ein zweiter Zweig das Modell durch eine Kurve neu — veröffentlicht wird er nur, wenn er sich als besser erweist.",
     "cal_note_idle": "Die Prüfung findet an diesem Sensor nichts, was eine Korrekturkurve beheben würde — deshalb läuft kein zweiter Zweig.",
-    "cal_note_wait": "Eine Korrekturkurve braucht erst Evidenz aus dem Sensor-Check. Bis dahin läuft kein zweiter Zweig.",
+    "cal_note_wait": "Noch kein zweiter Zweig: Eine Korrekturkurve entsteht erst, wenn der Sensor-Check genug Evidenz für eine gesammelt hat.",
     "help_calibration": "**Kalibrierungsversuch**: Der Einstrahlungssensor liest je nach Sonnenstand zu niedrig, und jede Schicht, die diese Anlage gelernt hat — Himmelskarte, Source-Bias, Wetterkorrekturen — wurde beim Lesen dieses Sensors trainiert. Einen Faktor davorzuschalten würde denselben Fehler doppelt korrigieren, weil jene Schichten Teile davon längst aufgenommen haben. Deshalb läuft ein **zweiter, vollständiger Modellzweig** daneben: dieselbe Anlage, dasselbe Wetter, aber der Sensor durch eine Korrekturkurve gelesen und das eigene Modell von Grund auf neu gelernt. Beide Zweige werden über dieselben klaren Stunden gewertet; die Karte zeigt Prognose durch Ist je Stunde des Tages gegen 1,0. Das Kriterium wurde **vor** dem Versuch festgeschrieben: Nach der oben genannten Zahl klarer Tage muss die schlechteste Stunde des Tages die Hälfte ihres Fehlers verlieren, ohne dass der Pegel dabei um mehr als 0,02 abdriftet. Bis dahin bleibt die veröffentlichte Prognose die bisherige, und das leere Diagramm heißt, dass der Versuch noch sammelt — nicht, dass etwas nicht stimmt.",
     "help_sensorcheck": "**Sensor-Check**: Eine billige Wetterstation misst keine Einstrahlung. Sie misst Beleuchtungsstärke mit einer aufs menschliche Auge gewichteten Diode und teilt durch eine Konstante — und die stimmt für genau einen Referenzfall: Je tiefer die Sonne steht, desto röter ihr Licht und desto größer der Anteil, den die Diode nicht sieht. Jede abgeschlossene Stunde wird gegen ein unabhängiges Reanalyse-Archiv gehalten und nach Sonnenstand gebändert; **1,0 heißt, der Sensor stimmt mit der Referenz überein**. Ein flacher Fehler ist ein Kalibrierfaktor, ein zum Horizont hin wachsender ein Spektralfehler, und ein Unterschied zwischen Ost und West ein Sensor, der nicht waagerecht steht. Bänder, die noch keine Kilowattstunde Referenz an fünf Tagen gesammelt haben, stehen als schraffierter Stummel da, nie als Wert. **Nichts davon korrigiert die Prognose** — Nowcast, Source-Bias-Schicht und Himmelskarte haben Teile dieses Fehlers bereits aufgenommen, ein Faktor davor würde doppelt korrigieren.",
     "conv_curve_datasheet": "Datenblatt-Kennlinie",
@@ -3790,6 +3798,11 @@ function calBlocking(hass, reason) {
   return reason;
 }
 
+// The single sensor-check verdict that settles it: this instrument is
+// straight, and no correction curve would improve on it. Every other reading
+// leaves the question open, and the card says so rather than guessing.
+const CAL_AGREES = (sc) => sc?.reading === "agrees with the reference";
+
 class PvsCalibrationCard extends PvsBaseCard {
   getCardSize() { return 5; }
   getGridOptions() { return { columns: "full", rows: "auto" }; }
@@ -3856,14 +3869,50 @@ class PvsCalibrationCard extends PvsBaseCard {
     const d = this._state.data;
 
     // ---- no branch running ------------------------------------------------
-    // Two different reasons, and they must not read alike: a sensor the check
-    // has nothing to say about yet, and one it has looked at and found
-    // straight enough. Neither is a fault, so neither gets a warning colour.
+    // "not running" covers three different situations and they must not read
+    // alike. An integration from before the option only ever meant the last
+    // of them, so that is what a missing `reason` falls back to.
     if (!d.running) {
-      const thin = d.curve == null && (a.sensor_check?.ratio == null);
+      const reason = d.reason ?? "not_enough_evidence";
+      // Never reached in practice: the entity guard above already withdrew
+      // where there is no instrument. It is here because the integration
+      // tests the option BEFORE the instrument, so a sensorless plant with
+      // the trial off reports `not_enabled` — which is exactly why that
+      // guard reads the entity and not this field.
+      if (reason === "no_sensor") return hide();
+      // The interesting one: the owner can see a skewed sensor and do
+      // something about it. An offer, not a warning — and it names where the
+      // switch is rather than leaving that to be searched for.
+      if (reason === "not_enabled") {
+        const sc = a.sensor_check;
+        const finding = sc?.ratio != null ? scReading(hass, sc.reading) : null;
+        // A sensor the check calls straight needs no trial, so it is not
+        // offered one — the finding stands on its own.
+        const offer = finding && !CAL_AGREES(sc);
+        return card(head(`<span class="pvs-chip">${t(hass, "cal_off")}</span>`) + (offer
+          ? `<div class="cal-finding">${esc(finding)}</div>
+             <div class="cal-chips">
+               <span class="pvs-chip">${t(hass, "sc_overall")} <span class="v">${fmtNum(hass, sc.ratio, 2)}</span></span>
+               ${sc.slope != null ? `<span class="pvs-chip">${t(hass, "sc_slope")}
+                 <span class="v">${fmtNum(hass, sc.slope, 2)}</span></span>` : ""}
+             </div>
+             <div class="cal-note">${t(hass, "cal_offer")}</div>
+             <div class="cal-where">${t(hass, "cal_where")}</div>`
+          // Nothing to offer a trial for: no finding at all, or one that
+          // says the sensor is straight. Suggesting it here would be asking
+          // for a second forecast against an error nobody has measured.
+          : `${finding ? `<div class="cal-finding">${esc(finding)}</div>` : ""}
+             <div class="cal-note">${t(hass, finding ? "cal_note_idle" : "cal_off_nofinding")}</div>`));
+      }
+      // Switched on, no branch yet: either the check has not gathered enough
+      // to build a curve from, or what it has justifies no correction. The
+      // published check carries no band's trust, so the two cannot be told
+      // apart here — and only one of them can be stated outright, which is a
+      // check that calls the sensor straight. Neither is a fault.
+      const agrees = CAL_AGREES(a.sensor_check);
       return card(
-        head(`<span class="pvs-chip">${t(hass, thin ? "cal_no_evidence" : "cal_not_needed")}</span>`)
-        + `<div class="cal-note">${t(hass, thin ? "cal_note_wait" : "cal_note_idle")}</div>`);
+        head(`<span class="pvs-chip">${t(hass, agrees ? "cal_not_needed" : "cal_no_evidence")}</span>`)
+        + `<div class="cal-note">${t(hass, agrees ? "cal_note_idle" : "cal_note_wait")}</div>`);
     }
 
     // ---- running ----------------------------------------------------------
@@ -4060,6 +4109,11 @@ const CAL_CSS = `
     border-radius: 6px; padding: 8px 11px; margin: 0 0 10px; }
   .cal-pub.on { border-left-color: var(--pvs-cat-3); }
   .cal-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .cal-finding { font-size: 15px; font-weight: 600; line-height: 1.35;
+    color: var(--primary-text-color); margin: 2px 0 9px; }
+  .cal-where { font-size: 11px; line-height: 1.5; margin-top: 6px; padding: 6px 9px;
+    border-radius: 6px; color: var(--primary-text-color);
+    background: var(--pvs-chip-bg); border-left: 3px solid var(--pvs-model); }
   .pvs-chip.dim { opacity: 0.7; }
   .cal-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
   .cal-tab { cursor: pointer; border-color: var(--pvs-hairline); }
