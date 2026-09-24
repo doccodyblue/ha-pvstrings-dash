@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.21.0";
+const PVS_VERSION = "0.21.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -2127,7 +2127,13 @@ class PvsSkyMapCard extends PvsBaseCard {
     if ((cfg.show_sun ?? true) && shading) {
       const sa = shading.attributes;
       if (sa.sun_elevation != null && sa.sun_elevation >= 3) {
-        let sx = xOf(sa.sun_azimuth);
+        // Signed offset from the window's left edge: xOf wraps modulo 360, so
+        // a morning sun just left of the window came out at +340 and was
+        // pinned to the west edge. Split the unseen arc at its middle instead.
+        const extent = nAz * 10;
+        let rel = (((sa.sun_azimuth - start + 10) % 360) + 360) % 360;
+        if (rel > extent + (360 - extent) / 2) rel -= 360;
+        const sx = PAD_L + rel / 10 * CW;
         let sy = yOf(sa.sun_elevation);
         const clampedX = Math.max(PAD_L + 6, Math.min(W - PAD_R - 6, sx));
         const outside = clampedX !== sx || sy < PAD_T || sy > H - PAD_B;
@@ -2137,8 +2143,10 @@ class PvsSkyMapCard extends PvsBaseCard {
             stroke="var(--card-background-color)" stroke-width="2"/>
           <circle cx="${clampedX}" cy="${sy}" r="10.5" fill="none"
             stroke="var(--pvs-sun)" stroke-width="1" opacity="0.5" class="sun-ring"/>
-          ${outside ? `<text x="${clampedX}" y="${sy - 14}" text-anchor="middle">${esc(t(hass, "sky_sun_outside"))}</text>` : ""}
         </g>`;
+        // Below the map, not inside it: a young map is only a few cells wide
+        // and any label in the SVG is cut off at its edge.
+        if (outside) sunLine = `<div class="sky-warnline dim">☀ ${esc(t(hass, "sky_sun_outside"))}</div>`;
       } else {
         sunLine = `<div class="sky-warnline dim">☾ ${t(hass, "sky_sun_below")}</div>`;
       }
