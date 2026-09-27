@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.22.0";
+const PVS_VERSION = "0.22.1";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -445,6 +445,7 @@ const STR = {
     // nerd
     "nerd_learning": "Learning — correction factors",
     "nerd_plant_buckets": "Plant: weather × daypart",
+    "nerd_plant_hours": "Plant: weather × hour",
     "nerd_bucket_missing": "never seen",
     "cens_coverage": "coverage",
     "cens_curtailed": "curtailed",
@@ -543,6 +544,7 @@ const STR = {
     "lbl_reconstructed_intervals": "reconstructed intervals",
     "lbl_skipped_because": "skipped because",
     "nerd_strings_table": "Strings: offset and daypart",
+    "nerd_strings_hours": "Strings: offset and hour",
     "col_offset": "offset",
     "factor_tip_factor": "factor",
     "factor_tip_n": "evidence n_eff",
@@ -897,6 +899,7 @@ const STR = {
     "missing_card": "**{key}** wurde hier erwartet, aber es gibt keine solche Entity an diesem Gerät — sie wurde nicht stillschweigend weggelassen. Prüfen, ob die Integrationsversion sie publiziert oder ob die Entity deaktiviert ist.",
     "nerd_learning": "Lernen — Korrekturfaktoren",
     "nerd_plant_buckets": "Anlage: Wetter × Tagesabschnitt",
+    "nerd_plant_hours": "Anlage: Wetter × Stunde",
     "nerd_bucket_missing": "nie gesehen",
     "cens_coverage": "Erfassung",
     "cens_curtailed": "Abregelung",
@@ -990,6 +993,7 @@ const STR = {
     "lbl_reconstructed_intervals": "rekonstruierte Intervalle",
     "lbl_skipped_because": "übersprungen wegen",
     "nerd_strings_table": "Stränge: Offset und Tagesabschnitt",
+    "nerd_strings_hours": "Stränge: Offset und Stunde",
     "col_offset": "Offset",
     "factor_tip_factor": "Faktor",
     "factor_tip_n": "Evidenz n_eff",
@@ -6782,10 +6786,19 @@ async function buildViews(hass, config) {
     if (mo) {
       nerdSections.push({ type: "grid", cards: [
         heading(t(lang, "nerd_learning")),
-        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_plant",
-          title: t(lang, "nerd_plant_buckets"), ...det },
-        { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_string_all",
-          title: t(lang, "nerd_strings_table"), ...det },
+        // Hourly buckets make these tables fourteen columns wide: full width
+        // there, so the day fits without scrolling. Daypart integrations keep
+        // their half-width three-column tables.
+        ...(() => {
+          const hourly = hass.states[mo]?.attributes?.daypart_scheme === 2;
+          const wide = hourly ? { grid_options: { columns: "full" } } : {};
+          return [
+            { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_plant",
+              title: t(lang, hourly ? "nerd_plant_hours" : "nerd_plant_buckets"), ...det, ...wide },
+            { type: "custom:pvstrings-kv-table", entity: mo, mode: "log_ratio_string_all",
+              title: t(lang, hourly ? "nerd_strings_hours" : "nerd_strings_table"), ...det, ...wide },
+          ];
+        })(),
       ] });
       // What the weather SOURCE gets wrong, on its own. The sections view is
       // a plain grid: sections line up in rows and a row is as tall as its
