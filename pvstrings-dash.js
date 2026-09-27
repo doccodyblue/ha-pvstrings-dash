@@ -27,7 +27,7 @@
 
 /* ============================ SECTION: HEADER ============================ */
 
-const PVS_VERSION = "0.21.1";
+const PVS_VERSION = "0.22.0";
 const PVS_MIN_INTEGRATION = "1.8.0";
 
 /* ============================ SECTION: CONST ============================= */
@@ -465,6 +465,10 @@ const STR = {
     "weather_overcast": "overcast", "weather_rain": "rain",
     "daypart_morning": "morning", "daypart_midday": "midday",
     "daypart_afternoon": "afternoon",
+    "hourly_legend_less": "delivered less than computed",
+    "hourly_legend_more": "delivered more",
+    "hourly_note": "One column per hour, counted from solar noon; the time is when that hour starts today, and only today's daylight hours are shown. The hours began with the value of their old daypart and learn one by one from there, so within a daypart they look alike at first.",
+    "hourly_note_rel": "One column per hour, in hours from solar noon. The hours began with the value of their old daypart and learn one by one from there, so within a daypart they look alike at first.",
     "vk_measured": "measured", "vk_lower_bound": "lower bound",
     "vk_reconstructed": "reconstructed",
     // savings provenance (PV Strings >= 1.22): both blocks are optional and
@@ -913,6 +917,10 @@ const STR = {
     "weather_overcast": "bedeckt", "weather_rain": "Regen",
     "daypart_morning": "Vormittag", "daypart_midday": "Mittag",
     "daypart_afternoon": "Nachmittag",
+    "hourly_legend_less": "weniger geliefert als gerechnet",
+    "hourly_legend_more": "mehr geliefert",
+    "hourly_note": "Eine Spalte pro Stunde, gezählt ab Sonnenmittag; die Uhrzeit ist der heutige Beginn dieser Stunde, gezeigt werden nur die heutigen Tagstunden. Die Stunden starteten mit dem Wert ihres alten Tagesabschnitts und lernen von dort einzeln weiter — innerhalb eines Abschnitts sehen sie anfangs gleich aus.",
+    "hourly_note_rel": "Eine Spalte pro Stunde, in Stunden ab Sonnenmittag. Die Stunden starteten mit dem Wert ihres alten Tagesabschnitts und lernen von dort einzeln weiter — innerhalb eines Abschnitts sehen sie anfangs gleich aus.",
     "vk_measured": "gemessen", "vk_lower_bound": "Untergrenze",
     "vk_reconstructed": "rekonstruiert",
     "nerd_price": "Ersparnis — Herkunft",
@@ -5290,6 +5298,49 @@ const HP_CSS = `
 const WEATHERS = ["clear", "partly_cloudy", "overcast", "rain"];
 const DAYPARTS = ["morning", "midday", "afternoon"];
 
+// Solar noon today at the plant, as a UTC timestamp: longitude plus the
+// equation of time (NOAA's short series, good to about a minute). The
+// integration keys its hourly buckets relative to solar noon; readers think
+// in clock time, so the columns are labelled with the clock time a slot
+// starts at today.
+function solarNoonMs(lon, now = Date.now()) {
+  const d = new Date(now);
+  const start = Date.UTC(d.getUTCFullYear(), 0, 0);
+  const doy = Math.floor((now - start) / 86400000);
+  const g = (2 * Math.PI / 365) * (doy - 1);
+  const eot = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g)
+    - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));  // minutes
+  const midnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return midnight + (720 - 4 * lon - eot) * 60000;
+}
+
+// The hourly slots a log-ratio table actually holds, in the integration's
+// order (daypart_slots), each with its span and the daypart it lies in.
+// Null when the integration still learns per daypart -- the caller then draws
+// the three-column table exactly as before.
+function hourlySlots(attrs, buckets, lat = null) {
+  if (attrs?.daypart_scheme !== 2 || !Array.isArray(attrs?.daypart_slots)) return null;
+  const present = new Set(Object.keys(buckets ?? {}).map((k) => k.split("|").pop()));
+  // The integration keeps slots out to the longest day of the year; today
+  // only the ones the sun actually crosses (plus half an hour) are shown, so
+  // a September table is not half night. They come back as the days grow.
+  const half = lat != null ? halfDayHours(lat) : 12;
+  const slots = attrs.daypart_slots.filter((s) =>
+    present.has(s.key) && s.to_h > -half - 0.5 && s.from_h < half + 0.5);
+  return slots.length ? slots : null;
+}
+
+// Half the length of today's day at a latitude, in hours (sunrise equation).
+function halfDayHours(lat, now = Date.now()) {
+  const d = new Date(now);
+  const doy = Math.floor((now - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86400000);
+  const decl = -23.44 * Math.cos((2 * Math.PI / 365) * (doy + 10)) * Math.PI / 180;
+  const x = -Math.tan(lat * Math.PI / 180) * Math.tan(decl);
+  if (x <= -1) return 12;
+  if (x >= 1) return 0;
+  return Math.acos(x) * 180 / Math.PI / 15;
+}
+
 class PvsKvTableCard extends PvsBaseCard {
   getCardSize() { return 3; }
   // Row-based modes (sky_overview, conversion, price) read entities beyond
@@ -5314,6 +5365,51 @@ class PvsKvTableCard extends PvsBaseCard {
     return `<td class="fac ${tone}${thin ? " thin" : ""}" data-fac='${esc(JSON.stringify({ f: cell.factor, n: cell.n_eff ?? null, thin }))}'>
       <span class="pvs-num">${fmtSigned(hass, pct, 1)} %</span>
       ${showN ? `<span class="n">n ${fmtNum(hass, cell.n_eff, 1)}</span>` : ""}</td>`;
+  }
+
+  // Hourly factors as a heatmap: one column per slot, grouped under the
+  // daypart it replaced, labelled with today's clock time. Same palette as the
+  // source-bias heatmap (orange = reality delivered more than computed, blue =
+  // less); the number stays small in the cell, evidence in the tooltip.
+  _hourlyTable(hass, slots, rows, lead = null) {
+    const lon = hass?.config?.longitude;
+    const noon = lon != null ? solarNoonMs(lon) : null;
+    const CLIP = 30;
+    const cell = (c) => {
+      if (!c) return `<td class="miss hm-miss"></td>`;
+      const pct = (c.factor - 1) * 100;
+      const mag = Math.min(1, Math.abs(pct) / CLIP);
+      const thin = (c.n_eff ?? 0) < MATURITY_MAX_N_EFF * 0.5;
+      const hue = pct < 0 ? "var(--pvs-model)" : "var(--pvs-measure)";
+      const mix = Math.round(8 + mag * 72);
+      return `<td class="hm${thin ? " thin" : ""}" style="background:color-mix(in srgb, ${hue} ${mix}%, transparent)"
+        data-fac='${esc(JSON.stringify({ f: c.factor, n: c.n_eff ?? null, thin }))}'>
+        <span class="pvs-num">${Math.abs(pct) < 0.5 ? "0" : fmtSigned(hass, pct, 0)}</span></td>`;
+    };
+    const groups = [];
+    for (const s of slots) {
+      const last = groups[groups.length - 1];
+      if (last && last.part === s.daypart) last.n += 1;
+      else groups.push({ part: s.daypart, n: 1 });
+    }
+    const label = (s) => noon != null
+      ? fmtHour(hass, noon + s.from_h * 3600000)
+      : `${s.from_h >= 0 ? "+" : "−"}${Math.abs(s.from_h)}`;
+    const leadHead = lead ? `<th>${esc(lead.title)}</th>` : "";
+    const leadGap = lead ? `<th></th>` : "";
+    return `<div class="hm-scroll"><table class="hm-table hm-hours">
+      <tr><th></th>${leadGap}${groups.map((g) => `<th colspan="${g.n}" class="hm-part">${t(hass, "daypart_" + g.part)}</th>`).join("")}</tr>
+      <tr><th></th>${leadHead}${slots.map((s) => `<th class="pvs-num hm-clock">${label(s)}</th>`).join("")}</tr>
+      ${rows.map((r) => `<tr><th>${esc(r.label)}</th>${lead ? this._factorCell(hass, r.lead) : ""}
+        ${slots.map((s) => cell(r.cells[s.key])).join("")}</tr>`).join("")}
+    </table></div>
+    <div class="hm-legend">
+      <span class="lbl">−${CLIP} % ${t(hass, "hourly_legend_less")}</span>
+      <span class="ramp"></span>
+      <span class="lbl">${t(hass, "hourly_legend_more")} +${CLIP} %</span>
+      <span class="thin-sw"><span class="sw"></span>${t(hass, "bias_thin")}</span>
+    </div>
+    <div class="kv-foot">${t(hass, noon != null ? "hourly_note" : "hourly_note_rel")}</div>`;
   }
 
   // help_<key> per mode — the "?" in the head replaces the explainer footer
@@ -5412,7 +5508,13 @@ class PvsKvTableCard extends PvsBaseCard {
     if (mode === "log_ratio_plant") {
       const buckets = a.log_ratio?.plant;
       if (!buckets) return empty("log_ratio.plant");
-      body = `<table><tr><th></th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
+      const slots = hourlySlots(a, buckets, hass?.config?.latitude);
+      if (slots) {
+        body = this._hourlyTable(hass, slots, WEATHERS.map((w) => ({
+          label: t(hass, "weather_" + w),
+          cells: Object.fromEntries(slots.map((s) => [s.key, buckets[`${w}|${s.key}`]])),
+        })));
+      } else body = `<table><tr><th></th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
         ${WEATHERS.map((w) => `<tr><th>${t(hass, "weather_" + w)}</th>
           ${DAYPARTS.map((d) => this._factorCell(hass, buckets[`${w}|${d}`])).join("")}</tr>`).join("")}</table>`;
     } else if (mode === "log_ratio_string_all") {
@@ -5422,7 +5524,14 @@ class PvsKvTableCard extends PvsBaseCard {
       const ids = [...new Set([...Object.keys(off), ...Object.keys(dp).map((k) => k.split("|")[0])])];
       if (!ids.length) return empty("log_ratio.string");
       const names = this._names ?? (this._stringNames(), new Map());
-      body = `<table><tr><th></th><th>${t(hass, "col_offset")}</th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
+      const slots = hourlySlots(a, dp, hass?.config?.latitude);
+      if (slots) {
+        body = this._hourlyTable(hass, slots, ids.map((id) => ({
+          label: names.get(id) ?? id.slice(0, 8),
+          lead: off[id],
+          cells: Object.fromEntries(slots.map((s) => [s.key, dp[`${id}|${s.key}`]])),
+        })), { title: t(hass, "col_offset") });
+      } else body = `<table><tr><th></th><th>${t(hass, "col_offset")}</th>${DAYPARTS.map((d) => `<th>${t(hass, "daypart_" + d)}</th>`).join("")}</tr>
         ${ids.map((id) => `<tr><th>${esc(names.get(id) ?? id.slice(0, 8))}</th>${this._factorCell(hass, off[id])}
           ${DAYPARTS.map((d) => this._factorCell(hass, dp[`${id}|${d}`])).join("")}</tr>`).join("")}</table>
         <div class="kv-foot">${t(hass, "factor_legend")}</div>`;
@@ -5700,6 +5809,10 @@ const KV_CSS = `
   .hm-table td.hm.thin .pvs-num { opacity: 0.45; }
   .hm-table td.hm.thin { background-image: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--card-background-color) 60%, transparent) 4px 6px); }
   .hm-miss { background: var(--pvs-unobserved); }
+  .hm-scroll { overflow-x: auto; }
+  .hm-hours td { padding: 3px 3px; min-width: 26px; }
+  .hm-hours th.hm-part { font-weight: 400; color: var(--secondary-text-color); border-bottom: 1px solid var(--divider-color); }
+  .hm-hours th.hm-clock { font-weight: 400; font-size: 9.5px; color: var(--secondary-text-color); white-space: nowrap; }
   .hm-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10.5px; color: var(--secondary-text-color); flex-wrap: wrap; }
   .hm-legend .ramp { flex: 1 1 80px; height: 8px; border-radius: 4px; min-width: 60px;
     background: linear-gradient(90deg, color-mix(in srgb, var(--pvs-model) 80%, transparent), transparent 50%, color-mix(in srgb, var(--pvs-measure) 80%, transparent)); }
