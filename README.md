@@ -5,9 +5,9 @@
 Cards and a zero-configuration dashboard strategy for the
 [PV Strings](https://github.com/doccodyblue/ha-pvstrings) integration.
 
-Install it, add the strategy, and you get a working dashboard for however many
-strings you have — without opening a card editor. Or ignore the strategy and
-use the cards on their own.
+Add the strategy and you get a working dashboard for however many strings you
+have — without opening a card editor. Or ignore the strategy and use the cards
+on their own.
 
 **Optional.** The integration publishes everything through ordinary entities
 and attributes and works perfectly well without any of this.
@@ -33,19 +33,22 @@ enough to walk outside and confirm.
 
 ## Installation
 
-### HACS (recommended)
+**Nothing to install.** Since PV Strings 1.26.2 the cards ship inside the
+integration, which registers them as a dashboard resource on setup. Install
+[PV Strings](https://github.com/doccodyblue/ha-pvstrings), restart, and the
+cards and the strategy are there — always the version that release was built
+and tested with.
 
-Search for **PV Strings Dashboard** in HACS and install it; HACS registers the
-Lovelace resource automatically.
+### Upgrading from a separate install
 
-Not there yet? The repository is awaiting inclusion in the HACS default store,
-which takes a while. Until then: HACS → three-dot menu → **Custom
-repositories** → `doccodyblue/ha-pvstrings-dash`, type **Dashboard**.
-
-### Manual
-
-Copy `pvstrings-dash.js` to `/config/www/` and add a Lovelace resource:
-`/local/pvstrings-dash.js`, type *JavaScript module*.
+If you installed this repository on its own before — through HACS, or by
+copying `pvstrings-dash.js` to `/config/www/` — Home Assistant raises a repair
+after the update: *Dashboard card is loaded from a separate copy*. Two copies
+compete for the same card names and the first one loaded wins, which may be
+the older one. Remove the separate copy (HACS → **PV Strings Dashboard** → ⋮ →
+**Remove**, or delete the `/local/` resource under Settings → Dashboards → ⋮ →
+Resources) and restart. Your dashboards stay as they are; the card types keep
+their names.
 
 ### The generated dashboard
 
@@ -741,18 +744,17 @@ enough data yet" from the outside):
 
 ---
 
-## Why a separate repository
+## Why this is still a repository of its own
 
-HACS classifies a repository as *either* an integration *or* a Lovelace
-plugin, and it decides from the layout. A repository carrying
-`custom_components/` is an integration and its JavaScript cannot be installed
-as a plugin. So the cards live here.
-
-The split has a second benefit and one real cost. The benefit: a card gets
-fiddled with ten times in an evening, and coupling that to integration
-releases would mean restarting Home Assistant ten times. The cost is version
-skew, and it fails quietly — which is exactly what *The contract* above is
-for.
+It is where the cards are developed. Users get them from the integration:
+each integration release carries a tagged release of this repository, copied
+in unchanged (`tools/sync_dash.sh` over there). That ends the version skew a
+separate install had — the cards and the entities they read now always
+arrive together — while a card can still be fiddled with ten times in an
+evening against a dev server without restarting Home Assistant each time.
+*The contract* above still holds: a card must cope with an integration older
+than itself, because the cards are written ahead of the release that ships
+them.
 
 ---
 
@@ -787,9 +789,11 @@ One ES module, plain JavaScript, no build step — `pvstrings-dash.js` is both
 source and artifact. The `tools/` directory carries the dev loop:
 
 - `tools/serve.mjs` — serves the repo with CORS so a Lovelace resource can
-  point at your dev machine
+  point at your dev machine. That resource takes precedence over the copy
+  bundled with the integration, which raises its separate-copy repair as a
+  reminder; remove the resource when you are done.
 - `tools/ha-ws.mjs` — minimal HA websocket client (`HA_URL` / `HA_TOKEN`)
 - `tools/test.html` — renders every card with live data from your instance,
   plus a strategy dry-run: `http://localhost:8099/tools/test.html?dark=1#token=<long-lived-token>`
 - `deploy.sh` — syntax-check, optional scp to `/config/www/`, cache-busts the
-  resource
+  resource (development only; a `/config/www/` copy counts as separate too)
