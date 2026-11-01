@@ -462,6 +462,13 @@ title: Day-ahead error by hour    # optional
 
 ![Hourly day-ahead profile](docs/img/hour-profile-dark.png)
 
+With integration 1.27.1 or later, chips above the chart switch between the
+plant and each string. Errors of opposite sign cancel in the plant sum — an
+east string announced too high in the morning, a west one too low in the
+afternoon — and only show per string. Weeks closed before 1.27.1 have the plant
+only; with a string selected, such a week says so instead of drawing the plant
+under the string's name.
+
 Two scales, because one would hide the other. The bars carry the energy behind
 an hour — announced in blue, arrived in orange. The strip below carries the
 deviation as a share of the announcement, `(announced − arrived) / announced`,

@@ -288,7 +288,17 @@
           { hour: 20, forecast_kwh: 0.548, actual_kwh: 0.521, days: 16 },
           { hour: 21, forecast_kwh: 0, actual_kwh: 0.004, days: 9 },
           { hour: 23, forecast_kwh: 0, actual_kwh: 0, days: 10 },
-        ] } },
+        ],
+        // per string: the east string runs hot in the morning, the west one
+        // cold in the afternoon -- partly cancelling in the plant sum
+        hourly_profile_by_string: {
+          s1: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((h) => ({ hour: h,
+            forecast_kwh: +(bell(h - 1.5) * 26).toFixed(3),
+            actual_kwh: +(bell(h - 1.5) * 26 * (h < 11 ? 0.72 : 0.98)).toFixed(3), days: 27 })),
+          s2: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map((h) => ({ hour: h,
+            forecast_kwh: +(bell(h + 1.5) * 24).toFixed(3),
+            actual_kwh: +(bell(h + 1.5) * 24 * (h > 13 ? 1.15 : 0.97)).toFixed(3), days: 28 })),
+        } } },
     // fresh installation: two days in, the accuracy state is still unknown
     // while the profile already has rows — the case that must not read "nothing"
     "sensor.plant_da30_fresh": { entity_id: "sensor.plant_da30_fresh", state: "unknown",
@@ -553,6 +563,13 @@
         hourly_profile: Array.from({ length: 12 }, (_, k) => ({ hour: k + 6,
           forecast_kwh: +(bell(k + 6) * 7 * (1 + (rnd() - 0.4) * 0.3)).toFixed(2),
           actual_kwh: +(bell(k + 6) * 7 * (0.85 + rnd() * 0.3)).toFixed(2), days: i > 0 ? 7 : 3 })),
+        // only the last two weeks were closed after per-string profiles existed
+        ...(i <= 1 ? { hourly_profile_by_string: {
+          s1: Array.from({ length: 8 }, (_, k) => ({ hour: k + 6,
+            forecast_kwh: +(bell(k + 4.5) * 4).toFixed(2), actual_kwh: +(bell(k + 4.5) * 3.4).toFixed(2), days: i > 0 ? 7 : 3 })),
+          s2: Array.from({ length: 9 }, (_, k) => ({ hour: k + 10,
+            forecast_kwh: +(bell(k + 11.5) * 4).toFixed(2), actual_kwh: +(bell(k + 11.5) * 4.3).toFixed(2), days: i > 0 ? 7 : 3 })),
+        } } : {}),
         maturity: backfilled || idx < 3 || (onlyRebuilt && i > 0) ? null : { weather_n_eff: Object.fromEntries(
           ["clear", "partly_cloudy", "overcast", "rain"].flatMap((w) => ["morning", "midday", "afternoon"].map((dp) => [`${w}|${dp}`, dp]))
             .slice(0, seen).map(([k], j) => [k, Math.min(22, n + j)])), sky_cells: { s1: 120 + idx * 9, s2: 100 + idx * 8 } } });
