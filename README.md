@@ -175,6 +175,12 @@ Hourly forecast, unshaded potential, and actual production — one axis.
 The gap between unshaded and forecast is the shadow the model knows; the gap
 to the measurement is what it does not.
 
+The line card sums that first gap over the shown day and puts it under the
+forecast total: *−2.9 kWh lost to shading (11 %)*. It counts what the learned
+sky map takes off — trees, buildings, anything fixed. Clouds are already in
+the weather forecast and are not counted. The line is left out below 0.5 %
+and on curtailment groups, which carry no unshaded series of their own.
+
 ```yaml
 type: custom:pvstrings-forecast
 entity: sensor.<plant>_forecast_today   # plant, string, or curtailment group
