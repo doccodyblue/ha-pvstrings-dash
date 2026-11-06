@@ -54,6 +54,8 @@
 <div class="wideb" id="histw"></div><div class="narrow" id="hists1"></div><div class="wideb" id="histbars"></div>
 <h4>history — hourly profile with week stepper (820px)</h4><div style="width:820px" id="histhp"></div>
 <h4>learning progress (940px)</h4><div class="wideb" id="learn1"></div>
+<h4>chain — one hour, layer by layer (460px)</h4><div class="narrow" id="chain"></div>
+<h4>daily — day-ahead vs actual (460px)</h4><div class="narrow" id="daily"></div>
 <script type="module">
   import "/pvstrings-dash.js";
   if (new URLSearchParams(location.search).get("dark") === "1") document.body.classList.add("dark");
@@ -153,8 +155,13 @@
       const lit = bell(h) > 0.02;
       const cell = lit ? +(air + bell(h) * (hot ? 9.5 : 6) - wind * 0.4).toFixed(1) : null;
       const thermal = lit ? +(1 - (cell - 25) * 0.004).toFixed(4) : 1.0;
-      rows.push({ datetime: dt, potential_kwh: p, unshaded_kwh: p, source_bias: 0.98,
-        shading: 1.0, model: 1.0, physics_kwh: p, thermal, cell_temp_c: cell, air_temp_c: air, wind_ms: wind });
+      // the east string carries a morning shadow and a model above 1, so the
+      // chain card has something to show; the west string stays flat
+      const shading = hot ? 1.0 : +(h < 11 ? 0.82 + 0.05 * (h - 7) : 1.0).toFixed(3);
+      const model = hot ? 1.0 : 1.06;
+      const phys = p, un = +(phys * model).toFixed(3);
+      rows.push({ datetime: dt, potential_kwh: +(un * shading).toFixed(3), unshaded_kwh: un, source_bias: 0.98,
+        shading, model, physics_kwh: phys, thermal, cell_temp_c: cell, air_temp_c: air, wind_ms: wind });
     }
     return rows;
   };
@@ -439,12 +446,29 @@
       attributes: { cells: cells.filter((c, i) => i % 2 === 0), level: null, fit_method: "absolute",
         friendly_name: "Strang West Himmelskarte" } },
   };
+  // daily card: tomorrow's forecast, and the day-ahead history the
+  // integration keeps on its 30-day sensor (rows keyed by the day they were for)
+  states["sensor.plant_fct"] = { entity_id: "sensor.plant_fct", state: "18.2",
+    attributes: { unit_of_measurement: "kWh", friendly_name: "PV Anlage Prognose morgen" } };
+  states["sensor.s1_prod"] = { entity_id: "sensor.s1_prod", state: "4.1",
+    attributes: { unit_of_measurement: "kWh", friendly_name: "Strang Ost Ertrag heute" } };
+  const dailyActual = (back) => +(13 + 6 * Math.sin(back * 1.3) + 2 * Math.cos(back * 0.7)).toFixed(2);
+  const dayKeyBack = (back) => { const dt = new Date(d0); dt.setDate(dt.getDate() - back);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`; };
+  states["sensor.plant_da30"].attributes.history = { plant:
+    Array.from({ length: 14 }, (_, i) => [dayKeyBack(i), +(dailyActual(i) * (1 + 0.14 * Math.sin(i * 2.1))).toFixed(2)]) };
+  const statsD = Array.from({ length: 14 }, (_, i) => {
+    const back = 13 - i, dt = new Date(d0); dt.setDate(dt.getDate() - back);
+    return { start: dt.getTime(), end: dt.getTime() + 86400e3, change: dailyActual(back) };
+  });
   const entReg = [
     { entity_id: "sensor.s1_sky", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_sky_map", translation_key: "sky_map" },
     { entity_id: "sensor.s1_shading", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_shading_now", translation_key: "shading_now" },
     { entity_id: "sensor.plant_fc", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_today", translation_key: "forecast_today" },
     { entity_id: "sensor.s1_fc", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_forecast_today", translation_key: "forecast_today" },
     { entity_id: "sensor.plant_da30", platform: "pvstrings", device_id: "dp", unique_id: "e_wmape_day_ahead_30d", translation_key: "wmape_day_ahead_30d" },
+    { entity_id: "sensor.plant_fct", platform: "pvstrings", device_id: "dp", unique_id: "e_forecast_tomorrow", translation_key: "forecast_tomorrow" },
+    { entity_id: "sensor.s1_prod", platform: "pvstrings", device_id: "ds", unique_id: "e_s1_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_prod", platform: "pvstrings", device_id: "dp", unique_id: "e_produced_today", translation_key: "produced_today" },
     { entity_id: "sensor.plant_power", platform: "pvstrings", device_id: "dp", unique_id: "e_power_now", translation_key: "power_now" },
     { entity_id: "sensor.ghi_check", platform: "pvstrings", device_id: "dp", unique_id: "e_ghi_forecast", translation_key: "ghi_forecast" },
@@ -611,7 +635,7 @@
       case "config/entity_registry/list": return entReg;
       case "config/device_registry/list": return devReg;
       case "recorder/statistics_during_period":
-        return { [cmd.statistic_ids[0]]: cmd.period === "5minute" ? stats5 : statsH };
+        return { [cmd.statistic_ids[0]]: cmd.period === "5minute" ? stats5 : cmd.period === "day" ? statsD : statsH };
       default: return {};
     }
   };
@@ -686,6 +710,8 @@
       ["#histbars", "pvstrings-forecast", { entity: "sensor.plant_fc", days: 2, show_unshaded: false }],
       ["#histhp", "pvstrings-hour-profile", { entity: "sensor.plant_da30" }],
       ["#learn1", "pvstrings-learning", { entity: "sensor.plant_da30" }],
+      ["#chain", "pvstrings-chain", { entity: "sensor.s1_fc" }],
+      ["#daily", "pvstrings-daily", { entity: "sensor.plant_fc", days: 14 }],
       ["#matn", "pvstrings-maturity", { entity: "sensor.plant_mo2",
         rows: [{ name: "Strang Ost", sky: "sensor.s1_sky" }, { name: "Strang West", sky: "sensor.s2_sky" }] }]]) {
     const el = document.createElement(tag);

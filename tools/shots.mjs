@@ -3,9 +3,11 @@
 import { createRequire } from "node:module";
 const req = createRequire(process.env.PLAYWRIGHT_PATH ?? import.meta.url);
 const { chromium } = req("playwright-core");
+import { english } from "./english.mjs";
 
 const OUT = new URL("../docs/img", import.meta.url).pathname;
 const specs = [
+  ["#w",      940, "forecast-wide-dark.png"],
   ["#sky",    520, "sky-map-dark.png"],
   ["#n",      480, "forecast-line-dark.png"],
   ["#conv1",  840, "conversion-dark.png"],
@@ -19,6 +21,8 @@ const specs = [
   ["#learn",  480, "factors-dark.png"],
   ["#thermal", 560, "thermal-dark.png"],
   ["#acc",    940, "accuracy-dark.png"],
+  ["#chain",  480, "chain-dark.png"],
+  ["#daily",  480, "daily-dark.png"],
 ];
 
 const b = await chromium.launch();
@@ -26,6 +30,7 @@ const ctx = await b.newContext({ viewport: { width: 1100, height: 900 }, deviceS
 const p = await ctx.newPage();
 const errs = [];
 p.on("pageerror", (e) => errs.push(String(e)));
+await english(p);
 await p.goto("http://localhost:8099/tools/mock-preview.html?dark=1", { waitUntil: "networkidle" });
 await p.waitForTimeout(2500);
 // the harness labels sit right under each card — hide them so the margin

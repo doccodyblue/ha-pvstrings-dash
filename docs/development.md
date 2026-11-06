@@ -20,7 +20,8 @@ Screenshots in `docs/img` are generated, not taken by hand: start
 `node tools/serve.mjs`, then run `node tools/shots.mjs` for the card images
 and `node tools/details.mjs` for the detail crops used in the [card reference](cards.md). Both
 render `tools/mock-preview.html`, so the images carry synthetic data and no
-plant of anyone's.
+plant of anyone's. `tools/english.mjs` rewrites the German harness to English
+on the fly, so the documentation images are English.
 
 One ES module, plain JavaScript, no build step — `pvstrings-dash.js` is both
 source and artifact. The `tools/` directory carries the dev loop:

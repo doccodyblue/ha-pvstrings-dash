@@ -10,7 +10,7 @@ register themselves. Install the integration, restart, done. This repository
 is where the cards are developed and documented. The dashboard is optional:
 the integration publishes everything as ordinary entities and works without it.
 
-![Forecast and actual for today](docs/img/en-forecast-wide.png)
+![Forecast and actual for today](docs/img/forecast-wide-dark.png)
 
 ## A complete dashboard in one step
 
@@ -37,14 +37,14 @@ config and edit it like any dashboard.
 
 | | |
 |---|---|
-| ![Sky map](docs/img/en-sky-map.png) | ![Conversion](docs/img/en-conversion.png) |
+| ![Sky map](docs/img/sky-map-dark.png) | ![Conversion](docs/img/conversion-dark.png) |
 
 The sky map is why these cards exist. On the reference plant two strings with
 the same orientation and tilt lose 0.3 % and 67.7 % in the same patch of sky —
 one has a neighbour's house in its morning. In a table that is noise; as two
 maps side by side it is obvious.
 
-![Day-ahead error by hour](docs/img/en-hour-profile.png)
+![Day-ahead error by hour](docs/img/hour-profile-dark.png)
 
 *Screenshots show demo data.*
 

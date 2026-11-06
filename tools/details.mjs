@@ -3,11 +3,13 @@
 import { createRequire } from "node:module";
 const req = createRequire(process.env.PLAYWRIGHT_PATH ?? import.meta.url);
 const { chromium } = req("playwright-core");
+import { english } from "./english.mjs";
 const OUT = new URL("../docs/img", import.meta.url).pathname;
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: 2 });
 const p = await ctx.newPage();
+await english(p);
 await p.goto("http://localhost:8099/tools/mock-preview.html?dark=1", { waitUntil: "networkidle" });
 await p.waitForTimeout(2500);
 await p.evaluate(() => document.querySelectorAll("h4").forEach((e) => { e.style.visibility = "hidden"; }));
